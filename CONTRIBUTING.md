@@ -181,6 +181,12 @@ We enforce consistent code style across the project:
    def process_entity(entity_id, validate=True):
        ...
    ```
+   
+   **Type Error Policy**:
+   - Fix all type errors at the source when possible
+   - SQLAlchemy dynamic attributes: `# type: ignore[attr-defined]` is acceptable
+   - Never suppress type errors just to make mypy pass - fix the root cause
+   - Document why if you must use `# type: ignore` for non-SQLAlchemy issues
 
 3. **Error Handling**: Use the centralized exception system
    ```python

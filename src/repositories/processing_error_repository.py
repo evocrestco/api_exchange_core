@@ -10,7 +10,7 @@ from typing import List, Optional
 
 from sqlalchemy import and_, select
 
-from src.context.tenant_context import TenantContext, tenant_aware
+from src.context.tenant_context import TenantContext
 from src.db.db_config import DatabaseManager
 from src.db.db_error_models import ProcessingError
 from src.exceptions import not_found

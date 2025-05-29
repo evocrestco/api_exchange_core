@@ -12,7 +12,7 @@ from sqlalchemy import func
 from src.context.operation_context import OperationHandler, operation
 from src.context.tenant_context import TenantContext, tenant_aware
 from src.db.db_entity_models import Entity
-from src.exceptions import not_found
+from src.exceptions import ErrorCode, RepositoryError, not_found
 from src.repositories.base_repository import BaseRepository
 from src.schemas.entity_schema import EntityCreate, EntityFilter, EntityRead
 
@@ -495,3 +495,39 @@ class EntityRepository(BaseRepository[Entity]):
             # Stop if we've processed all entities
             if offset >= total_count:
                 break
+
+    @tenant_aware
+    @operation(name="entity_update_attributes")
+    def update_attributes(self, entity_id: str, attributes: Dict[str, Any]) -> bool:
+        """
+        Update entity attributes.
+
+        Args:
+            entity_id: Entity ID
+            attributes: New attributes to merge with existing ones
+
+        Returns:
+            True if successful
+
+        Raises:
+            RepositoryError: If entity not found or database error occurs
+        """
+        with self._db_operation("update_attributes", entity_id):
+            # Get entity for update
+            entity = self._get_by_id(entity_id, for_update=True)
+            if not entity:
+                raise RepositoryError(
+                    message=f"Entity not found: {entity_id}",
+                    error_code=ErrorCode.NOT_FOUND,
+                    context={"entity_id": entity_id},
+                )
+
+            # Merge the new attributes with existing ones
+            current_attributes = entity.attributes or {}
+            updated_attributes = {**current_attributes, **attributes}
+
+            # Use the entity's update_attributes method to update and flag as modified
+            entity.update_attributes(updated_attributes)
+
+            # Commit handled by context manager
+            return True

@@ -435,7 +435,7 @@ class TestEntityServiceTenantIsolation:
                 TenantContext.clear_current_tenant()
 
 
-class TestEntityServiceErrorHandling:
+class TestEntityServiceUpdate:
     """Test error handling and edge cases."""
 
     def test_create_entity_invalid_tenant(self, entity_service, tenant_context):
@@ -488,3 +488,99 @@ class TestEntityServiceErrorHandling:
         # Act & Assert
         with pytest.raises((ServiceError, ValidationError, ValueError)):
             entity_service.create_entity(**invalid_input)
+
+    def test_update_entity_attributes_success(self, entity_service, tenant_context):
+        """Test successfully updating entity attributes."""
+        # Arrange - create entity first
+        entity_id = entity_service.create_entity(
+            external_id="update_test_001",
+            canonical_type="order",
+            source="test_system",
+            attributes={"original_field": "original_value"}
+        )
+        
+        new_attributes = {
+            "updated_field": "new_value",
+            "additional_data": {"nested": "content"}
+        }
+
+        # Act
+        result = entity_service.update_entity_attributes(entity_id, new_attributes)
+
+        # Assert
+        assert result is True
+
+        # Verify attributes were updated
+        updated_entity = entity_service.get_entity(entity_id)
+        assert updated_entity.attributes["updated_field"] == "new_value"
+        assert updated_entity.attributes["additional_data"] == {"nested": "content"}
+        # Original attributes should still be present
+        assert updated_entity.attributes["original_field"] == "original_value"
+
+    def test_update_entity_attributes_merge_existing(self, entity_service, tenant_context):
+        """Test that updating attributes merges with existing ones."""
+        # Arrange - create entity first
+        entity_id = entity_service.create_entity(
+            external_id="merge_test_001",
+            canonical_type="order",
+            source="test_system"
+        )
+        
+        # First update
+        first_attributes = {"field1": "value1", "field2": "value2"}
+        entity_service.update_entity_attributes(entity_id, first_attributes)
+
+        # Second update with overlapping and new fields
+        second_attributes = {"field1": "updated_value", "field3": "value3"}
+
+        # Act
+        result = entity_service.update_entity_attributes(entity_id, second_attributes)
+
+        # Assert
+        assert result is True
+
+        updated_entity = entity_service.get_entity(entity_id)
+        # field1 should be updated
+        assert updated_entity.attributes["field1"] == "updated_value"
+        # field2 should be preserved
+        assert updated_entity.attributes["field2"] == "value2"
+        # field3 should be added
+        assert updated_entity.attributes["field3"] == "value3"
+
+    def test_update_entity_attributes_nonexistent_entity(self, entity_service, tenant_context):
+        """Test updating attributes for non-existent entity."""
+        # Arrange
+        nonexistent_id = str(uuid.uuid4())
+        attributes = {"test": "value"}
+
+        # Act & Assert
+        with pytest.raises(ServiceError) as exc_info:
+            entity_service.update_entity_attributes(nonexistent_id, attributes)
+        
+        assert exc_info.value.error_code == ErrorCode.NOT_FOUND
+
+    def test_update_entity_attributes_empty_attributes(self, entity_service, tenant_context):
+        """Test updating with empty attributes."""
+        # Arrange - create entity first
+        entity_id = entity_service.create_entity(
+            external_id="empty_test_001",
+            canonical_type="order",
+            source="test_system",
+            attributes={"original_field": "original_value"}
+        )
+        
+        empty_attributes = {}
+
+        # Act
+        result = entity_service.update_entity_attributes(entity_id, empty_attributes)
+
+        # Assert
+        assert result is True
+        
+        # Original attributes should be unchanged
+        updated_entity = entity_service.get_entity(entity_id)
+        assert updated_entity.attributes["original_field"] == "original_value"
+
+
+class TestEntityServiceErrorHandling:
+    """Test error handling and edge cases."""

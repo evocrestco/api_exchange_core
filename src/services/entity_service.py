@@ -469,23 +469,11 @@ class EntityService(BaseService[EntityCreate, EntityRead, EntityUpdate, EntityFi
         TenantContext.get_current_tenant_id()  # Validate tenant context
 
         try:
-            # Get the entity from the repository
-            entity = self.repository.get_by_id(entity_id)
-
-            # Merge the new attributes with existing ones
-            # This preserves existing attributes while updating or adding new ones
-            current_attributes = entity.attributes or {}
-            updated_attributes = {**current_attributes, **attributes}
-
-            # Use the entity's update_attributes method to update and flag as modified
-            entity.update_attributes(updated_attributes)
-
-            # Commit the changes to the database
-            session = self.repository.db_manager.get_session()
-            session.commit()
+            # Use repository to update attributes
+            success = self.repository.update_attributes(entity_id, attributes)
 
             self.logger.info(f"Updated attributes for entity {entity_id}")
-            return True
+            return success
 
         except RepositoryError as e:
             self._handle_repo_error(e, "update_entity_attributes", entity_id)

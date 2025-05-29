@@ -14,7 +14,7 @@ from typing import Any, Callable, Dict, Optional, TypeVar, Union, cast
 
 from src.context.tenant_context import TenantContext
 from src.exceptions import BaseError, get_correlation_id, set_correlation_id
-from src.utils.logger import get_logger
+from src.utils.logger import ContextAwareLogger, get_logger
 
 
 class OperationContext:

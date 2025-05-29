@@ -258,7 +258,9 @@ class BaseRepository(Generic[T]):
             if hasattr(self.entity_class, "tenant_id"):
                 tenant_id = TenantContext.get_current_tenant_id()
                 if tenant_id:
-                    query = query.where(self.entity_class.tenant_id == tenant_id)  # type: ignore[attr-defined]
+                    query = query.where(
+                        self.entity_class.tenant_id == tenant_id  # type: ignore[attr-defined]
+                    )
 
             if for_update:
                 query = query.with_for_update()
@@ -482,7 +484,9 @@ class BaseRepository(Generic[T]):
             if hasattr(self.entity_class, "tenant_id"):
                 tenant_id = TenantContext.get_current_tenant_id()
                 if tenant_id:
-                    query = query.where(self.entity_class.tenant_id == tenant_id)  # type: ignore[attr-defined]
+                    query = query.where(
+                        self.entity_class.tenant_id == tenant_id  # type: ignore[attr-defined]
+                    )
 
             result = session.execute(query)
             entities = result.scalars().all()

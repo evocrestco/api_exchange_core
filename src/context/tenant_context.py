@@ -133,7 +133,8 @@ class TenantContext:
 
         # Check cache first
         if effective_tenant_id in cls._thread_local.tenant_cache:
-            return cls._thread_local.tenant_cache[effective_tenant_id]  # type: ignore[no-any-return]
+            # type: ignore[no-any-return]
+            return cls._thread_local.tenant_cache[effective_tenant_id]
 
         # Get tenant via repository
         try:
