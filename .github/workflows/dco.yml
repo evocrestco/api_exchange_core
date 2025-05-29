@@ -1,0 +1,18 @@
+name: DCO Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  dco-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: DCO Check
+        uses: dcoapp/check@v1.1.0
+        with:
+          default-branch: main
