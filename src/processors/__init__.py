@@ -5,6 +5,7 @@ This module provides the core interfaces and classes for building flexible
 data processing pipelines without artificial processor type distinctions.
 """
 
+from src.processors.mapper_interface import CompositeMapper, MapperInterface
 from src.processors.message import EntityReference, Message, MessageType
 from src.processors.processing_result import ProcessingResult, ProcessingStatus
 from src.processors.processor_executor import ProcessorExecutor
@@ -21,6 +22,8 @@ ProcessingResult.model_rebuild()
 __all__ = [
     # Core interfaces and classes
     "ProcessorInterface",
+    "MapperInterface",
+    "CompositeMapper",
     "Message",
     "MessageType",
     "EntityReference",

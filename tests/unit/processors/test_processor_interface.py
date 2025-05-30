@@ -26,6 +26,35 @@ class ConcreteProcessor(ProcessorInterface):
         )
 
 
+class ConcreteProcessorWithTransformations(ProcessorInterface):
+    """Concrete processor that implements transformation methods."""
+    
+    def process(self, message: Message) -> ProcessingResult:
+        """Simple implementation that returns success."""
+        return ProcessingResult(
+            status=ProcessingStatus.SUCCESS,
+            success=True,
+            output_messages=[],
+            processing_metadata={"processed": True}
+        )
+    
+    def to_canonical(self, external_data: dict, metadata: dict) -> dict:
+        """Transform external data to canonical format."""
+        return {
+            "canonical_id": external_data.get("id"),
+            "canonical_name": external_data.get("name"),
+            "transformed": True
+        }
+    
+    def from_canonical(self, canonical_data: dict, metadata: dict) -> dict:
+        """Transform canonical data to external format."""
+        return {
+            "id": canonical_data.get("canonical_id"),
+            "name": canonical_data.get("canonical_name"),
+            "exported": True
+        }
+
+
 class TestProcessorInterface:
     """Test ProcessorInterface default implementations."""
     
@@ -131,3 +160,76 @@ class TestProcessorInterface:
         result = processor.process(message)
         assert result.success is True
         assert result.processing_metadata["processed"] is True
+    
+    def test_to_canonical_raises_not_implemented_by_default(self):
+        """Test that to_canonical raises NotImplementedError by default."""
+        processor = ConcreteProcessor()
+        
+        external_data = {"id": "123", "name": "Test"}
+        metadata = {"source": "test_system"}
+        
+        with pytest.raises(NotImplementedError) as exc_info:
+            processor.to_canonical(external_data, metadata)
+        
+        expected_message = "ConcreteProcessor does not implement data import"
+        assert expected_message in str(exc_info.value)
+        assert "Override to_canonical()" in str(exc_info.value)
+    
+    def test_from_canonical_raises_not_implemented_by_default(self):
+        """Test that from_canonical raises NotImplementedError by default."""
+        processor = ConcreteProcessor()
+        
+        canonical_data = {"canonical_id": "123", "canonical_name": "Test"}
+        metadata = {"target": "test_system"}
+        
+        with pytest.raises(NotImplementedError) as exc_info:
+            processor.from_canonical(canonical_data, metadata)
+        
+        expected_message = "ConcreteProcessor does not implement data export"
+        assert expected_message in str(exc_info.value)
+        assert "Override from_canonical()" in str(exc_info.value)
+    
+    def test_to_canonical_can_be_overridden(self):
+        """Test that to_canonical can be successfully overridden."""
+        processor = ConcreteProcessorWithTransformations()
+        
+        external_data = {"id": "ext-123", "name": "External Name"}
+        metadata = {"source": "external_system"}
+        
+        result = processor.to_canonical(external_data, metadata)
+        
+        assert result["canonical_id"] == "ext-123"
+        assert result["canonical_name"] == "External Name"
+        assert result["transformed"] is True
+    
+    def test_from_canonical_can_be_overridden(self):
+        """Test that from_canonical can be successfully overridden."""
+        processor = ConcreteProcessorWithTransformations()
+        
+        canonical_data = {"canonical_id": "can-123", "canonical_name": "Canonical Name"}
+        metadata = {"target": "external_system"}
+        
+        result = processor.from_canonical(canonical_data, metadata)
+        
+        assert result["id"] == "can-123"
+        assert result["name"] == "Canonical Name"
+        assert result["exported"] is True
+    
+    def test_transformation_methods_work_with_empty_data(self):
+        """Test that transformation methods handle empty data gracefully."""
+        processor = ConcreteProcessorWithTransformations()
+        
+        # Test with empty dictionaries
+        empty_external = {}
+        empty_canonical = {}
+        empty_metadata = {}
+        
+        to_result = processor.to_canonical(empty_external, empty_metadata)
+        assert to_result["canonical_id"] is None
+        assert to_result["canonical_name"] is None
+        assert to_result["transformed"] is True
+        
+        from_result = processor.from_canonical(empty_canonical, empty_metadata)
+        assert from_result["id"] is None
+        assert from_result["name"] is None
+        assert from_result["exported"] is True
