@@ -11,6 +11,8 @@ from pydantic import BaseModel, Field
 
 from src.context.operation_context import operation
 from src.context.tenant_context import tenant_aware
+from src.db.db_base import EntityStateEnum
+from src.db.db_state_transition_models import TransitionTypeEnum
 from src.exceptions import ErrorCode, ServiceError, ValidationError
 from src.processing.duplicate_detection import DuplicateDetectionResult, DuplicateDetectionService
 from src.processing.entity_attributes import EntityAttributeBuilder
@@ -70,6 +72,23 @@ class ProcessingService:
         self.duplicate_detection_service = duplicate_detection_service
         self.attribute_builder = attribute_builder
         self.logger = get_logger()
+        
+        # Initialize state tracking and error services (will be injected)
+        self.state_tracking_service = None
+        self.processing_error_service = None
+
+    def set_state_tracking_service(self, service):
+        """Set the state tracking service for this processing service."""
+        self.state_tracking_service = service
+
+    def set_processing_error_service(self, service):
+        """Set the processing error service for this processing service."""
+        self.processing_error_service = service
+
+    def _get_current_tenant_id(self) -> Optional[str]:
+        """Get current tenant ID from context."""
+        from src.context.tenant_context import TenantContext
+        return TenantContext.get_current_tenant_id()
 
     @tenant_aware
     @operation(name="processing_service_process_entity")
@@ -162,6 +181,10 @@ class ProcessingService:
                 },
                 exc_info=True,
             )
+            
+            # Note: Pre-creation errors are not recorded in the database since entity_id is required
+            # These errors are logged for debugging purposes
+            
             raise ServiceError(
                 f"Entity processing failed: {str(e)}",
                 error_code=ErrorCode.INTERNAL_ERROR,
@@ -271,6 +294,29 @@ class ProcessingService:
                 attributes=attributes,
                 hash_config=config.hash_config,
             )
+            
+            # Record state transition for new entity
+            if self.state_tracking_service and config.enable_state_tracking:
+                try:
+                    self.state_tracking_service.record_transition(
+                        entity_id=entity_id,
+                        from_state=EntityStateEnum.RECEIVED,
+                        to_state=EntityStateEnum.PROCESSING,
+                        actor=config.processor_name,
+                        transition_type=TransitionTypeEnum.NORMAL,
+                        processor_data={
+                            "processor_name": config.processor_name,
+                            "processor_version": config.processor_version,
+                            "custom_data": {
+                                "is_new_entity": True,
+                                "version": 1,
+                                "duplicate_detection": duplicate_result.model_dump() if duplicate_result else None
+                            }
+                        },
+                        notes=f"New entity created by {config.processor_name}"
+                    )
+                except Exception as e:
+                    self.logger.warning(f"Failed to record state transition for new entity: {e}")
 
             return ProcessingResult(
                 entity_id=entity_id,
@@ -290,6 +336,29 @@ class ProcessingService:
                 attributes=attributes,
                 hash_config=config.hash_config,
             )
+            
+            # Record state transition for version update
+            if self.state_tracking_service and config.enable_state_tracking:
+                try:
+                    self.state_tracking_service.record_transition(
+                        entity_id=entity_id,
+                        from_state=EntityStateEnum.PROCESSING,
+                        to_state=EntityStateEnum.PROCESSING,
+                        actor=config.processor_name,
+                        transition_type=TransitionTypeEnum.NORMAL,
+                        processor_data={
+                            "processor_name": config.processor_name,
+                            "processor_version": config.processor_version,
+                            "custom_data": {
+                                "is_new_entity": False,
+                                "version": version,
+                                "duplicate_detection": duplicate_result.model_dump() if duplicate_result else None
+                            }
+                        },
+                        notes=f"Entity version {version} created by {config.processor_name}"
+                    )
+                except Exception as e:
+                    self.logger.warning(f"Failed to record state transition for version update: {e}")
 
             return ProcessingResult(
                 entity_id=entity_id,

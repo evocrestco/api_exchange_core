@@ -71,6 +71,11 @@ class ProcessorConfig(BaseModel):
     max_similar_entities: int = Field(
         default=10, description="Maximum number of similar entities to track in duplicate detection"
     )
+    
+    # State tracking configuration
+    enable_state_tracking: bool = Field(
+        default=False, description="Whether to record state transitions for entity processing"
+    )
 
     class Config:
         """Pydantic configuration."""
