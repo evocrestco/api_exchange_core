@@ -411,4 +411,4 @@ def get_logger(
         return ContextAwareLogger(logger)
 
     # Already wrapped, return as is
-    return logger  # type: ignore[return-value]
+    return logger

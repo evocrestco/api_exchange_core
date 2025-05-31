@@ -24,42 +24,42 @@ class ProcessorInterface(ABC):
     Unified interface for all processors in data integration pipelines.
 
     Processors operate on data flowing through message queues and can:
-    
+
     1. **Import**: Transform external data to canonical format (to_canonical)
     2. **Process**: Enhance, validate, or route canonical data
     3. **Export**: Transform canonical data to external format (from_canonical)
-    
+
     A single processor may do any combination of these operations. The actual
     data flows through message payloads, while the database only tracks metadata
     about the processing (entity state, versions, errors, etc).
-    
+
     Pipeline Example:
         SalesforceAdapter (import) -> OrderEnrichment (process) -> SAPAdapter (export)
-        
+
     Each processor reads from an input queue and writes to output queue(s).
-    
+
     Using Mappers:
         Processors can use MapperInterface implementations for reusable transformations:
-        
+
         class OrderProcessor(ProcessorInterface):
             def __init__(self):
                 self.salesforce_mapper = SalesforceOrderMapper()
                 self.sap_mapper = SAPOrderMapper()
-            
+
             def process(self, message):
                 # Use mapper for transformation
                 if message.metadata.get("source") == "salesforce":
                     canonical = self.salesforce_mapper.to_canonical(message.payload)
-                
+
                 # Process the canonical data
                 processed = self.enhance_order(canonical)
-                
+
                 # Transform for target system
                 if message.routing_info.get("target") == "sap":
                     sap_data = self.sap_mapper.from_canonical(processed)
-                    
+
                 return ProcessingResult.create_success(...)
-                
+
         This pattern promotes reusability and separation of concerns.
     """
 
@@ -142,26 +142,28 @@ class ProcessorInterface(ABC):
 
         # Retry other errors by default
         return True
-    
-    def to_canonical(self, external_data: Dict[str, Any], metadata: Dict[str, Any]) -> Dict[str, Any]:
+
+    def to_canonical(
+        self, external_data: Dict[str, Any], metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Transform external system data to canonical format.
-        
+
         This method is implemented by processors that import data from external
         systems. It transforms system-specific formats into the standardized
         canonical model that flows through the pipeline.
-        
+
         Args:
             external_data: Raw data from external system (from message payload)
             metadata: Additional context (source system, timestamps, etc)
-            
+
         Returns:
             Canonical format data ready for processing
-            
+
         Raises:
             NotImplementedError: If this processor doesn't import data
             ValidationError: If external data is invalid or incomplete
-            
+
         Example:
             # Salesforce order to canonical order
             def to_canonical(self, external_data, metadata):
@@ -177,26 +179,28 @@ class ProcessorInterface(ABC):
             f"{self.__class__.__name__} does not implement data import. "
             "Override to_canonical() to transform external data to canonical format."
         )
-    
-    def from_canonical(self, canonical_data: Dict[str, Any], metadata: Dict[str, Any]) -> Dict[str, Any]:
+
+    def from_canonical(
+        self, canonical_data: Dict[str, Any], metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Transform canonical format data to external system format.
-        
+
         This method is implemented by processors that export data to external
         systems. It transforms the standardized canonical model into the
         specific format required by the target system.
-        
+
         Args:
             canonical_data: Canonical format data (from message payload)
             metadata: Additional context (target system, settings, etc)
-            
+
         Returns:
             External format data ready for the target system
-            
+
         Raises:
             NotImplementedError: If this processor doesn't export data
             ValidationError: If canonical data is invalid for target system
-            
+
         Example:
             # Canonical order to SAP format
             def from_canonical(self, canonical_data, metadata):

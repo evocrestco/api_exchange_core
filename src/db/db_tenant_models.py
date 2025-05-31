@@ -71,6 +71,6 @@ class Tenant(Base, BaseModel):
 
         config_value = self.tenant_config[key]
         # Handle nested dict config (e.g., {"value": actual_value})
-        if hasattr(config_value, "get") and "value" in config_value:  # type: ignore[operator]
-            return config_value["value"]  # type: ignore[index]
+        if hasattr(config_value, "get") and "value" in config_value:
+            return config_value["value"]
         return config_value
