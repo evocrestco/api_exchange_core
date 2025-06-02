@@ -111,6 +111,62 @@ class TestProcessMetrics:
         mock_logger.warning.assert_called()
         assert "METRIC: test" in str(mock_logger.warning.call_args_list[0])
 
+    @patch("src.utils.azure_queue_utils.QueueClient")
+    @patch("src.utils.azure_queue_utils.logging.getLogger")
+    def test_process_metrics_queue_not_found_creates_queue(self, mock_get_logger, mock_queue_client_class):
+        """Test that queue is created when QueueNotFound error occurs."""
+        # Setup mock logger
+        mock_logger = MagicMock()
+        mock_get_logger.return_value = mock_logger
+
+        # Setup queue client
+        mock_queue_client = MagicMock()
+        # First send_message fails with QueueNotFound, second succeeds
+        mock_queue_client.send_message.side_effect = [
+            Exception("The specified queue does not exist."),
+            None  # Success on retry
+        ]
+        mock_queue_client_class.from_connection_string.return_value = mock_queue_client
+
+        metrics = [Metric(type="test", metric_name="test", value=1.0)]
+
+        with patch.dict("os.environ", {"AzureWebJobsStorage": "test_connection"}):
+            process_metrics(metrics)
+
+        # Verify queue was created
+        mock_queue_client.create_queue.assert_called_once()
+        # Verify message was sent twice (first failed, second succeeded)
+        assert mock_queue_client.send_message.call_count == 2
+
+    @patch("src.utils.azure_queue_utils.QueueClient")
+    @patch("src.utils.azure_queue_utils.logging.getLogger")
+    def test_process_metrics_queue_creation_fails(self, mock_get_logger, mock_queue_client_class):
+        """Test handling when queue creation fails."""
+        # Setup mock logger
+        mock_logger = MagicMock()
+        mock_get_logger.return_value = mock_logger
+
+        # Setup queue client
+        mock_queue_client = MagicMock()
+        # send_message fails with QueueNotFound
+        mock_queue_client.send_message.side_effect = Exception("QueueNotFound")
+        # create_queue also fails
+        mock_queue_client.create_queue.side_effect = Exception("Cannot create queue")
+        mock_queue_client_class.from_connection_string.return_value = mock_queue_client
+
+        metrics = [Metric(type="test", metric_name="test", value=1.0)]
+
+        with patch.dict("os.environ", {"AzureWebJobsStorage": "test_connection"}):
+            process_metrics(metrics)
+
+        # Verify queue creation was attempted
+        mock_queue_client.create_queue.assert_called_once()
+        # Verify error was logged
+        assert any(
+            "Failed to create queue or send metric" in str(call)
+            for call in mock_logger.error.call_args_list
+        )
+
 
 class TestSendQueueMessage:
     """Test send_queue_message function."""
