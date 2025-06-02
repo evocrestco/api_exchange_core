@@ -23,14 +23,18 @@ from src.processing.processor_config import ProcessorConfig
 from src.processors.processor_handler import ProcessorHandler
 from src.context.tenant_context import tenant_context
 
-# Import test harness components
+# Import test harness components from e2e directory
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'harness'))
-
-from processors.verification_processor import VerificationProcessor
-from processors.validation_processor import ValidationProcessor
-from utils.test_data_generators import TestMessageGenerator
+e2e_path = os.path.join(os.path.dirname(__file__), '..', '..', 'e2e')
+if os.path.exists(e2e_path):
+    sys.path.insert(0, e2e_path)
+    from processors.verification_processor import VerificationProcessor
+    from processors.validation_processor import ValidationProcessor
+    from utils.test_data_generators import TestMessageGenerator
+else:
+    # If e2e doesn't exist, skip these tests
+    pytest.skip("e2e test harness not available", allow_module_level=True)
 
 
 class TestFrameworkIntegration:
