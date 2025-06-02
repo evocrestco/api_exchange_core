@@ -1,0 +1,105 @@
+version: '3.8'
+
+services:
+  # PostgreSQL database for entity persistence
+  postgres:
+    image: postgres:15-alpine
+    container_name: coffee_pipeline_postgres
+    environment:
+      POSTGRES_DB: coffee_pipeline
+      POSTGRES_USER: coffee_admin
+      POSTGRES_PASSWORD: pretentious_password_123
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U coffee_admin -d coffee_pipeline"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - coffee_pipeline
+    restart: unless-stopped
+
+  # Azurite for Azure Storage emulation (queues, blobs)
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:3.34.0
+    container_name: coffee_pipeline_azurite
+    command: >
+      azurite 
+      --blobHost 0.0.0.0 
+      --blobPort 10000
+      --queueHost 0.0.0.0 
+      --queuePort 10001
+      --tableHost 0.0.0.0 
+      --tablePort 10002
+      --location /data
+      --debug /data/debug.log
+      --loose
+    ports:
+      - "10000:10000"  # Blob service
+      - "10001:10001"  # Queue service  
+      - "10002:10002"  # Table service
+    volumes:
+      - azurite_data:/data
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "10001"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - coffee_pipeline
+    restart: unless-stopped
+
+  # pgAdmin for database management (optional)
+  pgadmin:
+    image: dpage/pgadmin4:7.8
+    container_name: coffee_pipeline_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@coffeepipeline.local
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "8080:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./database/pgadmin_servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - coffee_pipeline
+    restart: unless-stopped
+    profiles:
+      - tools
+
+  # Azure Storage Explorer alternative (optional)
+  storage-explorer:
+    image: mcr.microsoft.com/azure-storage/azurite:3.28.0
+    container_name: coffee_pipeline_storage_explorer
+    command: >
+      sh -c "echo 'Azurite Storage Explorer available at http://localhost:10000' && 
+             echo 'Connection string: DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://localhost:10000/devstoreaccount1;QueueEndpoint=http://localhost:10001/devstoreaccount1;' &&
+             tail -f /dev/null"
+    depends_on:
+      azurite:
+        condition: service_healthy
+    networks:
+      - coffee_pipeline
+    profiles:
+      - tools
+
+volumes:
+  postgres_data:
+    driver: local
+  azurite_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+networks:
+  coffee_pipeline:
+    driver: bridge
+    name: coffee_pipeline_network

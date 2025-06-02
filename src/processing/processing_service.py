@@ -5,6 +5,7 @@ This module provides the main service for orchestrating entity processing workfl
 including entity creation, versioning, duplicate detection, and attribute management.
 """
 
+import time
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from pydantic import BaseModel, Field
@@ -22,6 +23,9 @@ from src.services.entity_service import EntityService
 from src.utils.logger import get_logger
 
 if TYPE_CHECKING:
+    from src.processors.message import Message
+    from src.processors.processing_result import ProcessingResult as ProcessorResult
+    from src.processors.processor_interface import ProcessorInterface
     from src.services.processing_error_service import ProcessingErrorService
     from src.services.state_tracking_service import StateTrackingService
 
@@ -127,7 +131,7 @@ class ProcessingService:
                     "is_new_entity": is_new_entity,
                     "version": version,
                     "duplicate_detection": (
-                        duplicate_result.model_dump() if duplicate_result else None
+                        duplicate_result.model_dump(mode='json') if duplicate_result else None
                     ),
                 },
             }
@@ -478,3 +482,4 @@ class ProcessingService:
             duplicate_detection_result=duplicate_result,
             processing_metadata={"processor": config.processor_name},
         )
+

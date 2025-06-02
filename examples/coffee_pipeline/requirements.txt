@@ -1,0 +1,17 @@
+# Azure Functions Core
+azure-functions>=1.18.0
+azure-functions-worker>=1.2.0
+
+# Azure Storage for queues
+azure-storage-queue>=12.8.0
+azure-storage-blob>=12.19.0
+
+# Core framework dependencies
+pydantic>=2.5.0
+typing-extensions>=4.8.0
+
+# Logging and utilities
+python-json-logger>=2.0.7
+
+# Development dependencies (optional)
+azure-cli>=2.55.0

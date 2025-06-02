@@ -8,7 +8,6 @@ data processing pipelines without artificial processor type distinctions.
 from src.processors.mapper_interface import CompositeMapper, MapperInterface
 from src.processors.message import EntityReference, Message, MessageType
 from src.processors.processing_result import ProcessingResult, ProcessingStatus
-from src.processors.processor_executor import ProcessorExecutor
 from src.processors.processor_factory import (
     ProcessorFactory,
     ProcessorHandler,
@@ -29,8 +28,6 @@ __all__ = [
     "EntityReference",
     "ProcessingResult",
     "ProcessingStatus",
-    # Execution framework
-    "ProcessorExecutor",
     # Factory and handler patterns
     "ProcessorFactory",
     "ProcessorHandler",

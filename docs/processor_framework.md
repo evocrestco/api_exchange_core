@@ -53,46 +53,226 @@ Standardized result format indicating:
 - **Routing Information**: Queue destinations and conditions
 - **Entity Operations**: Whether entities were created/updated
 
-### 4. Processing Services Integration
+### 4. ProcessorHandler
+
+The unified handler that bridges Azure Functions (or other triggers) and the processor framework:
+- **Message Conversion**: Converts between dict and Message formats
+- **Processor Execution**: Executes processors with comprehensive error handling and retry logic
+- **Error Handling**: Catches and classifies errors (validation, service, unexpected)
+- **Retry Logic**: Exponential backoff for recoverable errors
+- **Performance Monitoring**: Tracks execution duration and metrics
+- **Tenant Context Management**: Ensures proper multi-tenant isolation
+- **Message Validation**: Validates messages before processing
+- **Entity Persistence**: Automatically persists entities for processors with mapper interface
+- **State Tracking**: Records state transitions for audit trails
+- **Result Transformation**: Converts ProcessingResult to framework-compatible format
+- **Dependency Management**: Manages processor lifecycle and dependencies
+
+### 5. ProcessorFactory
+
+Creates processors with proper dependency injection:
+- **Automatic Dependency Injection**: Injects EntityService, ProcessingService, etc.
+- **Configuration Management**: Applies ProcessorConfig to processors
+- **Logging Setup**: Ensures proper logging context
+
+### 7. Processing Services Integration
 
 Processors can use Core services for entity operations:
 - **ProcessingService**: Entity creation, versioning, duplicate detection
 - **EntityService**: Direct entity CRUD operations
 - **StateTrackingService**: State transitions and monitoring
 
-## Common Processor Patterns
+## How to Build and Use a Processor
 
-### Data Ingestion Processor
+### Step 1: Implement ProcessorInterface
 
-Brings external data into the system:
+Create your processor by implementing the `ProcessorInterface`:
+
+```python
+from src.processors.processor_interface import ProcessorInterface
+from src.processors.processing_result import ProcessingResult, ProcessingStatus
+from src.processors.message import Message
+
+class MyBusinessProcessor(ProcessorInterface):
+    def process(self, message: Message) -> ProcessingResult:
+        # Your business logic here
+        transformed_data = self.transform(message.payload)
+        
+        # Return result with routing
+        return ProcessingResult(
+            status=ProcessingStatus.SUCCESS,
+            success=True,
+            output_messages=[
+                Message(
+                    payload=transformed_data,
+                    entity_reference=message.entity_reference,
+                    metadata={"processed_by": "my_processor"}
+                )
+            ],
+            routing_info={"destination": "next-queue"}
+        )
+    
+    def validate_message(self, message: Message) -> bool:
+        # Optional: Validate message before processing
+        return message.entity_reference is not None
+    
+    def get_processor_info(self) -> dict:
+        # Optional: Return processor metadata
+        return {
+            "name": "MyBusinessProcessor",
+            "version": "1.0.0",
+            "capabilities": ["transform", "validate"]
+        }
+```
+
+### Step 2: Create Azure Function with ProcessorHandler
+
+Use the framework's `ProcessorHandler` to integrate with Azure Functions:
+
+```python
+import azure.functions as func
+from src.processors.processor_factory import create_processor_handler
+from src.processing.processor_config import ProcessorConfig
+from src.repositories.entity_repository import EntityRepository
+from src.services.entity_service import EntityService
+from src.processing.processing_service import ProcessingService
+from src.db.db_config import get_db_manager
+from processors.my_business_processor import MyBusinessProcessor
+
+# Initialize dependencies (typically done once per function app)
+db_manager = get_db_manager()
+entity_repository = EntityRepository(db_manager)
+entity_service = EntityService(entity_repository)
+# ... initialize other services
+
+processing_service = ProcessingService(
+    entity_service=entity_service,
+    entity_repository=entity_repository,
+    # ... other dependencies
+)
+
+# Create processor configuration
+config = ProcessorConfig(
+    processor_name="my_business_processor",
+    processor_version="1.0.0",
+    enable_state_tracking=True,
+    is_source_processor=False
+)
+
+# Create the handler
+handler = create_processor_handler(
+    processor_class=MyBusinessProcessor,
+    config=config,
+    entity_service=entity_service,
+    entity_repository=entity_repository,
+    processing_service=processing_service
+)
+
+# Azure Function entry point
+@app.queue_trigger(arg_name="msg", queue_name="input-queue")
+@app.queue_output(arg_name="output", queue_name="output-queue")
+def process_message(msg: func.QueueMessage, output: func.Out[str]) -> None:
+    # Parse queue message
+    import json
+    message_data = json.loads(msg.get_body().decode('utf-8'))
+    
+    # Process with handler
+    result = handler.handle_message(message_data)
+    
+    # Route output messages
+    if result["success"] and result["output_messages"]:
+        for msg in result["output_messages"]:
+            output.set(json.dumps(msg))
+```
+
+### Step 3: What the Framework Provides Automatically
+
+When you use `ProcessorHandler`, you get:
+
+1. **Error Handling** - ProcessorHandler catches all errors and classifies them
+2. **Retry Logic** - Automatic exponential backoff for recoverable errors
+3. **Performance Tracking** - Execution duration and metrics
+4. **Tenant Context** - Multi-tenant isolation handled automatically
+5. **Message Validation** - Pre-processing validation
+6. **Logging** - Structured logging with correlation IDs
+
+### Step 4: Source Processors (Creating Entities)
+
+For processors that create entities, there are two approaches:
+
+#### Approach 1: Direct ProcessingService Usage (Recommended for batch operations)
 
 ```python
 class DataIngestionProcessor(ProcessorInterface):
-    def __init__(self, processing_service: ProcessingService, config: ProcessorConfig):
+    def __init__(self, processing_service: ProcessingService, **kwargs):
         self.processing_service = processing_service
-        self.config = config
-    
-    def process(self, message: Message) -> ProcessingResult:
-        # Fetch data from external source
-        external_data = self.fetch_from_source()
         
-        # Create/version entities using ProcessingService
+    def process(self, message: Message) -> ProcessingResult:
+        # Fetch external data
+        external_data = self.fetch_from_api()
+        
+        # Create entities using ProcessingService
+        entities_created = []
         for item in external_data:
             result = self.processing_service.process_entity(
-                external_id=item.id,
+                external_id=item["id"],
                 canonical_type="order",
-                source="shopify",
-                content=item.data,
-                config=self.config
+                source="external_api",
+                content=item,
+                config=ProcessorConfig(
+                    enable_duplicate_detection=True,
+                    enable_state_tracking=True
+                )
             )
-            
-        # Route to next stage
+            entities_created.append(result.entity_id)
+        
         return ProcessingResult(
             success=True,
-            output_messages=[create_message(result)],
-            routing_info={"destination": "processing_queue"}
+            entities_created=entities_created,
+            output_messages=[...],
+            processing_metadata={"items_processed": len(external_data)}
         )
 ```
+
+#### Approach 2: Simple Processor with Framework Handler
+
+For simple cases, just return the data and let the framework handle entity creation:
+
+```python
+class SimpleIngestionProcessor(ProcessorInterface):
+    def process(self, message: Message) -> ProcessingResult:
+        # Just transform the data
+        external_data = self.fetch_from_api()
+        
+        # Return messages for each item
+        output_messages = []
+        for item in external_data:
+            output_messages.append(
+                Message.create_entity_message(
+                    external_id=item["id"],
+                    canonical_type="order",
+                    source="external_api",
+                    tenant_id="default",
+                    payload=item
+                )
+            )
+        
+        return ProcessingResult(
+            success=True,
+            output_messages=output_messages,
+            processing_metadata={"items_fetched": len(external_data)}
+        )
+
+# In Azure Function setup:
+config = ProcessorConfig(
+    processor_name="simple_ingestion",
+    is_source_processor=True,  # This tells handler to create entities!
+    enable_state_tracking=True,
+    enable_duplicate_detection=True
+)
+```
+
+## Common Processor Patterns
 
 ### Business Logic Processor
 
@@ -221,17 +401,114 @@ except ProcessingError as e:
 
 - `ProcessorInterface` definition
 - `Message` and `ProcessingResult` classes
-- Integration with Core services
-- Handler and execution patterns
+- `ProcessorHandler` for Azure Function integration with built-in error handling and retry logic
+- `ProcessorFactory` for dependency injection
+- `ProcessingService` for entity operations
+- State tracking and error recording (automatic)
 - Configuration management
 
 ### What's in Your Implementation
 
-- Specific business logic
+- Specific business logic (implement `process()` method)
 - External system integrations (APIs, databases)
 - Data transformation rules
 - Routing decisions
 - Custom validation logic
+
+### Complete Example: Coffee Order Processor
+
+Here's a complete example showing all the pieces together:
+
+```python
+# processors/coffee_processor.py
+from src.processors.processor_interface import ProcessorInterface
+from src.processors.processing_result import ProcessingResult, ProcessingStatus
+from src.processors.message import Message
+
+class CoffeeOrderProcessor(ProcessorInterface):
+    """Simple processor - just implement business logic!"""
+    
+    def process(self, message: Message) -> ProcessingResult:
+        # Extract coffee order
+        order = message.payload
+        
+        # Business logic: validate coffee order
+        if not order.get("drink_type"):
+            return ProcessingResult(
+                status=ProcessingStatus.FAILED,
+                success=False,
+                error_message="Missing drink type"
+            )
+        
+        # Transform: add processing info
+        processed_order = {
+            **order,
+            "processed_at": datetime.now().isoformat(),
+            "processor": "coffee_order_processor"
+        }
+        
+        # Return success with routing
+        return ProcessingResult(
+            status=ProcessingStatus.SUCCESS,
+            success=True,
+            output_messages=[
+                Message(
+                    payload=processed_order,
+                    entity_reference=message.entity_reference,
+                    metadata={"stage": "processed"}
+                )
+            ],
+            routing_info={"destination": "barista-queue"}
+        )
+
+# function_app.py - Azure Function setup
+import azure.functions as func
+from src.processors.processor_factory import create_processor_handler
+from src.processing.processor_config import ProcessorConfig
+# ... other imports
+
+# Initialize framework (once per app)
+db_manager = get_db_manager()
+entity_repository = EntityRepository(db_manager)
+entity_service = EntityService(entity_repository)
+processing_service = ProcessingService(...)
+
+# Configure processor
+config = ProcessorConfig(
+    processor_name="coffee_order_processor",
+    enable_state_tracking=True,  # Automatic state tracking!
+    is_source_processor=False
+)
+
+# Create handler - this connects everything!
+handler = create_processor_handler(
+    processor_class=CoffeeOrderProcessor,
+    config=config,
+    entity_service=entity_service,
+    entity_repository=entity_repository,
+    processing_service=processing_service
+)
+
+# Azure Function - just pass to handler!
+@app.queue_trigger(arg_name="msg", queue_name="coffee-orders")
+@app.queue_output(arg_name="output", queue_name="barista-queue")
+def process_coffee_order(msg: func.QueueMessage, output: func.Out[str]):
+    message_data = json.loads(msg.get_body().decode('utf-8'))
+    result = handler.handle_message(message_data)
+    
+    if result["success"]:
+        for msg in result["output_messages"]:
+            output.set(json.dumps(msg))
+```
+
+**That's it!** The framework handles:
+- ✅ Error catching and classification
+- ✅ Retry logic with exponential backoff
+- ✅ State tracking (automatic with `enable_state_tracking=True`)
+- ✅ Performance monitoring
+- ✅ Tenant context
+- ✅ Message validation
+- ✅ Structured logging
 
 ## Migration from Old Framework
 

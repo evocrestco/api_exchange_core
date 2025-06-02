@@ -144,6 +144,7 @@ class ProcessingResult(BaseModel):
         can_retry: bool = True,
         retry_after_seconds: Optional[int] = None,
         routing_info: Optional[Dict[str, Any]] = None,
+        processing_duration_ms: float = 0.0,
     ) -> "ProcessingResult":
         """
         Create a failed processing result.
@@ -157,6 +158,7 @@ class ProcessingResult(BaseModel):
             can_retry: Whether processing can be retried
             retry_after_seconds: Suggested retry delay
             routing_info: Routing instructions (e.g., to error queue)
+            processing_duration_ms: Processing duration in milliseconds
 
         Returns:
             ProcessingResult indicating failed processing
@@ -172,6 +174,7 @@ class ProcessingResult(BaseModel):
             can_retry=can_retry,
             retry_after_seconds=retry_after_seconds,
             routing_info=routing_info or {},
+            processing_duration_ms=processing_duration_ms,
         )
 
     @classmethod

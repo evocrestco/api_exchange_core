@@ -10,10 +10,12 @@ from typing import Any, Optional, Type, TypeVar
 from src.exceptions import ErrorCode
 from src.processing.processing_service import ProcessingService
 from src.processing.processor_config import ProcessorConfig
-from src.processors.processor_executor import ProcessorExecutor
 from src.processors.processor_interface import ProcessorInterface
+from src.processors.processor_handler import ProcessorHandler
 from src.repositories.entity_repository import EntityRepository
 from src.services.entity_service import EntityService
+from src.services.processing_error_service import ProcessingErrorService
+from src.services.state_tracking_service import StateTrackingService
 from src.utils.logger import get_logger
 
 T = TypeVar("T", bound=ProcessorInterface)
@@ -108,167 +110,22 @@ class ProcessorFactory:
             ) from e
 
 
-class ProcessorHandler:
-    """
-    Handler for managing processor execution with Core service integration.
-
-    Provides the execution pattern that was used in the old unified processor
-    but updated to work with the new Core services and unified processor interface.
-    """
-
-    def __init__(
-        self,
-        processor: ProcessorInterface,
-        config: ProcessorConfig,
-        executor: Optional[ProcessorExecutor] = None,
-    ):
-        """
-        Initialize the processor handler.
-
-        Args:
-            processor: The processor instance to manage
-            config: Configuration for processing behavior
-            executor: Optional custom processor executor
-        """
-        self.processor = processor
-        self.config = config
-        self.executor = executor or ProcessorExecutor()
-        self.logger = get_logger()
-
-    def handle_message(self, message) -> dict:
-        """
-        Handle a message using the configured processor.
-
-        This provides the main entry point for processing messages, similar
-        to the old unified processor handler pattern.
-
-        Args:
-            message: Message to process (can be dict or Message object)
-
-        Returns:
-            Dictionary with processing results for framework integration
-        """
-        from src.processors.message import Message
-
-        try:
-            # Convert dict to Message if needed
-            if isinstance(message, dict):
-                message = self._convert_dict_to_message(message)
-            elif not isinstance(message, Message):
-                raise ValueError(f"Unsupported message type: {type(message)}")
-
-            # Execute processor
-            result = self.executor.execute_processor(
-                processor=self.processor,
-                message=message,
-                execution_context={"config": self.config},
-            )
-
-            # Convert result to dict format for framework compatibility
-            return self._convert_result_to_dict(result, message)
-
-        except Exception as e:
-            self.logger.error(
-                "Error handling message in processor handler",
-                extra={
-                    "processor_class": self.processor.__class__.__name__,
-                    "error": str(e),
-                },
-                exc_info=True,
-            )
-
-            # Return error result in expected format
-            return {
-                "success": False,
-                "error": str(e),
-                "processor_class": self.processor.__class__.__name__,
-                "can_retry": True,
-            }
-
-    def _convert_dict_to_message(self, message_dict: dict):
-        """
-        Convert dictionary message to Message object.
-
-        Handles compatibility with existing message formats.
-        """
-        from src.processors.message import Message
-
-        # Extract entity reference information
-        entity_ref_data = message_dict.get("entity_reference", {})
-
-        # Create Message from dict
-        return Message.create_entity_message(
-            external_id=entity_ref_data.get("external_id", "unknown"),
-            canonical_type=entity_ref_data.get("canonical_type", "unknown"),
-            source=entity_ref_data.get("source", "unknown"),
-            tenant_id=entity_ref_data.get("tenant_id", "unknown"),
-            payload=message_dict.get("payload", {}),
-            entity_id=entity_ref_data.get("entity_id"),
-            version=entity_ref_data.get("version"),
-            correlation_id=message_dict.get("correlation_id"),
-            metadata=message_dict.get("metadata", {}),
-        )
-
-    def _convert_result_to_dict(self, result, original_message) -> dict:
-        """
-        Convert ProcessingResult to dictionary format.
-
-        Maintains compatibility with existing framework expectations.
-        """
-        return {
-            "success": result.success,
-            "status": result.status.value,
-            "output_messages": [self._message_to_dict(msg) for msg in result.output_messages],
-            "routing_info": result.routing_info,
-            "error_message": result.error_message,
-            "error_code": result.error_code,
-            "processing_metadata": result.processing_metadata,
-            "entities_created": result.entities_created,
-            "entities_updated": result.entities_updated,
-            "processing_duration_ms": result.processing_duration_ms,
-            "can_retry": result.can_retry,
-            "retry_after_seconds": result.retry_after_seconds,
-            "processor_info": result.processor_info,
-            "original_message_id": original_message.message_id,
-            "correlation_id": original_message.correlation_id,
-        }
-
-    def _message_to_dict(self, message) -> dict:
-        """Convert Message object to dictionary format."""
-        return {
-            "message_id": message.message_id,
-            "correlation_id": message.correlation_id,
-            "message_type": message.message_type.value,
-            "entity_reference": {
-                "entity_id": message.entity_reference.entity_id,
-                "external_id": message.entity_reference.external_id,
-                "canonical_type": message.entity_reference.canonical_type,
-                "source": message.entity_reference.source,
-                "tenant_id": message.entity_reference.tenant_id,
-                "version": message.entity_reference.version,
-            },
-            "payload": message.payload,
-            "metadata": message.metadata,
-            "routing_info": message.routing_info,
-            "created_at": message.created_at.isoformat(),
-            "processed_at": message.processed_at.isoformat() if message.processed_at else None,
-        }
-
-
 def create_processor_handler(
     processor_class: Type[ProcessorInterface],
     config: ProcessorConfig,
     entity_service: EntityService,
     entity_repository: EntityRepository,
     processing_service: ProcessingService,
+    state_tracking_service: Optional[StateTrackingService] = None,
+    error_service: Optional[ProcessingErrorService] = None,
     **processor_kwargs: Any,
 ) -> ProcessorHandler:
     """
     Create a complete processor handler with all dependencies.
 
-    This is the main factory function for creating processor handlers,
-    similar to the old create_source_handler/create_intermediate_handler
-    pattern but unified.
+    This is the main factory function for creating processor handlers with
+    full framework integration including entity persistence, state tracking,
+    and error recording.
 
     Args:
         processor_class: The processor class to instantiate
@@ -276,6 +133,8 @@ def create_processor_handler(
         entity_service: Entity service dependency
         entity_repository: Entity repository dependency
         processing_service: Processing service dependency
+        state_tracking_service: Optional state tracking service
+        error_service: Optional error recording service
         **processor_kwargs: Additional processor constructor arguments
 
     Returns:
@@ -294,10 +153,13 @@ def create_processor_handler(
         **processor_kwargs,
     )
 
-    # Create handler
+    # Create handler with full framework integration
     return ProcessorHandler(
         processor=processor,
         config=config,
+        processing_service=processing_service,
+        state_tracking_service=state_tracking_service,
+        error_service=error_service,
     )
 
 

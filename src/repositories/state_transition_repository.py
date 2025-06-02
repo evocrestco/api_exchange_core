@@ -68,9 +68,34 @@ class StateTransitionRepository(BaseRepository[StateTransition]):
                 last_sequence = self._get_last_sequence_number(entity_id, session)
                 data_dict["sequence_number"] = last_sequence + 1
 
-        # Use BaseRepository's _create method
-        transition = self._create(data_dict)
-        return transition.id  # type: ignore[return-value]
+        # Create StateTransition with proper session management
+        with self._db_operation("create") as session:
+            from src.db.db_state_transition_models import StateTransition
+            from datetime import datetime, timezone
+            import uuid
+            
+            # Add required fields if not present
+            if "id" not in data_dict:
+                data_dict["id"] = str(uuid.uuid4())
+            if "created_at" not in data_dict:
+                data_dict["created_at"] = datetime.now(timezone.utc)
+            if "updated_at" not in data_dict:
+                data_dict["updated_at"] = datetime.now(timezone.utc)
+            
+            # Create StateTransition directly
+            transition = StateTransition(**data_dict)
+            
+            session.add(transition)
+            session.flush()
+            
+            # Log while transition is still in session
+            self.logger.info(
+                f"Created StateTransition: entity_id={transition.entity_id}, "
+                f"from={transition.from_state} to={transition.to_state}, "
+                f"actor={transition.actor}"
+            )
+            
+            return transition.id  # type: ignore[return-value]
 
     def get_by_id(self, id: str) -> Optional[StateTransitionRead]:
         """

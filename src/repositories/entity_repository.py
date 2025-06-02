@@ -84,50 +84,53 @@ class EntityRepository(BaseRepository[Entity]):
             RepositoryError: If database integrity constraints are violated or another
                 database error occurs
         """
-        tenant_id = TenantContext.get_current_tenant_id()
+        with self._db_operation("create") as session:
+            tenant_id = TenantContext.get_current_tenant_id()
 
-        # Prepare entity data using Entity's custom create method
-        # Build dict with required parameters first
-        entity_dict = {
-            "tenant_id": tenant_id,
-            "external_id": entity_data.external_id,
-            "canonical_type": entity_data.canonical_type,
-            "source": entity_data.source,
-            "version": getattr(entity_data, "version", 1),
-        }
+            # Prepare entity data using Entity's custom create method
+            # Build dict with required parameters first
+            entity_dict = {
+                "tenant_id": tenant_id,
+                "external_id": entity_data.external_id,
+                "canonical_type": entity_data.canonical_type,
+                "source": entity_data.source,
+                "version": getattr(entity_data, "version", 1),
+            }
 
-        # Add optional parameters only if they're not None
-        if entity_data.content_hash is not None:
-            entity_dict["content_hash"] = entity_data.content_hash
-        if entity_data.attributes is not None:
-            entity_dict["attributes"] = entity_data.attributes
+            # Add optional parameters only if they're not None
+            if entity_data.content_hash is not None:
+                entity_dict["content_hash"] = entity_data.content_hash
+            if entity_data.attributes is not None:
+                entity_dict["attributes"] = entity_data.attributes
 
-        # Use Entity's create method to generate id and timestamps
-        temp_entity = Entity.create(**entity_dict)
+            # Use Entity's create method to generate id and timestamps
+            temp_entity = Entity.create(**entity_dict)
 
-        # Convert to dict for BaseRepository's _create
-        data_dict = {
-            "id": temp_entity.id,
-            "tenant_id": temp_entity.tenant_id,
-            "external_id": temp_entity.external_id,
-            "canonical_type": temp_entity.canonical_type,
-            "source": temp_entity.source,
-            "content_hash": temp_entity.content_hash,
-            "attributes": temp_entity.attributes,
-            "version": temp_entity.version,
-            "created_at": temp_entity.created_at,
-            "updated_at": temp_entity.updated_at,
-        }
+            # Create the actual entity in the database
+            entity = Entity(
+                id=temp_entity.id,
+                tenant_id=temp_entity.tenant_id,
+                external_id=temp_entity.external_id,
+                canonical_type=temp_entity.canonical_type,
+                source=temp_entity.source,
+                content_hash=temp_entity.content_hash,
+                attributes=temp_entity.attributes,
+                version=temp_entity.version,
+                created_at=temp_entity.created_at,
+                updated_at=temp_entity.updated_at,
+            )
+            
+            session.add(entity)
+            session.flush()
 
-        entity = self._create(data_dict)
+            # Log while entity is still in session
+            self.logger.info(
+                f"Created entity: id={entity.id}, tenant={entity.tenant_id}, "
+                f"type={entity.canonical_type}, source={entity.source}, "
+                f"version={entity.version}"
+            )
 
-        self.logger.info(
-            f"Created entity: id={entity.id}, tenant={entity.tenant_id}, "
-            f"type={entity.canonical_type}, source={entity.source}, "
-            f"version={entity.version}"
-        )
-
-        return entity.id  # type: ignore[return-value]  # SQLAlchemy Column access
+            return entity.id  # type: ignore[return-value]  # SQLAlchemy Column access
 
     @tenant_aware
     @operation(name="entity_get_by_id")
