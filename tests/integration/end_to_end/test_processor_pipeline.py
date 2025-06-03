@@ -13,7 +13,7 @@ from typing import Dict, Any
 from src.processors.message import Message, MessageType
 from src.processors.processing_result import ProcessingResult
 from src.processors.processor_interface import ProcessorInterface
-from src.processors.processor_executor import ProcessorExecutor
+from src.processors.processor_handler import ProcessorHandler
 from src.processors.processor_factory import ProcessorFactory
 from src.processing.processor_config import ProcessorConfig
 from src.schemas.entity_schema import EntityRead
@@ -245,8 +245,12 @@ class TestProcessorPipeline:
         )
         
         # Execute processor
-        executor = ProcessorExecutor()
-        result = executor.execute_processor(processor, message)
+        handler = ProcessorHandler(
+            processor=processor,
+            config=config,
+            processing_service=processing_service
+        )
+        result = handler.execute(message)
         
         # Verify processing succeeded
         assert result.success is True
@@ -316,13 +320,26 @@ class TestProcessorPipeline:
             }
         )
         
-        executor = ProcessorExecutor()
-        result1 = executor.execute_processor(transform_processor, initial_message)
+        transform_handler = ProcessorHandler(
+            processor=transform_processor,
+            config=config,
+            processing_service=processing_service
+        )
+        result1 = transform_handler.execute(initial_message)
         assert result1.success is True
         
         # Stage 2: Enrich entity
         enrichment_message = result1.output_messages[0]
-        result2 = executor.execute_processor(enrichment_processor, enrichment_message)
+        enrichment_config = ProcessorConfig(
+            processor_name="GenericEnrichmentProcessor",
+            enable_duplicate_detection=False
+        )
+        enrichment_handler = ProcessorHandler(
+            processor=enrichment_processor,
+            config=enrichment_config,
+            processing_service=processing_service
+        )
+        result2 = enrichment_handler.execute(enrichment_message)
         assert result2.success is True
         
         # Verify final entity state
@@ -363,7 +380,11 @@ class TestProcessorPipeline:
             hash_config=HashConfig(fields_to_include=["id", "data"])
         )
         processor = GenericTransformProcessor(processing_service, config)
-        executor = ProcessorExecutor()
+        handler = ProcessorHandler(
+            processor=processor,
+            config=config,
+            processing_service=processing_service
+        )
         
         # Process entity first time
         message1 = Message.create_entity_message(
@@ -377,7 +398,7 @@ class TestProcessorPipeline:
             }
         )
         
-        result1 = executor.execute_processor(processor, message1)
+        result1 = handler.execute(message1)
         assert result1.success is True
         assert len(result1.entities_created) == 1
         
@@ -393,7 +414,7 @@ class TestProcessorPipeline:
             }
         )
         
-        result2 = executor.execute_processor(processor, message2)
+        result2 = handler.execute(message2)
         assert result2.success is True
         assert len(result2.entities_created) == 1  # New version created (processing attempt)
         assert len(result2.entities_updated) == 0  # No updates, just new version
@@ -446,19 +467,51 @@ class TestProcessorPipeline:
             payload={"test": "data"}
         )
         
-        executor = ProcessorExecutor()
+        # Create minimal services for processor handler
+        from src.processing.duplicate_detection import DuplicateDetectionService
+        from src.processing.entity_attributes import EntityAttributeBuilder
+        from src.processing.processing_service import ProcessingService
+        from src.services.entity_service import EntityService
+        from src.repositories.entity_repository import EntityRepository
+        from src.db.db_config import DatabaseManager, DatabaseConfig
+        
+        # Create minimal config for test
+        config = ProcessorConfig(
+            processor_name="TransientFailureProcessor",
+            enable_duplicate_detection=False
+        )
+        
+        # Create minimal processing service
+        db_config = DatabaseConfig()
+        db_manager = DatabaseManager(db_config)
+        entity_repository = EntityRepository(db_manager=db_manager)
+        entity_service = EntityService(entity_repository=entity_repository)
+        duplicate_detection_service = DuplicateDetectionService(entity_repository)
+        attribute_builder = EntityAttributeBuilder()
+        processing_service = ProcessingService(
+            entity_service=entity_service,
+            entity_repository=entity_repository,
+            duplicate_detection_service=duplicate_detection_service,
+            attribute_builder=attribute_builder
+        )
+        
+        handler = ProcessorHandler(
+            processor=processor,
+            config=config,
+            processing_service=processing_service
+        )
         
         # First attempt should fail
-        result1 = executor.execute_processor(processor, message)
+        result1 = handler.execute(message)
         assert result1.success is False
         assert result1.can_retry is True
-        assert result1.retry_after_seconds == 5
+        assert result1.retry_after_seconds == 5  # Processor explicitly sets retry delay
         
         # Increment retry count
         message.increment_retry()
         
         # Second attempt should succeed
-        result2 = executor.execute_processor(processor, message)
+        result2 = handler.execute(message)
         assert result2.success is True
         assert result2.processing_metadata["attempts"] == 2
     
@@ -549,7 +602,39 @@ class TestProcessorPipeline:
         
         # Test control message processing
         processor = ControlMessageProcessor()
-        executor = ProcessorExecutor()
+        
+        # Create minimal config and services for handler
+        config = ProcessorConfig(
+            processor_name="ControlMessageProcessor",
+            enable_duplicate_detection=False
+        )
+        
+        # Create minimal processing service
+        from src.processing.duplicate_detection import DuplicateDetectionService
+        from src.processing.entity_attributes import EntityAttributeBuilder
+        from src.processing.processing_service import ProcessingService
+        from src.services.entity_service import EntityService
+        from src.repositories.entity_repository import EntityRepository
+        from src.db.db_config import DatabaseManager, DatabaseConfig
+        
+        db_config = DatabaseConfig()
+        db_manager = DatabaseManager(db_config)
+        entity_repository = EntityRepository(db_manager=db_manager)
+        entity_service = EntityService(entity_repository=entity_repository)
+        duplicate_detection_service = DuplicateDetectionService(entity_repository)
+        attribute_builder = EntityAttributeBuilder()
+        processing_service = ProcessingService(
+            entity_service=entity_service,
+            entity_repository=entity_repository,
+            duplicate_detection_service=duplicate_detection_service,
+            attribute_builder=attribute_builder
+        )
+        
+        handler = ProcessorHandler(
+            processor=processor,
+            config=config,
+            processing_service=processing_service
+        )
         
         # Send pause command
         pause_message = Message.create_control_message(
@@ -557,7 +642,7 @@ class TestProcessorPipeline:
             tenant_id=tenant_id
         )
         
-        result = executor.execute_processor(processor, pause_message)
+        result = handler.execute(pause_message)
         assert result.success is True
         assert result.processing_metadata["command_executed"] == "pause"
         assert processor.paused is True

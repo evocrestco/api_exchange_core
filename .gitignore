@@ -463,6 +463,9 @@ private/
 *.cert
 *.crt
 
+# Azure Functions
+local.settings.json
+
 # Test outputs
 test-results/
 test-reports/

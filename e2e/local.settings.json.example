@@ -1,0 +1,13 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "DB_HOST": "localhost",
+    "DB_PORT": "5432",
+    "DB_NAME": "e2e_test",
+    "DB_USER": "test_user",
+    "DB_PASSWORD": "test_password",
+    "TENANT_ID": "e2e_test_tenant"
+  }
+}
