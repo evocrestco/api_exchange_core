@@ -20,22 +20,47 @@ requires-python = ">=3.8"
 dependencies = [
     "sqlalchemy>=2.0.0",
     "pydantic>=2.0.0",
+    "email-validator>=2.0.0",
     "azure-storage-queue>=12.6.0",
     "azure-functions>=1.14.0",
+    "psycopg2-binary>=2.9.7",
+    "requests>=2.31.0",
+    "python-dotenv>=1.0.0",
+    "typing-extensions>=4.8.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
+    "pytest-asyncio>=0.25.0",
     "pytest-cov>=4.0.0",
-    "black>=23.0.0",
+    "pytest-bdd>=8.0.0",
+    "factory-boy>=3.3.0",
+    "requests-mock>=1.12.0",
+    "black>=23.0.0", 
     "isort>=5.12.0",
     "mypy>=1.0.0",
     "flake8>=6.0.0",
+    "bandit>=1.8.0",
+    "autoflake>=2.3.0",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.34.0",
+    "matplotlib>=3.10.0",
+    "plotly>=6.0.0",
+    "networkx>=3.4.0",
+    "prometheus-client>=0.21.0",
+]
+e2e = [
+    "azure-functions>=1.18.0",
+    "azure-storage-queue>=12.8.0", 
+    "azure-storage-blob>=12.19.0",
+    "requests>=2.31.0",
+    "python-json-logger>=2.0.7",
 ]
 
 [tool.setuptools]
-packages = ["api_exchange_core"]
+package-dir = {"" = "src"}
+packages = {find = {where = ["src"], exclude = ["tests*"]}}
 
 [tool.black]
 line-length = 100
