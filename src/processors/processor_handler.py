@@ -148,8 +148,8 @@ class ProcessorHandler:
             
             # Handle successful result
             if result.success:
-                # Persist entity if processor is a mapper
-                if hasattr(self.processor, 'to_canonical'):
+                # Persist entity only for source processors
+                if self.config.is_source_processor and hasattr(self.processor, 'to_canonical'):
                     entity_id = self._persist_entity(message, result)
                 
                 # Record successful state transition (only if we have entity_id)
