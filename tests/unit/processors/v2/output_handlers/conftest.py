@@ -6,13 +6,13 @@ Uses simple data classes instead of SQLAlchemy models to avoid database dependen
 """
 
 import uuid
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Any, Dict
 
 import pytest
 
-from src.processors.v2.message import Message, MessageType
 from src.processors.processing_result import ProcessingResult, ProcessingStatus
+from src.processors.v2.message import Message, MessageType
 
 
 class SimpleEntity:

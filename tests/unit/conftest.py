@@ -78,9 +78,9 @@ def processing_error_service(processing_error_repository):
 @pytest.fixture(scope="function")
 def processing_service(db_session):
     """Processing service with real dependencies."""
-    from src.processing.processing_service import ProcessingService
     from src.processing.duplicate_detection import DuplicateDetectionService
     from src.processing.entity_attributes import EntityAttributeBuilder
+    from src.processing.processing_service import ProcessingService
     from src.repositories.entity_repository import EntityRepository
     from src.services.entity_service import EntityService
     

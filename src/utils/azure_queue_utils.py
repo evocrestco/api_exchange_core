@@ -68,7 +68,9 @@ def process_metrics(
                         queue_client.send_message(json_metric)
                         log.debug(f"Metric {idx + 1} sent to queue after creation: {json_metric}")
                     except Exception as create_error:
-                        log.error(f"Failed to create queue or send metric {idx + 1}: {str(create_error)}")
+                        log.error(
+                            f"Failed to create queue or send metric {idx + 1}: {str(create_error)}"
+                        )
                 else:
                     log.error(f"Failed to send metric {idx + 1}: {str(e)}")
 

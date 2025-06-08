@@ -5,18 +5,18 @@ This module provides the core interfaces and classes for building flexible
 data processing pipelines using the v2 architecture.
 """
 
-# Import v2 components
-from src.processors.v2.message import Message, MessageType
-from src.processors.v2.processor_interface import ProcessorInterface, ProcessorContext
-from src.processors.v2.processor_handler import ProcessorHandler
-from src.processors.v2.processor_factory import (
-    create_processor_handler,
-    create_db_manager,
-)
-
 # Import shared components
 from src.processors.mapper_interface import CompositeMapper, MapperInterface
 from src.processors.processing_result import ProcessingResult, ProcessingStatus
+
+# Import v2 components
+from src.processors.v2.message import Message, MessageType
+from src.processors.v2.processor_factory import (
+    create_db_manager,
+    create_processor_handler,
+)
+from src.processors.v2.processor_handler import ProcessorHandler
+from src.processors.v2.processor_interface import ProcessorContext, ProcessorInterface
 
 # Import v2 message components for backwards compatibility
 from src.schemas.entity_schema import EntityReference

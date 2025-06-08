@@ -58,13 +58,13 @@ class TenantRepository(BaseRepository[Tenant]):
             RepositoryError: If tenant doesn't exist or there's a database error
         """
         tenant_id = self._get_current_tenant_id()
-        
+
         with self._session_operation("get_current_tenant", tenant_id) as session:
             tenant = session.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()
             if not tenant:
                 raise not_found("Tenant", tenant_id=tenant_id)
             return TenantRead.model_validate(tenant)
-        
+
     def get_by_id(self, tenant_id: str) -> TenantRead:
         """
         Get a tenant by ID.
@@ -83,8 +83,6 @@ class TenantRepository(BaseRepository[Tenant]):
             if not tenant:
                 raise not_found("Tenant", tenant_id=tenant_id)
             return TenantRead.model_validate(tenant)
-
-
 
     def create(self, tenant_data: TenantCreate) -> TenantRead:
         """

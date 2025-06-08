@@ -5,20 +5,20 @@ Tests the abstract base class functionality, helper methods, and
 common result/error classes used by all output handlers.
 """
 
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Any, Dict
 from unittest.mock import MagicMock
 
 import pytest
 
+from src.processors.processing_result import ProcessingResult
+from src.processors.v2.message import Message
 from src.processors.v2.output_handlers.base import (
     OutputHandler,
     OutputHandlerError,
     OutputHandlerResult,
     OutputHandlerStatus,
 )
-from src.processors.v2.message import Message
-from src.processors.processing_result import ProcessingResult
 
 
 class ConcreteOutputHandler(OutputHandler):

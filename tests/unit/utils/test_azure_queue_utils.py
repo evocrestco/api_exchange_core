@@ -1,10 +1,9 @@
 """Tests for Azure Queue utilities."""
 
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, Mock, patch
 
 import azure.functions as func
-
 
 from src.constants import QueueName, QueueOperation
 from src.schemas.metric_model import Metric

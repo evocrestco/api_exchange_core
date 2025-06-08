@@ -235,4 +235,3 @@ class CompositeMapper(MapperInterface):
             "mapper_module": self.__class__.__module__,
             "component_mappers": [mapper.get_mapper_info() for mapper in self.mappers],
         }
-

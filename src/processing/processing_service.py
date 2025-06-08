@@ -128,7 +128,7 @@ class ProcessingService:
                     "is_new_entity": is_new_entity,
                     "version": version,
                     "duplicate_detection": (
-                        duplicate_result.model_dump(mode='json') if duplicate_result else None
+                        duplicate_result.model_dump(mode="json") if duplicate_result else None
                     ),
                 },
             }
@@ -508,7 +508,7 @@ class ProcessingService:
         """
         try:
             start_time = time.time()
-            
+
             self.logger.info(
                 f"Processing message through processor",
                 extra={
@@ -517,11 +517,12 @@ class ProcessingService:
                     "processor": config.processor_name,
                     "entity_external_id": message.entity_reference.external_id,
                     "entity_type": message.entity_reference.canonical_type,
-                }
+                },
             )
 
             # Execute the processor
             from src.processors.processing_result import ProcessingResult as ProcessorResult
+
             processor_result = processor.process(message)
 
             # Ensure we have a valid result
@@ -536,7 +537,7 @@ class ProcessingService:
             if processor_result.success:
                 # Extract entity information from the message
                 entity_ref = message.entity_reference
-                
+
                 # Perform duplicate detection if enabled
                 duplicate_result = None
                 if config.enable_duplicate_detection:
@@ -559,34 +560,45 @@ class ProcessingService:
                 )
 
                 # Update processor result with persistence information
-                processor_result.entities_created = [persistence_result.entity_id] if persistence_result.is_new_entity else []
-                processor_result.entities_updated = [persistence_result.entity_id] if not persistence_result.is_new_entity else []
-                
+                processor_result.entities_created = (
+                    [persistence_result.entity_id] if persistence_result.is_new_entity else []
+                )
+                processor_result.entities_updated = (
+                    [persistence_result.entity_id] if not persistence_result.is_new_entity else []
+                )
+
                 # Add entity persistence metadata
-                processor_result.processing_metadata.update({
-                    "entity_id": persistence_result.entity_id,
-                    "entity_version": persistence_result.entity_version,
-                    "is_new_entity": persistence_result.is_new_entity,
-                    "content_changed": persistence_result.content_changed,
-                })
+                processor_result.processing_metadata.update(
+                    {
+                        "entity_id": persistence_result.entity_id,
+                        "entity_version": persistence_result.entity_version,
+                        "is_new_entity": persistence_result.is_new_entity,
+                        "content_changed": persistence_result.content_changed,
+                    }
+                )
 
                 if persistence_result.duplicate_detection_result:
-                    processor_result.processing_metadata["duplicate_detection"] = persistence_result.duplicate_detection_result.model_dump(mode='json')
+                    processor_result.processing_metadata["duplicate_detection"] = (
+                        persistence_result.duplicate_detection_result.model_dump(mode="json")
+                    )
 
             # Calculate processing duration
             processing_duration = (time.time() - start_time) * 1000
             processor_result.processing_duration_ms = processing_duration
 
             # Set processor info
-            processor_result.processor_info.update({
-                "name": config.processor_name,
-                "version": config.processor_version,
-                "is_source_processor": config.is_source_processor,
-            })
+            processor_result.processor_info.update(
+                {
+                    "name": config.processor_name,
+                    "version": config.processor_version,
+                    "is_source_processor": config.is_source_processor,
+                }
+            )
 
             # Set completion timestamp if successful
             if processor_result.success:
-                from datetime import datetime, UTC
+                from datetime import UTC, datetime
+
                 processor_result.completed_at = datetime.now(UTC)
 
             self.logger.info(
@@ -599,7 +611,7 @@ class ProcessingService:
                     "output_handlers": len(processor_result.output_handlers),
                     "entities_created": len(processor_result.entities_created),
                     "entities_updated": len(processor_result.entities_updated),
-                }
+                },
             )
 
             return processor_result
@@ -616,9 +628,11 @@ class ProcessingService:
             )
 
             # Create failure result
-            from src.processors.processing_result import ProcessingResult as ProcessorResult, ProcessingStatus
-            from datetime import datetime, UTC
-            
+            from datetime import UTC, datetime
+
+            from src.processors.processing_result import ProcessingResult as ProcessorResult
+            from src.processors.processing_result import ProcessingStatus
+
             processor_result = ProcessorResult(
                 status=ProcessingStatus.FAILED,
                 success=False,
@@ -640,4 +654,3 @@ class ProcessingService:
             )
 
             return processor_result
-

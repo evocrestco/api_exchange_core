@@ -7,7 +7,7 @@ use exponential backoff correctly for retry logic.
 
 import pytest
 
-from src.processors.v2.output_handlers.base import calculate_exponential_backoff, OutputHandlerError
+from src.processors.v2.output_handlers.base import OutputHandlerError, calculate_exponential_backoff
 
 
 class TestExponentialBackoff:

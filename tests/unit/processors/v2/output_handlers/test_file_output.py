@@ -26,20 +26,20 @@ import json
 import os
 import tempfile
 import uuid
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
 from unittest.mock import patch
 
 import pytest
 
-from src.processors.v2.output_handlers.file_output import FileOutputHandler
+from src.processors.processing_result import ProcessingResult, ProcessingStatus
+from src.processors.v2.message import Message, MessageType
 from src.processors.v2.output_handlers.base import (
     OutputHandlerResult,
     OutputHandlerStatus,
 )
-from src.processors.v2.message import Message, MessageType
-from src.processors.processing_result import ProcessingResult, ProcessingStatus
+from src.processors.v2.output_handlers.file_output import FileOutputHandler
 
 
 class TestFileOutputHandler:

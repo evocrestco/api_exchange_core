@@ -5,8 +5,9 @@ Tests use real data and real code paths following the NO MOCKS philosophy.
 All tests use actual EntityRepository and database operations.
 """
 
-import pytest
 from datetime import datetime
+
+import pytest
 
 from src.processing.duplicate_detection import DuplicateDetectionResult, DuplicateDetectionService
 from src.schemas.entity_schema import EntityCreate

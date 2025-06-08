@@ -4,7 +4,6 @@ Test the consolidated exception system.
 
 from unittest.mock import MagicMock, patch
 
-
 from src.exceptions import (
     BaseError,
     ErrorCode,

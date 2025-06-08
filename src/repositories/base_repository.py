@@ -42,7 +42,7 @@ class BaseRepository(Generic[T]):
         self.entity_class = entity_class
         self.logger = logger or logging.getLogger(f"{__name__}.{self.__class__.__name__}")
         self.entity_name = entity_class.__name__
-        
+
     def _get_current_tenant_id(self) -> str:
         """Get current tenant ID from context."""
         tenant_id = TenantContext.get_current_tenant_id()
@@ -155,12 +155,11 @@ class BaseRepository(Generic[T]):
                 **error_context,
             )
 
-            
     @contextmanager
     def _session_operation(self, operation_name: str, entity_id: Optional[str] = None):
         """
         Context manager for operations on existing session with error handling.
-        
+
         This is for the new session-based repository pattern where the repository
         receives a session and doesn't manage session lifecycle.
 
@@ -209,7 +208,7 @@ class BaseRepository(Generic[T]):
         return result
 
     # ==================== BASE CRUD METHODS ====================
-    
+
     def _get_by_id(self, entity_id: str, for_update: bool = False) -> Optional[T]:
         """
         Get an entity by its ID using existing session.

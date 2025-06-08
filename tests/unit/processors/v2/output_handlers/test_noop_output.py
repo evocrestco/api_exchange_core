@@ -9,9 +9,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.processors.v2.output_handlers import NoOpOutputHandler, OutputHandlerStatus
-from src.processors.v2.message import Message
 from src.processors.processing_result import ProcessingResult
+from src.processors.v2.message import Message
+from src.processors.v2.output_handlers import NoOpOutputHandler, OutputHandlerStatus
 
 
 class TestNoOpOutputHandler:

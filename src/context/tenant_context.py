@@ -98,9 +98,7 @@ class TenantContext:
             cls._logger.debug("Tenant cache cleared")
 
     @classmethod
-    def get_tenant(
-        cls, session, tenant_id: Optional[str] = None
-    ) -> Optional["TenantRead"]:
+    def get_tenant(cls, session, tenant_id: Optional[str] = None) -> Optional["TenantRead"]:
         """
         Get a tenant object by ID or from current context using repository pattern.
 

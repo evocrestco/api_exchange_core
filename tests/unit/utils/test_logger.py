@@ -11,18 +11,19 @@ import sys
 import tempfile
 from datetime import datetime
 from io import StringIO
-from unittest.mock import patch, Mock
+from unittest.mock import Mock, patch
+
 import pytest
 
-from src.utils.logger import (
-    ContextAwareLogger,
-    TenantContextFilter,
-    AzureQueueHandler,
-    configure_logging,
-    get_logger
-)
 import src.utils.logger
 from src.context.tenant_context import TenantContext, tenant_context
+from src.utils.logger import (
+    AzureQueueHandler,
+    ContextAwareLogger,
+    TenantContextFilter,
+    configure_logging,
+    get_logger,
+)
 
 
 @pytest.fixture(autouse=True)

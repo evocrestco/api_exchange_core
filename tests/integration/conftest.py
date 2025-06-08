@@ -5,20 +5,21 @@ This module provides fixtures and configuration specific to integration tests.
 It builds on the base conftest.py but adds integration-specific setup.
 """
 
+import json
 import os
-import pytest
+import time
 from pathlib import Path
 
-# Import base fixtures from root conftest
-from tests.conftest import *  # noqa: F403, F401
+import pytest
+
+# Azure Storage imports for real queue operations
+from azure.storage.queue import QueueClient, QueueMessage
 
 # Integration tests need to import all models for proper database setup
 from src.db.db_config import import_all_models
 
-# Azure Storage imports for real queue operations
-from azure.storage.queue import QueueClient, QueueMessage
-import json
-import time
+# Import base fixtures from root conftest
+from tests.conftest import *  # noqa: F403, F401
 
 
 @pytest.fixture(scope="session", autouse=True)

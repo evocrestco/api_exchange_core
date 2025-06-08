@@ -6,7 +6,7 @@ and entity factories that work with the database.
 """
 
 import uuid
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
 import pytest
 

@@ -67,7 +67,7 @@ class EntityReference(BaseModel):
     canonical_type: str
     source: str
     version: int = Field(default=1, description="Entity version number")
-    
+
     @classmethod
     def from_entity(cls, entity) -> "EntityReference":
         """Create EntityReference from Entity model."""
@@ -77,5 +77,5 @@ class EntityReference(BaseModel):
             external_id=entity.external_id,
             canonical_type=entity.canonical_type,
             source=entity.source,
-            version=entity.version
+            version=entity.version,
         )

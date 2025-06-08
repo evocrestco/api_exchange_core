@@ -5,7 +5,7 @@ This module provides configuration classes for customizing processor behavior
 including duplicate detection, versioning, and processing options.
 """
 
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -80,17 +80,15 @@ class ProcessorConfig(BaseModel):
     # Output handler configuration
     output_handlers_config: Optional[Dict[str, Dict[str, Any]]] = Field(
         default=None,
-        description="Configuration for output handlers (e.g., queues, files, service bus)"
+        description="Configuration for output handlers (e.g., queues, files, service bus)",
     )
-    
+
     default_output_handlers: Optional[List[str]] = Field(
-        default=None,
-        description="List of output handler names to use by default"
+        default=None, description="List of output handler names to use by default"
     )
-    
+
     output_handler_env_prefix: Optional[str] = Field(
-        default=None,
-        description="Environment variable prefix for loading output handler configs"
+        default=None, description="Environment variable prefix for loading output handler configs"
     )
 
     model_config = ConfigDict(extra="allow")  # Allow additional configuration fields

@@ -69,10 +69,11 @@ class StateTransitionRepository(BaseRepository[StateTransition]):
 
         # Create StateTransition with proper session management
         with self._session_operation("create") as session:
-            from src.db.db_state_transition_models import StateTransition
-            from datetime import datetime, timezone
             import uuid
-            
+            from datetime import datetime, timezone
+
+            from src.db.db_state_transition_models import StateTransition
+
             # Add required fields if not present
             if "id" not in data_dict:
                 data_dict["id"] = str(uuid.uuid4())
@@ -80,20 +81,20 @@ class StateTransitionRepository(BaseRepository[StateTransition]):
                 data_dict["created_at"] = datetime.now(timezone.utc)
             if "updated_at" not in data_dict:
                 data_dict["updated_at"] = datetime.now(timezone.utc)
-            
+
             # Create StateTransition directly
             transition = StateTransition(**data_dict)
-            
+
             session.add(transition)
             session.flush()
-            
+
             # Log while transition is still in session
             self.logger.info(
                 f"Created StateTransition: entity_id={transition.entity_id}, "
                 f"from={transition.from_state} to={transition.to_state}, "
                 f"actor={transition.actor}"
             )
-            
+
             return transition.id  # type: ignore[return-value]
 
     def get_by_id(self, id: str) -> Optional[StateTransitionRead]:

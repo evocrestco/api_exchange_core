@@ -9,7 +9,7 @@ import pytest
 
 from src.exceptions import ErrorCode, RepositoryError
 from src.repositories.entity_repository import EntityRepository
-from src.schemas.entity_schema import EntityCreate, EntityUpdate, EntityFilter
+from src.schemas.entity_schema import EntityCreate, EntityFilter, EntityUpdate
 
 
 class TestEntityRepositoryErrorPaths:

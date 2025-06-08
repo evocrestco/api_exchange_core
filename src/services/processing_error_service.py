@@ -86,7 +86,7 @@ class ProcessingErrorService(
             if error_data is None:
                 from src.context.tenant_context import TenantContext
                 from src.exceptions import ErrorCode, ServiceError
-                
+
                 tenant_id = self._get_current_tenant_id()
                 raise ServiceError(
                     f"Processing error not found: error_id={error_id}",

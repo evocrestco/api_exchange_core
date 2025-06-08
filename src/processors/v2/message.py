@@ -3,7 +3,7 @@ Message classes v2 for processor pipeline communication.
 
 Key improvements from v1:
 - Takes Entity directly instead of EntityReference
-- Eliminates circular dependencies 
+- Eliminates circular dependencies
 - EntityReference created on-demand from Entity
 - Cleaner entity creation sequence
 """
@@ -13,13 +13,14 @@ from enum import Enum
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.schemas.entity_schema import EntityReference
 
 
 class MessageType(str, Enum):
     """Types of messages that can flow through the pipeline."""
+
     ENTITY_PROCESSING = "entity_processing"
     CONTROL_MESSAGE = "control_message"
     ERROR_MESSAGE = "error_message"
@@ -66,11 +67,11 @@ class Message(BaseModel):
 
     @classmethod
     def create_entity_message(
-            cls,
-            entity,
-            payload: Dict[str, Any],
-            correlation_id: Optional[str] = None,
-            metadata: Optional[Dict[str, Any]] = None,
+        cls,
+        entity,
+        payload: Dict[str, Any],
+        correlation_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> "Message":
         """Create message for entity processing."""
         return cls(

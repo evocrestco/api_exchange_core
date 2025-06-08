@@ -41,11 +41,11 @@ class BaseService(Generic[TCreate, TRead, TUpdate, TFilter]):
         self.repository = repository
         self.read_schema_class = read_schema_class
         self.logger = get_logger()
-    
+
     def _get_current_tenant_id(self) -> str:
         """Get current tenant ID from context with validation."""
         from src.context.tenant_context import TenantContext
-        
+
         tenant_id = TenantContext.get_current_tenant_id()
         if not tenant_id:
             raise ValueError("No tenant context set - ensure tenant_context is active")

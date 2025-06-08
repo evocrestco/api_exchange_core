@@ -130,18 +130,16 @@ def get_production_config() -> DatabaseConfig:
     )
 
 
-
-
 def import_all_models():
     """Import all models to ensure they're registered with SQLAlchemy metadata."""
     # Import order matters - base models first, then dependent models
     # Configure mappers to resolve all relationships
     from sqlalchemy.orm import configure_mappers
 
-    from src.db.db_tenant_models import Tenant  # noqa
     from src.db.db_entity_models import Entity  # noqa
-    from src.db.db_state_transition_models import StateTransition  # noqa
     from src.db.db_error_models import ProcessingError  # noqa
+    from src.db.db_state_transition_models import StateTransition  # noqa
+    from src.db.db_tenant_models import Tenant  # noqa
 
     configure_mappers()
 
@@ -149,7 +147,7 @@ def import_all_models():
 def init_db(db_manager: DatabaseManager) -> None:
     """
     Initialize the database, creating all tables.
-    
+
     Args:
         db_manager: DatabaseManager instance to use for table creation
     """

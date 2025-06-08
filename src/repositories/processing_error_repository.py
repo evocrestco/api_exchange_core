@@ -48,7 +48,7 @@ class ProcessingErrorRepository(BaseRepository[ProcessingError]):
             RepositoryError: If there's a database error during creation
         """
         tenant_id = self._get_current_tenant_id()
-            
+
         with self._session_operation("create") as session:
             # Create ProcessingError instance with tenant context
             error = ProcessingError(
@@ -59,7 +59,7 @@ class ProcessingErrorRepository(BaseRepository[ProcessingError]):
                 processing_step=error_data.processing_step,
                 stack_trace=error_data.stack_trace,
             )
-            
+
             session.add(error)
             session.flush()
 
@@ -82,17 +82,18 @@ class ProcessingErrorRepository(BaseRepository[ProcessingError]):
         """
         with self._session_operation("get_by_id", error_id) as session:
             tenant_id = self._get_current_tenant_id()
-            
-            error = session.query(ProcessingError).filter(
-                ProcessingError.id == error_id,
-                ProcessingError.tenant_id == tenant_id
-            ).first()
+
+            error = (
+                session.query(ProcessingError)
+                .filter(ProcessingError.id == error_id, ProcessingError.tenant_id == tenant_id)
+                .first()
+            )
 
             if not error:
                 return None
 
             return ProcessingErrorRead.model_validate(error)
-    
+
     def require_by_id(self, error_id: str) -> ProcessingErrorRead:
         """
         Get a processing error by its ID, raising an exception if not found.
@@ -201,18 +202,19 @@ class ProcessingErrorRepository(BaseRepository[ProcessingError]):
         """
         with self._session_operation("delete", error_id) as session:
             tenant_id = self._get_current_tenant_id()
-            
-            error = session.query(ProcessingError).filter(
-                ProcessingError.id == error_id,
-                ProcessingError.tenant_id == tenant_id
-            ).first()
-            
+
+            error = (
+                session.query(ProcessingError)
+                .filter(ProcessingError.id == error_id, ProcessingError.tenant_id == tenant_id)
+                .first()
+            )
+
             if not error:
                 return False
-                
+
             session.delete(error)
             session.flush()
-            
+
             self.logger.info(f"Deleted processing error with ID: {error_id}")
             return True
 

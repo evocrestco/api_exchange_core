@@ -116,7 +116,6 @@ class TenantService(BaseService[TenantCreate, TenantRead, TenantUpdate, TenantFi
         except Exception as e:
             self._handle_tenant_service_exception("create_tenant", e, tenant_data.tenant_id)
 
-
     @tenant_aware
     @operation()
     @transactional()
@@ -218,7 +217,6 @@ class TenantService(BaseService[TenantCreate, TenantRead, TenantUpdate, TenantFi
             raise
         except Exception as e:
             self._handle_tenant_service_exception("update_tenant_config", e, tenant_id)
-
 
     @tenant_aware
     @operation()

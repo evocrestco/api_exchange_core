@@ -5,8 +5,9 @@ Tests use real data and real code paths following the NO MOCKS philosophy.
 Tests cover EntityAttributeBuilder functionality for standardized attribute management.
 """
 
-import pytest
 from datetime import datetime
+
+import pytest
 
 from src.processing.duplicate_detection import DuplicateDetectionResult
 from src.processing.entity_attributes import EntityAttributeBuilder

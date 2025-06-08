@@ -5,24 +5,25 @@ These tests use real implementations following the NO MOCKS philosophy.
 Tests verify that ProcessorContext properly provides access to framework services.
 """
 
-import pytest
 from datetime import datetime
 
-from src.processors.v2.processor_interface import ProcessorContext
-from src.processing.processing_service import ProcessingService
-from src.processing.duplicate_detection import DuplicateDetectionService
-from src.processing.entity_attributes import EntityAttributeBuilder
-from src.processing.processor_config import ProcessorConfig
-from src.services.entity_service import EntityService
-from src.services.state_tracking_service import StateTrackingService
-from src.services.processing_error_service import ProcessingErrorService
-from src.repositories.entity_repository import EntityRepository
-from src.repositories.state_transition_repository import StateTransitionRepository
-from src.repositories.processing_error_repository import ProcessingErrorRepository
-from src.schemas.entity_schema import EntityRead
+import pytest
+
 from src.context.tenant_context import tenant_context as tenant_ctx
 from src.db.db_base import EntityStateEnum
 from src.exceptions import ServiceError
+from src.processing.duplicate_detection import DuplicateDetectionService
+from src.processing.entity_attributes import EntityAttributeBuilder
+from src.processing.processing_service import ProcessingService
+from src.processing.processor_config import ProcessorConfig
+from src.processors.v2.processor_interface import ProcessorContext
+from src.repositories.entity_repository import EntityRepository
+from src.repositories.processing_error_repository import ProcessingErrorRepository
+from src.repositories.state_transition_repository import StateTransitionRepository
+from src.schemas.entity_schema import EntityRead
+from src.services.entity_service import EntityService
+from src.services.processing_error_service import ProcessingErrorService
+from src.services.state_tracking_service import StateTrackingService
 
 
 class TestProcessorContext:

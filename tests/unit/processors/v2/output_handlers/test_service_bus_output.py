@@ -12,24 +12,24 @@ some tests use controlled simulation to avoid external dependencies.
 import json
 import os
 import uuid
-from datetime import datetime, UTC
-from typing import Dict, Any
-from unittest.mock import MagicMock, patch, Mock
+from datetime import UTC, datetime
+from typing import Any, Dict
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from src.processors.v2.output_handlers.service_bus_output import (
-    ServiceBusOutputHandler,
-    SERVICEBUS_AVAILABLE,
-)
+from src.db.db_entity_models import Entity
+from src.processors.processing_result import ProcessingResult, ProcessingStatus
+from src.processors.v2.message import Message, MessageType
 from src.processors.v2.output_handlers.base import (
     OutputHandlerError,
     OutputHandlerResult,
     OutputHandlerStatus,
 )
-from src.processors.v2.message import Message, MessageType
-from src.processors.processing_result import ProcessingResult, ProcessingStatus
-from src.db.db_entity_models import Entity
+from src.processors.v2.output_handlers.service_bus_output import (
+    SERVICEBUS_AVAILABLE,
+    ServiceBusOutputHandler,
+)
 from src.schemas.entity_schema import EntityReference
 from src.utils.hash_utils import calculate_entity_hash
 

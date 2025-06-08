@@ -131,12 +131,12 @@ def transactional():
             try:
                 # Execute the function
                 result = func(self, *args, **kwargs)
-                
+
                 # Commit the transaction on success
                 session.commit()
-                
+
                 return result
-                
+
             except Exception:
                 # Rollback on any exception
                 session.rollback()

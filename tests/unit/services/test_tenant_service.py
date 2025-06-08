@@ -19,7 +19,6 @@ import os
 # Import models and schemas using our established path pattern
 import sys
 import uuid
-
 from typing import Any, Dict
 
 import pytest

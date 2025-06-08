@@ -119,7 +119,7 @@ class EntityRepository(BaseRepository[Entity]):
                 created_at=temp_entity.created_at,
                 updated_at=temp_entity.updated_at,
             )
-            
+
             session.add(entity)
             session.flush()
 

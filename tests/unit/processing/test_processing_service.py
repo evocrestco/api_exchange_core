@@ -7,18 +7,18 @@ focusing on error handling and processing flow.
 
 import pytest
 
+from src.db.db_base import EntityStateEnum
 from src.exceptions import ErrorCode, ServiceError, ValidationError
 from src.processing.duplicate_detection import DuplicateDetectionResult, DuplicateDetectionService
 from src.processing.entity_attributes import EntityAttributeBuilder
-from src.processing.processing_service import ProcessingService, ProcessingResult
+from src.processing.processing_service import ProcessingResult, ProcessingService
 from src.processing.processor_config import ProcessorConfig
 from src.repositories.entity_repository import EntityRepository
-from src.repositories.state_transition_repository import StateTransitionRepository
 from src.repositories.processing_error_repository import ProcessingErrorRepository
+from src.repositories.state_transition_repository import StateTransitionRepository
 from src.services.entity_service import EntityService
-from src.services.state_tracking_service import StateTrackingService
 from src.services.processing_error_service import ProcessingErrorService
-from src.db.db_base import EntityStateEnum
+from src.services.state_tracking_service import StateTrackingService
 from src.utils.hash_config import HashConfig
 
 
@@ -378,8 +378,9 @@ class TestProcessingServiceMessageIntegration:
     @pytest.fixture
     def test_processor(self):
         """Create a real test processor for testing."""
+        from datetime import UTC, datetime
+
         from src.processors.processing_result import ProcessingResult, ProcessingStatus
-        from datetime import datetime, UTC
         
         class TestProcessor:
             """Real processor implementation for testing."""
@@ -417,10 +418,11 @@ class TestProcessingServiceMessageIntegration:
     @pytest.fixture
     def test_message(self, create_test_entity):
         """Create a test message v2."""
-        from src.processors.v2.message import Message, MessageType
-        from datetime import datetime, UTC
         import uuid
-        
+        from datetime import UTC, datetime
+
+        from src.processors.v2.message import Message, MessageType
+
         # Create entity with unique external_id to avoid conflicts
         entity = create_test_entity(
             external_id=f"msg-test-{uuid.uuid4().hex[:8]}",
@@ -441,10 +443,11 @@ class TestProcessingServiceMessageIntegration:
     def test_process_message_success_new_entity(self, processing_service, test_processor, create_test_message):
         """Test successful message processing with new entity creation."""
         # Create a message that references a non-existent entity (for new entity creation)
-        from src.processors.v2.message import Message, MessageType
-        from datetime import datetime, UTC
         import uuid
-        
+        from datetime import UTC, datetime
+
+        from src.processors.v2.message import Message, MessageType
+
         # Create a simple entity-like object that doesn't exist in database
         class MockEntity:
             def __init__(self):
@@ -542,9 +545,10 @@ class TestProcessingServiceMessageIntegration:
 
     def test_process_message_processor_failure(self, processing_service, test_message):
         """Test message processing when processor fails."""
+        from datetime import UTC, datetime
+
         from src.processors.processing_result import ProcessingResult, ProcessingStatus
-        from datetime import datetime, UTC
-        
+
         # Create processor that returns failure
         class FailingProcessor:
             def process(self, message):
@@ -626,10 +630,11 @@ class TestProcessingServiceMessageIntegration:
 
     def test_process_message_with_output_handlers(self, processing_service, test_message):
         """Test message processing preserves output handlers from processor result."""
+        from datetime import UTC, datetime
+
         from src.processors.processing_result import ProcessingResult, ProcessingStatus
         from src.processors.v2.output_handlers.noop_output import NoOpOutputHandler
-        from datetime import datetime, UTC
-        
+
         # Create processor with output handlers
         class ProcessorWithHandlers:
             def process(self, message):

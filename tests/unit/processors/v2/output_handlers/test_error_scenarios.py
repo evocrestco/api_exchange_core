@@ -43,13 +43,14 @@ can't be controlled with real Azurite infrastructure.
 
 import os
 import tempfile
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, Mock, patch
+
 import pytest
 
 try:
-    from azure.core.exceptions import ServiceRequestError, HttpResponseError
-    from azure.storage.queue import QueueClient, QueueServiceClient
+    from azure.core.exceptions import HttpResponseError, ServiceRequestError
     from azure.servicebus.exceptions import ServiceBusConnectionError, ServiceBusError
+    from azure.storage.queue import QueueClient, QueueServiceClient
     AZURE_AVAILABLE = True
 except ImportError:
     AZURE_AVAILABLE = False
@@ -58,10 +59,10 @@ except ImportError:
     ServiceBusConnectionError = Exception
     ServiceBusError = Exception
 
+from src.processors.v2.output_handlers.base import OutputHandlerError
+from src.processors.v2.output_handlers.file_output import FileOutputHandler
 from src.processors.v2.output_handlers.queue_output import QueueOutputHandler
 from src.processors.v2.output_handlers.service_bus_output import ServiceBusOutputHandler
-from src.processors.v2.output_handlers.file_output import FileOutputHandler
-from src.processors.v2.output_handlers.base import OutputHandlerError
 
 
 class TestQueueOutputHandlerErrorScenarios:

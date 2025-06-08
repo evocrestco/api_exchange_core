@@ -13,7 +13,7 @@ from decimal import Decimal
 import pytest
 from pydantic import BaseModel
 
-from src.utils.json_utils import dump, dumps, load, loads, EnhancedJSONEncoder
+from src.utils.json_utils import EnhancedJSONEncoder, dump, dumps, load, loads
 
 
 class SamplePydanticModel(BaseModel):

@@ -5,21 +5,22 @@ Tests the configuration loading, validation, and management functionality
 for all output handler types.
 """
 
-import os
 import json
+import os
 import tempfile
-from unittest.mock import patch
 from dataclasses import dataclass
+from unittest.mock import patch
+
 import pytest
 
 from src.processors.v2.output_handlers.config import (
-    OutputHandlerConfigBase,
-    QueueOutputHandlerConfig,
-    ServiceBusOutputHandlerConfig,
     FileOutputHandlerConfig,
     NoOpOutputHandlerConfig,
+    OutputHandlerConfigBase,
     OutputHandlerConfigFactory,
-    OutputHandlerConfigManager
+    OutputHandlerConfigManager,
+    QueueOutputHandlerConfig,
+    ServiceBusOutputHandlerConfig,
 )
 
 
