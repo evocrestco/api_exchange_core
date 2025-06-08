@@ -59,7 +59,7 @@ class ContextAwareLogger:
 
     def set_level(self, level):
         """Set the logging level of the underlying logger."""
-        self.logger.set_level(level)
+        self.logger.setLevel(level)
 
     def info(self, msg, **kwargs):
         """Log at INFO level with formatted extra."""

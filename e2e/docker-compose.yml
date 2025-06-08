@@ -16,7 +16,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-    command: postgres -c shared_buffers=256MB -c max_connections=200
+    command: postgres -c shared_buffers=256MB -c max_connections=200 -c log_statement=all -c log_min_duration_statement=0
 
   # Azurite for Azure Storage emulation
   azurite:

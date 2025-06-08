@@ -11,7 +11,6 @@ from typing import List, Optional
 from sqlalchemy import and_, select
 
 from src.context.tenant_context import TenantContext
-from src.db.db_config import DatabaseManager
 from src.db.db_error_models import ProcessingError
 from src.exceptions import not_found
 from src.repositories.base_repository import BaseRepository
@@ -25,15 +24,15 @@ from src.schemas.processing_error_schema import (
 class ProcessingErrorRepository(BaseRepository[ProcessingError]):
     """Repository for ProcessingError entity data access operations."""
 
-    def __init__(self, db_manager: DatabaseManager, logger: Optional[logging.Logger] = None):
+    def __init__(self, session, logger: Optional[logging.Logger] = None):
         """
         Initialize the ProcessingError repository.
 
         Args:
-            db_manager: Database manager instance for session handling
+            session: SQLAlchemy session for database operations
             logger: Optional logger instance
         """
-        super().__init__(db_manager, ProcessingError, logger)
+        super().__init__(session, ProcessingError, logger)
 
     def create(self, error_data: ProcessingErrorCreate) -> str:
         """
@@ -48,11 +47,24 @@ class ProcessingErrorRepository(BaseRepository[ProcessingError]):
         Raises:
             RepositoryError: If there's a database error during creation
         """
-        # Use BaseRepository helper to prepare data
-        error_dict = self._prepare_create_data(error_data)
+        tenant_id = self._get_current_tenant_id()
+            
+        with self._session_operation("create") as session:
+            # Create ProcessingError instance with tenant context
+            error = ProcessingError(
+                tenant_id=tenant_id,
+                entity_id=error_data.entity_id,
+                error_type_code=error_data.error_type_code,
+                message=error_data.message,
+                processing_step=error_data.processing_step,
+                stack_trace=error_data.stack_trace,
+            )
+            
+            session.add(error)
+            session.flush()
 
-        error = self._create(error_dict)
-        return error.id  # type: ignore[return-value]
+            self.logger.info(f"Created processing error with ID: {error.id}")
+            return error.id  # type: ignore[return-value]
 
     def get_by_id(self, error_id: str) -> Optional[ProcessingErrorRead]:
         """
@@ -68,16 +80,36 @@ class ProcessingErrorRepository(BaseRepository[ProcessingError]):
             EntityNotFoundError: If the error doesn't exist
             RepositoryError: If there's a database error
         """
-        # Use BaseRepository's _get_by_id method
-        error = self._get_by_id(error_id)
+        with self._session_operation("get_by_id", error_id) as session:
+            tenant_id = self._get_current_tenant_id()
+            
+            error = session.query(ProcessingError).filter(
+                ProcessingError.id == error_id,
+                ProcessingError.tenant_id == tenant_id
+            ).first()
 
+            if not error:
+                return None
+
+            return ProcessingErrorRead.model_validate(error)
+    
+    def require_by_id(self, error_id: str) -> ProcessingErrorRead:
+        """
+        Get a processing error by its ID, raising an exception if not found.
+
+        Args:
+            error_id: The ID of the error to retrieve
+
+        Returns:
+            ProcessingErrorRead schema object
+
+        Raises:
+            RepositoryError: If the error doesn't exist or there's a database error
+        """
+        error = self.get_by_id(error_id)
         if not error:
-            raise not_found(
-                "ProcessingError",
-                error_id=error_id,
-            )
-
-        return ProcessingErrorRead.model_validate(error)
+            raise not_found("ProcessingError", error_id=error_id)
+        return error
 
     def find_by_entity_id(self, entity_id: str) -> List[ProcessingErrorRead]:
         """
@@ -92,8 +124,8 @@ class ProcessingErrorRepository(BaseRepository[ProcessingError]):
         Raises:
             RepositoryError: If there's a database error
         """
-        with self._db_operation("find_by_entity_id") as session:
-            tenant_id = TenantContext.get_current_tenant_id()
+        with self._session_operation("find_by_entity_id") as session:
+            tenant_id = self._get_current_tenant_id()
 
             query = select(ProcessingError).where(
                 and_(
@@ -125,8 +157,8 @@ class ProcessingErrorRepository(BaseRepository[ProcessingError]):
         Raises:
             RepositoryError: If there's a database error
         """
-        with self._db_operation("get_by_filter") as session:
-            tenant_id = TenantContext.get_current_tenant_id()
+        with self._session_operation("get_by_filter") as session:
+            tenant_id = self._get_current_tenant_id()
 
             query = select(ProcessingError)
 
@@ -167,8 +199,22 @@ class ProcessingErrorRepository(BaseRepository[ProcessingError]):
         Raises:
             RepositoryError: If there's a database error
         """
-        # Use BaseRepository's _delete method (hard delete since ProcessingError has no soft delete)
-        return self._delete(error_id, soft_delete=False)
+        with self._session_operation("delete", error_id) as session:
+            tenant_id = self._get_current_tenant_id()
+            
+            error = session.query(ProcessingError).filter(
+                ProcessingError.id == error_id,
+                ProcessingError.tenant_id == tenant_id
+            ).first()
+            
+            if not error:
+                return False
+                
+            session.delete(error)
+            session.flush()
+            
+            self.logger.info(f"Deleted processing error with ID: {error_id}")
+            return True
 
     def delete_by_entity_id(self, entity_id: str) -> int:
         """
@@ -183,8 +229,8 @@ class ProcessingErrorRepository(BaseRepository[ProcessingError]):
         Raises:
             RepositoryError: If there's a database error
         """
-        with self._db_operation("delete_by_entity_id") as session:
-            tenant_id = TenantContext.get_current_tenant_id()
+        with self._session_operation("delete_by_entity_id") as session:
+            tenant_id = self._get_current_tenant_id()
 
             # First, get all error IDs for this entity
             query = select(ProcessingError.id).where(

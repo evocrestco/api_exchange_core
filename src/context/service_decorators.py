@@ -98,3 +98,50 @@ def handle_repository_errors(operation_name: Optional[str] = None):
         return cast(F, wrapper)
 
     return decorator
+
+
+def transactional():
+    """
+    Decorator to automatically handle database transactions in service methods.
+
+    This decorator wraps service methods that perform database operations and
+    automatically commits transactions on success or rolls back on errors.
+    It works by accessing the service's repository session to manage the transaction.
+
+    Usage:
+        @transactional()
+        @handle_repository_errors("create_entity")
+        def create_entity(self, ...):
+            return self.repository.create(...)
+
+    Note: This decorator should be applied BEFORE @handle_repository_errors()
+    to ensure transactions are properly managed before error handling.
+    """
+
+    def decorator(func: F) -> F:
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            # Get the session from the service's repository
+            if not hasattr(self, "repository") or not hasattr(self.repository, "session"):
+                # If no repository or session, just call the function normally
+                return func(self, *args, **kwargs)
+
+            session = self.repository.session
+
+            try:
+                # Execute the function
+                result = func(self, *args, **kwargs)
+                
+                # Commit the transaction on success
+                session.commit()
+                
+                return result
+                
+            except Exception:
+                # Rollback on any exception
+                session.rollback()
+                raise
+
+        return cast(F, wrapper)
+
+    return decorator

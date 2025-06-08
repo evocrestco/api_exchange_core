@@ -10,7 +10,7 @@ are represented by creating new versions rather than updating existing records.
 from typing import Any, Dict, Generator, List, NoReturn, Optional, Tuple, Union
 
 from src.context.operation_context import OperationHandler, operation
-from src.context.service_decorators import handle_repository_errors
+from src.context.service_decorators import handle_repository_errors, transactional
 from src.context.tenant_context import TenantContext, tenant_aware
 from src.exceptions import ErrorCode, RepositoryError, ServiceError, ValidationError
 from src.repositories.entity_repository import EntityRepository
@@ -75,9 +75,8 @@ class EntityService(BaseService[EntityCreate, EntityRead, EntityUpdate, EntityFi
             version=version,
         )
 
-    @staticmethod
     def _handle_repo_error(
-        e: RepositoryError, operation_name: str, entity_id: Optional[str] = None
+        self, e: RepositoryError, operation_name: str, entity_id: Optional[str] = None
     ) -> NoReturn:
         """
         Convert repository errors to service errors with appropriate context.
@@ -90,7 +89,7 @@ class EntityService(BaseService[EntityCreate, EntityRead, EntityUpdate, EntityFi
         Raises:
             ServiceError: With appropriate error code based on the original error
         """
-        tenant_id = TenantContext.get_current_tenant_id()
+        tenant_id = self._get_current_tenant_id()
 
         # Check if it's a not found error by checking the error code
         if hasattr(e, "error_code") and e.error_code == ErrorCode.NOT_FOUND:
@@ -124,6 +123,7 @@ class EntityService(BaseService[EntityCreate, EntityRead, EntityUpdate, EntityFi
 
     @tenant_aware
     @operation(name="entity_service_create")
+    @transactional()
     def create_entity(
         self,
         external_id: str,
@@ -153,7 +153,7 @@ class EntityService(BaseService[EntityCreate, EntityRead, EntityUpdate, EntityFi
             ValidationError: If validation fails
             ServiceError: If entity already exists or another error occurs
         """
-        tenant_id = TenantContext.get_current_tenant_id()
+        tenant_id = self._get_current_tenant_id()
         if not tenant_id:
             raise ValidationError("No tenant context set")
 
@@ -189,6 +189,7 @@ class EntityService(BaseService[EntityCreate, EntityRead, EntityUpdate, EntityFi
 
     @tenant_aware
     @operation(name="entity_service_create_new_version")
+    @transactional()
     def create_new_version(
         self,
         external_id: str,
@@ -218,7 +219,7 @@ class EntityService(BaseService[EntityCreate, EntityRead, EntityUpdate, EntityFi
             ValidationError: If validation fails
             ServiceError: If trying to version a non-existent entity or another error occurs
         """
-        tenant_id = TenantContext.get_current_tenant_id()
+        tenant_id = self._get_current_tenant_id()
 
         try:
             # Calculate content hash
@@ -285,7 +286,7 @@ class EntityService(BaseService[EntityCreate, EntityRead, EntityUpdate, EntityFi
 
             # Check if entity exists
             if entity is None:
-                tenant_id = TenantContext.get_current_tenant_id()
+                tenant_id = self._get_current_tenant_id()
                 raise ServiceError(
                     f"Entity not found: entity_id={entity_id}",
                     error_code=ErrorCode.NOT_FOUND,
@@ -380,6 +381,7 @@ class EntityService(BaseService[EntityCreate, EntityRead, EntityUpdate, EntityFi
 
     @tenant_aware
     @operation(name="entity_service_delete")
+    @transactional()
     @handle_repository_errors("delete_entity")
     def delete_entity(self, entity_id: str) -> bool:
         """
@@ -449,6 +451,7 @@ class EntityService(BaseService[EntityCreate, EntityRead, EntityUpdate, EntityFi
 
     @tenant_aware
     @operation(name="entity_service_update_attributes")
+    @transactional()
     def update_entity_attributes(self, entity_id: str, attributes: Dict[str, Any]) -> bool:
         """
         Update the attributes of an entity.
@@ -466,7 +469,7 @@ class EntityService(BaseService[EntityCreate, EntityRead, EntityUpdate, EntityFi
         Raises:
             ServiceError: If entity is not found or another error occurs
         """
-        TenantContext.get_current_tenant_id()  # Validate tenant context
+        self._get_current_tenant_id()  # Validate tenant context
 
         try:
             # Use repository to update attributes

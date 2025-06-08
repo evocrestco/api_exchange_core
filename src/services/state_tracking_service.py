@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Union
 
 from src.context.operation_context import operation
-from src.context.service_decorators import handle_repository_errors
+from src.context.service_decorators import handle_repository_errors, transactional
 from src.context.tenant_context import tenant_aware
 from src.db.db_base import EntityStateEnum
 from src.db.db_state_transition_models import TransitionTypeEnum
@@ -37,22 +37,23 @@ class StateTrackingService(
     state transitions throughout the entity processing pipeline.
     """
 
-    def __init__(self, db_manager):
+    def __init__(self, repository: StateTransitionRepository, logger=None):
         """
-        Initialize the service with a database manager.
+        Initialize the service with a repository.
 
         Args:
-            db_manager: Database manager for session handling
+            repository: Repository for state transition data access
+            logger: Optional logger instance
         """
-        self.db_manager = db_manager
-        repository = StateTransitionRepository(db_manager)
         super().__init__(
             repository=repository,
             read_schema_class=StateTransitionRead,
+            logger=logger,
         )
 
     @tenant_aware
     @operation(name="record_state_transition")
+    @transactional()
     @handle_repository_errors("record_transition")
     def record_transition(
         self,

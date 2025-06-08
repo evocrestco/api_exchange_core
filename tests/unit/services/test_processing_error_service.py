@@ -39,51 +39,6 @@ from src.schemas.processing_error_schema import (
 )
 from src.services.processing_error_service import ProcessingErrorService
 
-# ==================== HELPER FIXTURES ====================
-
-
-@pytest.fixture(scope="function")
-def processing_error_service(db_manager):
-    """Create a ProcessingErrorService instance with real repository."""
-    repository = ProcessingErrorRepository(db_manager)
-    return ProcessingErrorService(repository)
-
-
-@pytest.fixture(scope="function")
-def test_entities(entity_repository, tenant_context):
-    """Create test entities for processing error service tests."""
-    entities = {}
-
-    # Create several test entities that processing errors can reference
-    entity_configs = [
-        ("service_ent_12345", "test_order_001", "order"),
-        ("service_ent_minimal", "test_order_002", "order"),
-        ("service_ent_complex", "test_order_003", "order"),
-        ("service_ent_bulk_test", "test_order_004", "order"),
-        ("service_ent_filter_test", "test_order_005", "order"),
-        ("service_ent_isolation_test", "test_order_006", "order"),
-        ("service_ent_delete_test", "test_order_007", "order"),
-        ("service_ent_workflow_test", "test_order_008", "order"),
-        ("service_ent_logging_test", "test_order_009", "order"),
-        ("service_ent_convenience_test", "test_order_010", "order"),
-    ]
-
-    for entity_id_suffix, external_id, canonical_type in entity_configs:
-        entity_data = EntityCreate(
-            external_id=external_id,
-            tenant_id=tenant_context["id"],
-            canonical_type=canonical_type,
-            source="test_system",
-            version=1,
-            content_hash=f"hash_{external_id}",
-            attributes={"status": "NEW", "test": True},
-        )
-        created_entity_id = entity_repository.create(entity_data)
-        entities[entity_id_suffix] = created_entity_id
-
-    return entities
-
-
 # ==================== PROCESSING ERROR SERVICE TESTS ====================
 
 

@@ -15,6 +15,7 @@ from src.repositories.entity_repository import EntityRepository
 from src.repositories.processing_error_repository import ProcessingErrorRepository
 from src.repositories.state_transition_repository import StateTransitionRepository
 from src.repositories.tenant_repository import TenantRepository
+from src.schemas.entity_schema import EntityCreate
 from src.services.entity_service import EntityService
 from src.services.processing_error_service import ProcessingErrorService
 from src.services.state_tracking_service import StateTrackingService
@@ -24,27 +25,27 @@ from src.services.tenant_service import TenantService
 
 
 @pytest.fixture(scope="function")
-def entity_repository(db_manager):
-    """Entity repository with test database manager."""
-    return EntityRepository(db_manager)
+def entity_repository(db_session):
+    """Entity repository with test database session."""
+    return EntityRepository(db_session)
 
 
 @pytest.fixture(scope="function")
-def tenant_repository(db_manager):
+def tenant_repository(db_session):
     """Tenant repository with test database manager."""
-    return TenantRepository(db_manager)
+    return TenantRepository(db_session)
 
 
 @pytest.fixture(scope="function")
-def state_transition_repository(db_manager):
-    """State transition repository with test database manager."""
-    return StateTransitionRepository(db_manager)
+def state_transition_repository(db_session):
+    """State transition repository with test database session."""
+    return StateTransitionRepository(db_session)
 
 
 @pytest.fixture(scope="function")
-def processing_error_repository(db_manager):
-    """Processing error repository with test database manager."""
-    return ProcessingErrorRepository(db_manager)
+def processing_error_repository(db_session):
+    """Processing error repository with test database session."""
+    return ProcessingErrorRepository(db_session)
 
 
 # ==================== SERVICE FIXTURES ====================
@@ -72,6 +73,39 @@ def state_tracking_service(state_transition_repository):
 def processing_error_service(processing_error_repository):
     """Processing error service with test repository."""
     return ProcessingErrorService(processing_error_repository)
+
+
+@pytest.fixture(scope="function")
+def processing_service(db_session):
+    """Processing service with real dependencies."""
+    from src.processing.processing_service import ProcessingService
+    from src.processing.duplicate_detection import DuplicateDetectionService
+    from src.processing.entity_attributes import EntityAttributeBuilder
+    from src.repositories.entity_repository import EntityRepository
+    from src.services.entity_service import EntityService
+    
+    entity_repository = EntityRepository(db_session)
+    entity_service = EntityService(entity_repository)
+    duplicate_detection = DuplicateDetectionService(entity_repository)
+    attribute_builder = EntityAttributeBuilder()
+    
+    return ProcessingService(
+        entity_service=entity_service,
+        duplicate_detection_service=duplicate_detection,
+        attribute_builder=attribute_builder
+    )
+
+
+@pytest.fixture(scope="function")
+def processor_context(processing_service, state_tracking_service, processing_error_service):
+    """ProcessorContext with all services for v2 processor testing."""
+    from src.processors.v2.processor_interface import ProcessorContext
+    
+    return ProcessorContext(
+        processing_service=processing_service,
+        state_tracking_service=state_tracking_service,
+        error_service=processing_error_service
+    )
 
 
 # ==================== MOCK FIXTURES (ONLY WHEN NECESSARY) ====================
@@ -106,6 +140,84 @@ def mock_http_client():
     mock_client.get.return_value = mock_response
     mock_client.post.return_value = mock_response
     return mock_client
+
+
+# ==================== ENTITY FIXTURES ====================
+
+
+@pytest.fixture(scope="function")
+def test_entities(entity_repository, tenant_context):
+    """
+    Create test entities for all test modules.
+    
+    Creates entities with various prefixes to support different test modules:
+    - error_ent_* for processing error repository tests
+    - ent_* for state transition repository tests  
+    - service_ent_* for service tests
+    """
+    entities = {}
+
+    # All entity configurations consolidated from different test files
+    entity_configs = [
+        # Processing error repository entities
+        ("error_ent_12345", "test_order_001", "order"),
+        ("error_ent_minimal", "test_order_002", "order"),
+        ("error_ent_complex", "test_order_003", "order"),
+        ("error_ent_bulk_test", "test_order_004", "order"),
+        ("error_ent_filter_test", "test_order_005", "order"),
+        ("error_ent_isolation_test", "test_order_006", "order"),
+        ("error_ent_delete_test", "test_order_007", "order"),
+        
+        # State transition repository entities
+        ("ent_12345", "test_order_101", "order"),
+        ("ent_minimal", "test_order_102", "order"),
+        ("ent_complex", "test_order_103", "order"),
+        ("ent_sequence_test", "test_order_104", "order"),
+        ("ent_context_test", "test_order_105", "order"),
+        ("ent_get_test", "test_order_106", "order"),
+        ("ent_filter_test", "test_order_107", "order"),
+        ("ent_workflow_test", "test_order_108", "order"),
+        ("ent_shared_id", "test_order_109", "order"),
+        ("ent_no_tenant", "test_order_110", "order"),
+        ("ent_db_error_test", "test_order_111", "order"),
+        
+        # Service test entities
+        ("service_ent_12345", "test_order_201", "order"),
+        ("service_ent_minimal", "test_order_202", "order"),
+        ("service_ent_complex", "test_order_203", "order"),
+        ("service_ent_bulk_test", "test_order_204", "order"),
+        ("service_ent_filter_test", "test_order_205", "order"),
+        ("service_ent_isolation_test", "test_order_206", "order"),
+        ("service_ent_delete_test", "test_order_207", "order"),
+        ("service_ent_workflow_test", "test_order_208", "order"),
+        ("service_ent_logging_test", "test_order_209", "order"),
+        ("service_ent_convenience_test", "test_order_210", "order"),
+        
+        # State tracking service entities
+        ("entity_record_test", "test_order_301", "order"),
+        ("entity_history_test", "test_order_302", "order"),
+        ("entity_current_state", "test_order_303", "order"),
+        ("entity_stuck_test", "test_order_304", "order"),
+        ("entity_stats_test1", "test_order_305", "order"),
+        ("entity_stats_test2", "test_order_306", "order"),
+        ("entity_processing_time", "test_order_307", "order"),
+        ("entity_isolation_test", "test_order_308", "order"),
+    ]
+
+    for entity_id_suffix, external_id, canonical_type in entity_configs:
+        entity_data = EntityCreate(
+            external_id=external_id,
+            tenant_id=tenant_context["id"],
+            canonical_type=canonical_type,
+            source="test_system",
+            version=1,
+            content_hash=f"hash_{external_id}",
+            attributes={"status": "NEW", "test": True},
+        )
+        created_entity_id = entity_repository.create(entity_data)
+        entities[entity_id_suffix] = created_entity_id
+
+    return entities
 
 
 # ==================== COMPONENT-SPECIFIC TEST DATA ====================

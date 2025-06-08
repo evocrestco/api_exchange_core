@@ -35,42 +35,6 @@ from src.schemas.state_transition_schema import (
 # ==================== HELPER FIXTURES ====================
 
 
-@pytest.fixture(scope="function")
-def test_entities(entity_repository, tenant_context):
-    """Create test entities for state transition tests."""
-    entities = {}
-
-    # Create several test entities that state transitions can reference
-    entity_configs = [
-        ("ent_12345", "test_order_001", "order"),
-        ("ent_minimal", "test_order_002", "order"),
-        ("ent_complex", "test_order_003", "order"),
-        ("ent_sequence_test", "test_order_004", "order"),
-        ("ent_context_test", "test_order_005", "order"),
-        ("ent_get_test", "test_order_006", "order"),
-        ("ent_filter_test", "test_order_007", "order"),
-        ("ent_workflow_test", "test_order_008", "order"),
-        ("ent_shared_id", "test_order_009", "order"),
-        ("ent_no_tenant", "test_order_010", "order"),
-        ("ent_db_error_test", "test_order_011", "order"),
-    ]
-
-    for entity_id_suffix, external_id, canonical_type in entity_configs:
-        entity_data = EntityCreate(
-            external_id=external_id,
-            tenant_id=tenant_context["id"],
-            canonical_type=canonical_type,
-            source="test_system",
-            version=1,
-            content_hash=f"hash_{external_id}",
-            attributes={"status": "NEW", "test": True},
-        )
-        created_entity_id = entity_repository.create(entity_data)
-        entities[entity_id_suffix] = created_entity_id
-
-    return entities
-
-
 # ==================== STATE TRANSITION REPOSITORY TESTS ====================
 
 
@@ -614,8 +578,10 @@ class TestStateTransitionRepositoryStatistics:
             )
             state_transition_repository.create(transition_data)
 
-        # Act
-        stats = state_transition_repository.get_state_statistics(tenant_context["id"])
+        # Act - Use tenant context for tenant-secure operation
+        from src.context.tenant_context import tenant_context as tenant_ctx
+        with tenant_ctx(tenant_context["id"]):
+            stats = state_transition_repository.get_state_statistics()
 
         # Assert
         assert isinstance(stats, StateTransitionStats)
@@ -639,12 +605,14 @@ class TestStateTransitionRepositoryStatistics:
         # This test would require manipulation of created_at timestamps
         # For now, we'll test the basic structure
 
-        # Act
+        # Act - Use tenant context for tenant-secure operation
         now = datetime.now()
         yesterday = now - timedelta(days=1)
-        stats = state_transition_repository.get_state_statistics(
-            tenant_context["id"], start_time=yesterday, end_time=now
-        )
+        from src.context.tenant_context import tenant_context as tenant_ctx
+        with tenant_ctx(tenant_context["id"]):
+            stats = state_transition_repository.get_state_statistics(
+                start_time=yesterday, end_time=now
+            )
 
         # Assert
         assert isinstance(stats, StateTransitionStats)
@@ -668,8 +636,8 @@ class TestStateTransitionRepositoryErrorHandling:
             actor="error_tester",
         )
 
-        # Act & Assert
-        with pytest.raises(RepositoryError, match="Tenant ID must be provided"):
+        # Act & Assert - Should fail with tenant context error
+        with pytest.raises(ValueError, match="No tenant context set"):
             state_transition_repository.create(transition_data)
 
     def test_repository_database_error_handling(

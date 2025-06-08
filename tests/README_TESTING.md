@@ -132,26 +132,35 @@ def quantity_available(self) -> int:
 
 ## Fixture Organization
 
-### Hierarchical Fixture Structure
+### Fixture Management Rules
+
+**CRITICAL**: **NEVER define fixtures inside test files**. Always use appropriate `conftest.py` files.
+
+### Fixture Reference
+
+📖 **See `tests/FIXTURES.md` for complete fixture inventory** - always check existing fixtures before creating new ones.
+
+### Fixture Placement Guidelines
 
 ```python
-# tests/conftest.py - Root level (MAIN FIXTURE HUB)
-- test_engine: SQLite engine (session-scoped)
-- db_session: Transaction-isolated session (function-scoped)  
-- db_manager: Test database manager
-- example_order_data: Standard order test data (function-scoped)
-- example_inventory_data: Standard inventory test data (function-scoped)
-- example_customer_data: Standard customer test data (function-scoped)
-- create_example_*_data(): Helper functions for generating test data
+# tests/conftest.py - Global fixtures
+- Database infrastructure (test_engine, db_session, db_manager)
+- Tenant management (test_tenant, tenant_context, multi_tenant_context)
+- Core test data (example_order_data, example_inventory_data, etc.)
 
 # tests/unit/conftest.py - Unit test fixtures
-- order_repository: Repository with test session
-- order_service: Service with test dependencies
-- tenant_context: Tenant context setup/teardown
+- Repositories (entity_repository, tenant_repository, etc.)
+- Services (entity_service, tenant_service, processing_service, etc.)
+- Component-specific test utilities
+
+# tests/unit/[component]/conftest.py - Component-specific fixtures
+- Processing components (detection_service, attribute_builder)
+- Processor v2 components (processor, sample_message)
+- Service-specific fixtures (service fixtures in service tests)
 
 # tests/integration/conftest.py - Integration fixtures  
-- full_pipeline_setup: End-to-end test environment
-- example_workflow: Complete processing workflow
+- Cross-component test setups
+- End-to-end workflow fixtures
 ```
 
 ### Import Strategy for Example Models
@@ -179,11 +188,14 @@ This approach:
 
 ### Fixture Rules
 
-1. **No Redefinition**: Each fixture defined once, reused everywhere
-2. **Scope Appropriately**: Session > Module > Function based on cost
-3. **Clean Teardown**: Automatic cleanup without manual intervention
-4. **Dictionary Returns**: Return dicts to prevent accidental state modification
-5. **Parameterized Fixtures**: Use `pytest.fixture(params=...)` for variations
+1. **No Fixtures in Test Files**: NEVER define fixtures inside test files - use `conftest.py` files
+2. **Check Existing First**: Always consult `tests/FIXTURES.md` before creating new fixtures
+3. **No Redefinition**: Each fixture defined once, reused everywhere
+4. **Scope Appropriately**: Session > Module > Function based on cost
+5. **Clean Teardown**: Automatic cleanup without manual intervention
+6. **Dictionary Returns**: Return dicts to prevent accidental state modification
+7. **Parameterized Fixtures**: Use `pytest.fixture(params=...)` for variations
+8. **Update Documentation**: Add new fixtures to `tests/FIXTURES.md`
 
 ## Testing Patterns
 
@@ -379,9 +391,9 @@ def test_service(mock_repo):
 def test_entity_creation():
     entity = Entity(id="123", name="Test")  # Brittle!
 
-# Fixture redefinition
+# Fixture in test file (FORBIDDEN)
 @pytest.fixture
-def entity_service():  # Already defined in conftest.py!
+def entity_service():  # Should use conftest.py fixture!
     pass
 
 # Testing implementation details

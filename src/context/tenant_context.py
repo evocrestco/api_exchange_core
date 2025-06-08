@@ -16,8 +16,6 @@ from typing import TYPE_CHECKING, Any, Callable, Generator, Optional, Union
 
 from sqlalchemy.orm import Session
 
-from src.db.db_config import DatabaseManager
-
 if TYPE_CHECKING:
     from src.schemas.tenant_schema import TenantRead
 
@@ -101,13 +99,13 @@ class TenantContext:
 
     @classmethod
     def get_tenant(
-        cls, db_manager_or_session, tenant_id: Optional[str] = None
+        cls, session, tenant_id: Optional[str] = None
     ) -> Optional["TenantRead"]:
         """
         Get a tenant object by ID or from current context using repository pattern.
 
         Args:
-            db_manager_or_session: DatabaseManager or Session (for backward compatibility)
+            session: Database session for repository operations
             tenant_id: Optional explicit tenant ID (prioritized if provided)
 
         Returns:
@@ -137,20 +135,7 @@ class TenantContext:
 
         # Get tenant via repository
         try:
-            # Handle both DatabaseManager and Session for backward compatibility
-            if isinstance(db_manager_or_session, DatabaseManager):
-                repository = TenantRepository(db_manager_or_session)
-            else:
-                # Legacy: create a temporary DatabaseManager wrapper
-                db_manager = type(
-                    "TempDBManager",
-                    (),
-                    {
-                        "get_session": lambda self: db_manager_or_session,
-                        "close_session": lambda self, s: None,
-                    },
-                )()
-                repository = TenantRepository(db_manager)
+            repository = TenantRepository(session)
             tenant = repository.get_by_id(effective_tenant_id)
 
             # Cache for future use (limit cache size to prevent memory issues)

@@ -26,7 +26,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "src"))
 
-from src.context.tenant_context import TenantContext
+from src.context.tenant_context import TenantContext, tenant_context
 from src.exceptions import ErrorCode, RepositoryError, ServiceError, ValidationError
 from src.schemas.tenant_schema import TenantCreate, TenantUpdate
 
@@ -128,32 +128,6 @@ class TestTenantServiceCreate:
             service.create_tenant(duplicate_data)
         assert "already exists" in str(exc_info.value)
 
-    def test_create_tenant_from_dict_success(self, tenant_service):
-        """Test creating tenant from dictionary data."""
-        service = tenant_service
-
-        tenant_id = f"dict-test-{uuid.uuid4()}"
-
-        result = service.create_tenant_from_dict(
-            tenant_id=tenant_id,
-            customer_name="Dict Customer",
-            primary_contact_email="dict@customer.com",
-            is_active=True,
-        )
-
-        assert result.tenant_id == tenant_id
-        assert result.customer_name == "Dict Customer"
-        assert result.primary_contact_email == "dict@customer.com"
-        assert result.is_active is True
-
-    def test_create_tenant_from_dict_validation_error(self, tenant_service):
-        """Test that create_tenant_from_dict validates input."""
-        service = tenant_service
-
-        with pytest.raises((ValueError, ServiceError)):
-            service.create_tenant_from_dict(
-                tenant_id="", customer_name="Invalid Customer"  # Invalid empty tenant_id
-            )
 
 
 class TestTenantServiceRead:
@@ -169,73 +143,22 @@ class TestTenantServiceRead:
         )
         created = service.create_tenant(tenant_data)
 
-        # Retrieve tenant
-        result = service.get_tenant(created.tenant_id)
+        # Retrieve tenant using current tenant context
+        with tenant_context(created.tenant_id):
+            result = service.get_current_tenant()
 
         assert result.tenant_id == created.tenant_id
         assert result.customer_name == created.customer_name
 
     def test_get_tenant_not_found(self, tenant_service):
-        """Test getting non-existent tenant."""
+        """Test getting tenant when no tenant context is set."""
         service = tenant_service
 
-        with pytest.raises(RepositoryError) as exc_info:
-            service.get_tenant(f"nonexistent-{uuid.uuid4()}")
-        assert exc_info.value.error_code == ErrorCode.NOT_FOUND
+        # Test fails when no tenant context is set
+        with pytest.raises(ValueError) as exc_info:
+            service.get_current_tenant()
+        assert "No tenant ID provided for tenant-aware function" in str(exc_info.value)
 
-    def test_get_tenants_empty_list(self, tenant_service):
-        """Test getting all tenants when none exist."""
-        service = tenant_service
-
-        result = service.get_tenants()
-
-        assert isinstance(result, list)
-        assert len(result) == 0
-
-    def test_get_tenants_with_data(self, tenant_service):
-        """Test getting all tenants when some exist."""
-        service = tenant_service
-
-        # Create multiple tenants
-        tenant_ids = []
-        for i in range(3):
-            tenant_data = TenantCreate(
-                tenant_id=f"list-test-{i}-{uuid.uuid4()}",
-                customer_name=f"Customer {i}",
-                is_active=True,
-            )
-            created = service.create_tenant(tenant_data)
-            tenant_ids.append(created.tenant_id)
-
-        result = service.get_tenants()
-
-        assert len(result) >= 3  # May have other tenants from other tests
-        result_ids = [t.tenant_id for t in result]
-        for tenant_id in tenant_ids:
-            assert tenant_id in result_ids
-
-    def test_get_tenants_include_inactive(self, tenant_service):
-        """Test getting tenants including inactive ones."""
-        service = tenant_service
-
-        # Create active tenant
-        active_data = TenantCreate(
-            tenant_id=f"active-{uuid.uuid4()}", customer_name="Active Customer", is_active=True
-        )
-        active = service.create_tenant(active_data)
-
-        # Create inactive tenant
-        inactive_data = TenantCreate(
-            tenant_id=f"inactive-{uuid.uuid4()}", customer_name="Inactive Customer", is_active=False
-        )
-        inactive = service.create_tenant(inactive_data)
-
-        # Get all tenants including inactive
-        all_tenants = service.get_tenants(include_inactive=True)
-        all_ids = [t.tenant_id for t in all_tenants]
-
-        assert active.tenant_id in all_ids
-        assert inactive.tenant_id in all_ids
 
 
 class TestTenantServiceUpdate:
@@ -340,20 +263,20 @@ class TestTenantServiceConfig:
         )
         created = service.create_tenant(tenant_data)
 
-        # Update config
-        result = service.update_tenant_config(created.tenant_id, "test_setting", "test_value")
+        # Update config using tenant context
+        with tenant_context(created.tenant_id):
+            result = service.update_tenant_config("test_setting", "test_value")
 
         assert result is True
 
     def test_update_tenant_config_not_found(self, tenant_service):
-        """Test config update for non-existent tenant."""
+        """Test config update when tenant doesn't exist."""
         service = tenant_service
 
-        result = service.update_tenant_config(
-            f"nonexistent-{uuid.uuid4()}", "test_setting", "test_value"
-        )
-
-        assert result is False
+        # Create a non-existent tenant context and test that it returns False
+        with tenant_context(f"nonexistent-{uuid.uuid4()}"):
+            result = service.update_tenant_config("test_setting", "test_value")
+            assert result is False
 
     @pytest.mark.parametrize(
         "config_key,config_value",
@@ -375,8 +298,9 @@ class TestTenantServiceConfig:
         )
         created = service.create_tenant(tenant_data)
 
-        # Update config with various types
-        result = service.update_tenant_config(created.tenant_id, config_key, config_value)
+        # Update config with various types using tenant context
+        with tenant_context(created.tenant_id):
+            result = service.update_tenant_config(config_key, config_value)
 
         assert result is True
 
@@ -396,22 +320,23 @@ class TestTenantServiceActivation:
         )
         created = service.create_tenant(tenant_data)
 
-        # Activate tenant
-        result = service.activate_tenant(created.tenant_id)
+        # Activate tenant using current tenant context
+        with tenant_context(created.tenant_id):
+            result = service.activate_current_tenant()
+            assert result is True
 
-        assert result is True
-
-        # Verify tenant is now active
-        retrieved = service.get_tenant(created.tenant_id)
-        assert retrieved.is_active is True
+            # Verify tenant is now active
+            retrieved = service.get_current_tenant()
+            assert retrieved.is_active is True
 
     def test_activate_tenant_not_found(self, tenant_service):
-        """Test activating non-existent tenant."""
+        """Test activating when tenant doesn't exist."""
         service = tenant_service
 
-        result = service.activate_tenant(f"nonexistent-{uuid.uuid4()}")
-
-        assert result is False
+        # Create a non-existent tenant context and test that it returns False
+        with tenant_context(f"nonexistent-{uuid.uuid4()}"):
+            result = service.activate_current_tenant()
+            assert result is False
 
     def test_deactivate_tenant_success(self, tenant_service):
         """Test successful tenant deactivation."""
@@ -425,22 +350,23 @@ class TestTenantServiceActivation:
         )
         created = service.create_tenant(tenant_data)
 
-        # Deactivate tenant
-        result = service.deactivate_tenant(created.tenant_id)
+        # Deactivate tenant using current tenant context
+        with tenant_context(created.tenant_id):
+            result = service.deactivate_current_tenant()
+            assert result is True
 
-        assert result is True
-
-        # Verify tenant is now inactive
-        retrieved = service.get_tenant(created.tenant_id)
-        assert retrieved.is_active is False
+            # Verify tenant is now inactive
+            retrieved = service.get_current_tenant()
+            assert retrieved.is_active is False
 
     def test_deactivate_tenant_not_found(self, tenant_service):
-        """Test deactivating non-existent tenant."""
+        """Test deactivating when tenant doesn't exist."""
         service = tenant_service
 
-        result = service.deactivate_tenant(f"nonexistent-{uuid.uuid4()}")
-
-        assert result is False
+        # Create a non-existent tenant context and test that it returns False
+        with tenant_context(f"nonexistent-{uuid.uuid4()}"):
+            result = service.deactivate_current_tenant()
+            assert result is False
 
     def test_activation_cycle(self, tenant_service):
         """Test complete activation/deactivation cycle."""
@@ -454,19 +380,20 @@ class TestTenantServiceActivation:
         )
         created = service.create_tenant(tenant_data)
 
-        # Deactivate
-        result1 = service.deactivate_tenant(created.tenant_id)
-        assert result1 is True
+        with tenant_context(created.tenant_id):
+            # Deactivate
+            result1 = service.deactivate_current_tenant()
+            assert result1 is True
 
-        retrieved1 = service.get_tenant(created.tenant_id)
-        assert retrieved1.is_active is False
+            retrieved1 = service.get_current_tenant()
+            assert retrieved1.is_active is False
 
-        # Reactivate
-        result2 = service.activate_tenant(created.tenant_id)
-        assert result2 is True
+            # Reactivate
+            result2 = service.activate_current_tenant()
+            assert result2 is True
 
-        retrieved2 = service.get_tenant(created.tenant_id)
-        assert retrieved2.is_active is True
+            retrieved2 = service.get_current_tenant()
+            assert retrieved2.is_active is True
 
 
 class TestTenantServiceErrorHandling:
@@ -532,18 +459,18 @@ class TestTenantServiceErrorHandling:
         )
         created = service.create_tenant(tenant_data)
 
-        # Populate cache by getting tenant via TenantContext
-        TenantContext.get_tenant(db_session, created.tenant_id)
+        with tenant_context(created.tenant_id):
+            # Populate cache by getting tenant via TenantContext
+            TenantContext.get_tenant(db_session, created.tenant_id)
 
-        # Update tenant - should clear cache
-        TenantContext.set_current_tenant(created.tenant_id)
-        update_data = TenantUpdate(customer_name="Updated Name")
-        service.update_tenant(update_data)
+            # Update tenant - should clear cache
+            update_data = TenantUpdate(customer_name="Updated Name")
+            service.update_tenant(update_data)
 
-        # Cache should be cleared (difficult to test directly without mocking)
-        # But operation should succeed
-        updated = service.get_tenant(created.tenant_id)
-        assert updated.customer_name == "Updated Name"
+            # Cache should be cleared (difficult to test directly without mocking)
+            # But operation should succeed
+            updated = service.get_current_tenant()
+            assert updated.customer_name == "Updated Name"
 
 
 class TestTenantServiceIntegration:
@@ -563,55 +490,27 @@ class TestTenantServiceIntegration:
         created = service.create_tenant(tenant_data)
         assert created.is_active is True
 
-        # 2. Update tenant details
-        TenantContext.set_current_tenant(created.tenant_id)
-        update_data = TenantUpdate(
-            customer_name="Updated Lifecycle Customer", primary_contact_phone="555-987-6543"
-        )
-        updated = service.update_tenant(update_data)
-        assert updated.customer_name == "Updated Lifecycle Customer"
-        assert updated.primary_contact_phone == "555-987-6543"
-
-        # 3. Update configuration
-        config_result = service.update_tenant_config(created.tenant_id, "max_connections", 100)
-        assert config_result is True
-
-        # 4. Deactivate tenant
-        deactivate_result = service.deactivate_tenant(created.tenant_id)
-        assert deactivate_result is True
-
-        # 5. Verify final state
-        final = service.get_tenant(created.tenant_id)
-        assert final.customer_name == "Updated Lifecycle Customer"
-        assert final.is_active is False
-
-    def test_multi_tenant_operations(self, tenant_service):
-        """Test operations across multiple tenants."""
-        service = tenant_service
-
-        # Create multiple tenants
-        tenant_ids = []
-        for i in range(3):
-            tenant_data = TenantCreate(
-                tenant_id=f"multi-{i}-{uuid.uuid4()}",
-                customer_name=f"Multi Customer {i}",
-                is_active=i % 2 == 0,  # Alternating active/inactive
+        # 2. Update tenant details using tenant context
+        with tenant_context(created.tenant_id):
+            update_data = TenantUpdate(
+                customer_name="Updated Lifecycle Customer", primary_contact_phone="555-987-6543"
             )
-            created = service.create_tenant(tenant_data)
-            tenant_ids.append(created.tenant_id)
+            updated = service.update_tenant(update_data)
+            assert updated.customer_name == "Updated Lifecycle Customer"
+            assert updated.primary_contact_phone == "555-987-6543"
 
-        # Get all tenants
-        all_tenants = service.get_tenants(include_inactive=True)
-        multi_tenants = [t for t in all_tenants if t.tenant_id in tenant_ids]
+            # 3. Update configuration
+            config_result = service.update_tenant_config("max_connections", 100)
+            assert config_result is True
 
-        assert len(multi_tenants) == 3
+            # 4. Deactivate tenant
+            deactivate_result = service.deactivate_current_tenant()
+            assert deactivate_result is True
 
-        # Verify active/inactive states
-        active_count = sum(1 for t in multi_tenants if t.is_active)
-        inactive_count = sum(1 for t in multi_tenants if not t.is_active)
-
-        assert active_count == 2  # Tenants 0 and 2
-        assert inactive_count == 1  # Tenant 1
+            # 5. Verify final state
+            final = service.get_current_tenant()
+            assert final.customer_name == "Updated Lifecycle Customer"
+            assert final.is_active is False
 
     def test_tenant_operations_with_context_switching(self, tenant_service):
         """Test operations with context switching between tenants."""
@@ -628,21 +527,23 @@ class TestTenantServiceIntegration:
         )
         tenant2 = service.create_tenant(tenant2_data)
 
-        # Update tenant 1
-        TenantContext.set_current_tenant(tenant1.tenant_id)
-        update1 = TenantUpdate(customer_name="Updated Customer 1")
-        result1 = service.update_tenant(update1)
-        assert result1.customer_name == "Updated Customer 1"
+        # Update tenant 1 using context
+        with tenant_context(tenant1.tenant_id):
+            update1 = TenantUpdate(customer_name="Updated Customer 1")
+            result1 = service.update_tenant(update1)
+            assert result1.customer_name == "Updated Customer 1"
 
         # Switch context and update tenant 2
-        TenantContext.set_current_tenant(tenant2.tenant_id)
-        update2 = TenantUpdate(customer_name="Updated Customer 2")
-        result2 = service.update_tenant(update2)
-        assert result2.customer_name == "Updated Customer 2"
+        with tenant_context(tenant2.tenant_id):
+            update2 = TenantUpdate(customer_name="Updated Customer 2")
+            result2 = service.update_tenant(update2)
+            assert result2.customer_name == "Updated Customer 2"
 
-        # Verify both tenants have correct state
-        final1 = service.get_tenant(tenant1.tenant_id)
-        final2 = service.get_tenant(tenant2.tenant_id)
+        # Verify both tenants have correct state using their contexts
+        with tenant_context(tenant1.tenant_id):
+            final1 = service.get_current_tenant()
+            assert final1.customer_name == "Updated Customer 1"
 
-        assert final1.customer_name == "Updated Customer 1"
-        assert final2.customer_name == "Updated Customer 2"
+        with tenant_context(tenant2.tenant_id):
+            final2 = service.get_current_tenant()
+            assert final2.customer_name == "Updated Customer 2"

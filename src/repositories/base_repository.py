@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 
 from src.context.tenant_context import TenantContext
 from src.db.db_base import BaseModel
-from src.db.db_config import DatabaseManager
 from src.exceptions import ErrorCode, RepositoryError, duplicate, not_found
 
 # Type variable for entity models
@@ -27,7 +26,7 @@ class BaseRepository(Generic[T]):
 
     def __init__(
         self,
-        db_manager: DatabaseManager,
+        session: Session,
         entity_class: Type[T],
         logger: Optional[logging.Logger] = None,
     ):
@@ -35,14 +34,21 @@ class BaseRepository(Generic[T]):
         Initialize the base repository.
 
         Args:
-            db_manager: Database manager instance for session handling
+            session: SQLAlchemy session for database operations
             entity_class: SQLAlchemy model class this repository handles
             logger: Optional logger instance
         """
-        self.db_manager = db_manager
+        self.session = session
         self.entity_class = entity_class
         self.logger = logger or logging.getLogger(f"{__name__}.{self.__class__.__name__}")
         self.entity_name = entity_class.__name__
+        
+    def _get_current_tenant_id(self) -> str:
+        """Get current tenant ID from context."""
+        tenant_id = TenantContext.get_current_tenant_id()
+        if not tenant_id:
+            raise ValueError("No tenant context set - ensure tenant_context is active")
+        return tenant_id
 
     def _handle_db_error(
         self,
@@ -149,40 +155,33 @@ class BaseRepository(Generic[T]):
                 **error_context,
             )
 
-    def _get_session(self) -> Session:
-        """Get a database session from the manager."""
-        return self.db_manager.get_session()
-
-    def _close_session(self, session: Session) -> None:
-        """Close a database session."""
-        self.db_manager.close_session(session)
-
+            
     @contextmanager
-    def _db_operation(self, operation_name: str, entity_id: Optional[str] = None):
+    def _session_operation(self, operation_name: str, entity_id: Optional[str] = None):
         """
-        Context manager for database operations with consistent error handling.
+        Context manager for operations on existing session with error handling.
+        
+        This is for the new session-based repository pattern where the repository
+        receives a session and doesn't manage session lifecycle.
 
         Args:
             operation_name: Name of the operation for error reporting
             entity_id: Optional ID of the entity being operated on
 
         Yields:
-            Database session
+            The existing session
 
         Raises:
             RepositoryError: If there's a database error
         """
-        session = self._get_session()
         try:
-            yield session
-            session.flush()
-            session.commit()
-            session.expire_all()
+            yield self.session
+            # NOTE: We don't commit here - that's handled by the service layer
+            # We only flush to catch constraint violations early
+            self.session.flush()
         except Exception as e:
-            session.rollback()
+            # NOTE: We don't rollback here - that's handled by the service layer
             self._handle_db_error(e, operation_name, entity_id)
-        finally:
-            self._close_session(session)
 
     def _entity_to_dict(self, entity: T) -> Dict[str, Any]:
         """
@@ -209,40 +208,11 @@ class BaseRepository(Generic[T]):
 
         return result
 
-    # ==================== STANDARD CRUD METHODS ====================
-
-    def _create(self, data: Dict[str, Any], flush: bool = True) -> T:
-        """
-        Create a new entity in the database.
-
-        Args:
-            data: Dictionary of entity attributes
-            flush: Whether to flush the session after creation
-
-        Returns:
-            The created entity
-
-        Raises:
-            RepositoryError: If creation fails
-        """
-        with self._db_operation("create") as session:
-            # Create entity instance
-            entity = self.entity_class(**data)
-            session.add(entity)
-
-            if flush:
-                session.flush()
-
-            self.logger.info(
-                f"Created {self.entity_name} with ID: {entity.id}",
-                extra={"entity_id": entity.id, "entity_type": self.entity_name},
-            )
-
-            return entity
-
+    # ==================== BASE CRUD METHODS ====================
+    
     def _get_by_id(self, entity_id: str, for_update: bool = False) -> Optional[T]:
         """
-        Get an entity by its ID.
+        Get an entity by its ID using existing session.
 
         Args:
             entity_id: The entity's ID
@@ -251,69 +221,30 @@ class BaseRepository(Generic[T]):
         Returns:
             The entity or None if not found
         """
-        with self._db_operation("get_by_id", entity_id) as session:
-            query = select(self.entity_class).where(self.entity_class.id == entity_id)
+        query = select(self.entity_class).where(self.entity_class.id == entity_id)
 
-            # Apply tenant filter if entity has tenant_id
-            if hasattr(self.entity_class, "tenant_id"):
-                tenant_id = TenantContext.get_current_tenant_id()
-                if tenant_id:
-                    query = query.where(
-                        self.entity_class.tenant_id == tenant_id  # type: ignore[attr-defined]
-                    )
-
-            if for_update:
-                query = query.with_for_update()
-
-            result = session.execute(query)
-            entity = result.scalar_one_or_none()
-
-            if entity:
-                session.refresh(entity)
-
-            return entity  # type: ignore[no-any-return]
-
-    def _update(self, entity_id: str, data: Dict[str, Any]) -> T:
-        """
-        Update an entity by its ID.
-
-        Args:
-            entity_id: The entity's ID
-            data: Dictionary of attributes to update
-
-        Returns:
-            The updated entity
-
-        Raises:
-            RepositoryError: If entity not found or update fails
-        """
-        with self._db_operation("update", entity_id) as session:
-            entity = self._get_by_id(entity_id, for_update=True)
-
-            if not entity:
-                raise not_found(
-                    resource_type=self.entity_name,
-                    entity_id=entity_id,
+        # Apply tenant filter if entity has tenant_id
+        if hasattr(self.entity_class, "tenant_id"):
+            tenant_id = self._get_current_tenant_id()
+            if tenant_id:
+                query = query.where(
+                    self.entity_class.tenant_id == tenant_id  # type: ignore[attr-defined]
                 )
 
-            # Update attributes
-            for key, value in data.items():
-                if hasattr(entity, key):
-                    setattr(entity, key, value)
+        if for_update:
+            query = query.with_for_update()
 
-            session.flush()
-            session.refresh(entity)
+        result = self.session.execute(query)
+        entity = result.scalar_one_or_none()
 
-            self.logger.info(
-                f"Updated {self.entity_name} with ID: {entity_id}",
-                extra={"entity_id": entity_id, "entity_type": self.entity_name},
-            )
+        if entity:
+            self.session.refresh(entity)
 
-            return entity
+        return entity  # type: ignore[no-any-return]
 
     def _delete(self, entity_id: str, soft_delete: bool = True) -> bool:
         """
-        Delete an entity by its ID.
+        Delete an entity by its ID using existing session.
 
         Args:
             entity_id: The entity's ID
@@ -325,143 +256,33 @@ class BaseRepository(Generic[T]):
         Raises:
             RepositoryError: If deletion fails
         """
-        with self._db_operation("delete", entity_id) as session:
-            entity = self._get_by_id(entity_id, for_update=True)
+        entity = self._get_by_id(entity_id, for_update=True)
 
-            if not entity:
-                return False
+        if not entity:
+            return False
 
-            if soft_delete and hasattr(entity, "deleted_at"):
-                # Soft delete - just mark as deleted
-                from datetime import datetime, timezone
+        if soft_delete and hasattr(entity, "deleted_at"):
+            # Soft delete - just mark as deleted
+            from datetime import datetime, timezone
 
-                entity.deleted_at = datetime.now(timezone.utc)
-            else:
-                # Hard delete
-                session.delete(entity)
+            entity.deleted_at = datetime.now(timezone.utc)
+        else:
+            # Hard delete
+            self.session.delete(entity)
 
-            session.flush()
+        self.session.flush()
 
-            self.logger.info(
-                f"{'Soft' if soft_delete else 'Hard'} deleted {self.entity_name} "
-                f"with ID: {entity_id}",
-                extra={"entity_id": entity_id, "entity_type": self.entity_name},
-            )
+        self.logger.info(
+            f"{'Soft' if soft_delete else 'Hard'} deleted {self.entity_name} "
+            f"with ID: {entity_id}",
+            extra={"entity_id": entity_id, "entity_type": self.entity_name},
+        )
 
-            return True
-
-    # ==================== BATCH OPERATIONS ====================
-
-    def _create_batch(self, items: List[Dict[str, Any]], flush: bool = True) -> List[T]:
-        """
-        Create multiple entities in a single transaction.
-
-        Args:
-            items: List of dictionaries with entity attributes
-            flush: Whether to flush after adding all entities
-
-        Returns:
-            List of created entities
-
-        Raises:
-            RepositoryError: If batch creation fails
-        """
-        if not items:
-            return []
-
-        with self._db_operation("create_batch") as session:
-            entities = []
-
-            for item_data in items:
-                entity = self.entity_class(**item_data)
-                session.add(entity)
-                entities.append(entity)
-
-            if flush:
-                session.flush()
-                # Refresh all entities to get generated IDs
-                for entity in entities:
-                    session.refresh(entity)
-
-            self.logger.info(
-                f"Created {len(entities)} {self.entity_name} entities in batch",
-                extra={
-                    "entity_type": self.entity_name,
-                    "batch_size": len(entities),
-                    "entity_ids": [e.id for e in entities],
-                },
-            )
-
-            return entities
-
-    def _update_batch(self, updates: List[Dict[str, Any]], id_field: str = "id") -> List[T]:
-        """
-        Update multiple entities in a single transaction.
-
-        Args:
-            updates: List of dicts containing entity ID and attributes to update
-            id_field: Name of the ID field in update dicts (default: "id")
-
-        Returns:
-            List of updated entities
-
-        Raises:
-            RepositoryError: If any entity not found or update fails
-        """
-        if not updates:
-            return []
-
-        with self._db_operation("update_batch") as session:
-            updated_entities = []
-            not_found_ids = []
-
-            for update_data in updates:
-                entity_id = update_data.get(id_field)
-                if not entity_id:
-                    continue
-
-                # Get entity with lock
-                entity = self._get_by_id(entity_id, for_update=True)
-
-                if not entity:
-                    not_found_ids.append(entity_id)
-                    continue
-
-                # Update attributes (excluding ID)
-                for key, value in update_data.items():
-                    if key != id_field and hasattr(entity, key):
-                        setattr(entity, key, value)
-
-                updated_entities.append(entity)
-
-            # Raise error if any entities not found
-            if not_found_ids:
-                raise not_found(
-                    resource_type=self.entity_name,
-                    entity_ids=not_found_ids,
-                    message=f"{len(not_found_ids)} {self.entity_name} entities not found",
-                )
-
-            session.flush()
-
-            # Refresh all entities
-            for entity in updated_entities:
-                session.refresh(entity)
-
-            self.logger.info(
-                f"Updated {len(updated_entities)} {self.entity_name} entities in batch",
-                extra={
-                    "entity_type": self.entity_name,
-                    "batch_size": len(updated_entities),
-                    "entity_ids": [e.id for e in updated_entities],
-                },
-            )
-
-            return updated_entities
+        return True
 
     def _delete_batch(self, entity_ids: List[str], soft_delete: bool = True) -> int:
         """
-        Delete multiple entities in a single transaction.
+        Delete multiple entities in a single transaction using existing session.
 
         Args:
             entity_ids: List of entity IDs to delete
@@ -476,49 +297,50 @@ class BaseRepository(Generic[T]):
         if not entity_ids:
             return 0
 
-        with self._db_operation("delete_batch") as session:
-            # Build query for all entities
-            query = select(self.entity_class).where(self.entity_class.id.in_(entity_ids))
+        # Build query for all entities
+        query = select(self.entity_class).where(self.entity_class.id.in_(entity_ids))
 
-            # Apply tenant filter if needed
-            if hasattr(self.entity_class, "tenant_id"):
-                tenant_id = TenantContext.get_current_tenant_id()
-                if tenant_id:
-                    query = query.where(
-                        self.entity_class.tenant_id == tenant_id  # type: ignore[attr-defined]
-                    )
+        # Apply tenant filter if needed
+        if hasattr(self.entity_class, "tenant_id"):
+            tenant_id = self._get_current_tenant_id()
+            if tenant_id:
+                query = query.where(
+                    self.entity_class.tenant_id == tenant_id  # type: ignore[attr-defined]
+                )
 
-            result = session.execute(query)
-            entities = result.scalars().all()
+        result = self.session.execute(query)
+        entities = result.scalars().all()
 
-            deleted_count = len(entities)
+        deleted_count = len(entities)
 
-            if soft_delete and hasattr(self.entity_class, "deleted_at"):
-                # Soft delete all
-                from datetime import datetime, timezone
+        if soft_delete and hasattr(self.entity_class, "deleted_at"):
+            # Soft delete all
+            from datetime import datetime, timezone
 
-                now = datetime.now(timezone.utc)
-                for entity in entities:
-                    entity.deleted_at = now
-            else:
-                # Hard delete all
-                for entity in entities:
-                    session.delete(entity)
+            now = datetime.now(timezone.utc)
+            for entity in entities:
+                entity.deleted_at = now
+        else:
+            # Hard delete all
+            for entity in entities:
+                self.session.delete(entity)
 
-            session.flush()
+        self.session.flush()
 
-            self.logger.info(
-                f"{'Soft' if soft_delete else 'Hard'} deleted {deleted_count} "
-                f"{self.entity_name} entities in batch",
-                extra={
-                    "entity_type": self.entity_name,
-                    "requested_count": len(entity_ids),
-                    "deleted_count": deleted_count,
-                    "entity_ids": [e.id for e in entities],
-                },
-            )
+        self.logger.info(
+            f"{'Soft' if soft_delete else 'Hard'} deleted {deleted_count} "
+            f"{self.entity_name} entities in batch",
+            extra={
+                "entity_type": self.entity_name,
+                "requested_count": len(entity_ids),
+                "deleted_count": deleted_count,
+                "entity_ids": [e.id for e in entities],
+            },
+        )
 
-            return deleted_count
+        return deleted_count
+
+    # ==================== UTILITY METHODS ====================
 
     def _apply_tenant_filter(self, query, tenant_id: str):
         """
@@ -584,7 +406,7 @@ class BaseRepository(Generic[T]):
             RepositoryError: If tenant_id is not available
         """
         # Get tenant_id from context
-        tenant_id = TenantContext.get_current_tenant_id()
+        tenant_id = self._get_current_tenant_id()
 
         if not tenant_id:
             raise RepositoryError(

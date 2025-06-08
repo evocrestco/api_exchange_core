@@ -32,48 +32,6 @@ from src.schemas.state_transition_schema import (
 )
 from src.services.state_tracking_service import StateTrackingService
 
-# ==================== HELPER FIXTURES ====================
-
-
-@pytest.fixture(scope="function")
-def state_tracking_service(db_manager):
-    """Create a StateTrackingService instance."""
-    return StateTrackingService(db_manager)
-
-
-@pytest.fixture(scope="function")
-def test_entities(entity_repository, tenant_context):
-    """Create test entities for state tracking tests."""
-    entities = {}
-
-    # Create several test entities that state transitions can reference
-    entity_configs = [
-        ("entity_record_test", "test_order_001", "order"),
-        ("entity_history_test", "test_order_002", "order"),
-        ("entity_current_state", "test_order_003", "order"),
-        ("entity_stuck_test", "test_order_004", "order"),
-        ("entity_stats_test1", "test_order_005", "order"),
-        ("entity_stats_test2", "test_order_006", "order"),
-        ("entity_processing_time", "test_order_007", "order"),
-        ("entity_isolation_test", "test_order_008", "order"),
-    ]
-
-    for entity_id_suffix, external_id, canonical_type in entity_configs:
-        entity_data = EntityCreate(
-            external_id=external_id,
-            tenant_id=tenant_context["id"],
-            canonical_type=canonical_type,
-            source="test_system",
-            version=1,
-            content_hash=f"hash_{external_id}",
-            attributes={"status": "NEW", "test": True},
-        )
-        created_entity_id = entity_repository.create(entity_data)
-        entities[entity_id_suffix] = created_entity_id
-
-    return entities
-
-
 # ==================== STATE TRACKING SERVICE TESTS ====================
 
 

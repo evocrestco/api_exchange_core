@@ -77,8 +77,9 @@ def create_schema():
         print("Created all tables")
         
         # Create tenants using the TenantService
-        tenant_repository = TenantRepository(db_manager=db_manager)
-        tenant_service = TenantService(tenant_repository=tenant_repository)
+        db_session = db_manager.get_session()
+        tenant_repository = TenantRepository(db_session)
+        tenant_service = TenantService(tenant_repository)
         
         test_tenants = [
             TenantCreate(
@@ -111,6 +112,8 @@ def create_schema():
             tenant_service.create_tenant(tenant_data)
             print(f"Created tenant: {tenant_data.tenant_id}")
         
+        # Commit the transaction
+        db_session.commit()
         print("Test tenants created successfully")
             
     finally:

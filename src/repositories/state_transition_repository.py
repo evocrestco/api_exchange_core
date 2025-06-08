@@ -9,7 +9,6 @@ from typing import List, Optional
 
 from sqlalchemy import desc, func
 
-from src.context.tenant_context import TenantContext
 from src.db.db_state_transition_models import StateTransition, TransitionTypeEnum
 from src.repositories.base_repository import BaseRepository
 from src.schemas.state_transition_schema import (
@@ -30,15 +29,15 @@ class StateTransitionRepository(BaseRepository[StateTransition]):
     built-in tenant isolation and error handling.
     """
 
-    def __init__(self, db_manager, logger=None):
+    def __init__(self, session, logger=None):
         """
-        Initialize the repository with a database manager.
+        Initialize the repository with a database session.
 
         Args:
-            db_manager: Database manager for session handling
+            session: SQLAlchemy session for database operations
             logger: Optional logger instance
         """
-        super().__init__(db_manager, StateTransition, logger)
+        super().__init__(session, StateTransition, logger)
         if logger is None:
             self.logger = get_logger()  # type: ignore[assignment]
 
@@ -64,12 +63,12 @@ class StateTransitionRepository(BaseRepository[StateTransition]):
 
         # Auto-assign sequence number if not provided
         if "sequence_number" not in data_dict or data_dict["sequence_number"] is None:
-            with self._db_operation("get_last_sequence", entity_id) as session:
+            with self._session_operation("get_last_sequence", entity_id) as session:
                 last_sequence = self._get_last_sequence_number(entity_id, session)
                 data_dict["sequence_number"] = last_sequence + 1
 
         # Create StateTransition with proper session management
-        with self._db_operation("create") as session:
+        with self._session_operation("create") as session:
             from src.db.db_state_transition_models import StateTransition
             from datetime import datetime, timezone
             import uuid
@@ -135,8 +134,8 @@ class StateTransitionRepository(BaseRepository[StateTransition]):
         Raises:
             RepositoryError: If there's an error filtering state transitions
         """
-        with self._db_operation("get_by_filter") as session:
-            tenant_id = TenantContext.get_current_tenant_id()
+        with self._session_operation("get_by_filter") as session:
+            tenant_id = self._get_current_tenant_id()
 
             query = session.query(StateTransition)
 
@@ -181,13 +180,11 @@ class StateTransitionRepository(BaseRepository[StateTransition]):
         Raises:
             RepositoryError: If there's an error retrieving state history
         """
-        with self._db_operation("get_entity_state_history", entity_id) as session:
-            tenant_id = TenantContext.get_current_tenant_id()
+        with self._session_operation("get_entity_state_history", entity_id) as session:
+            tenant_id = self._get_current_tenant_id()
 
             query = session.query(StateTransition).filter(StateTransition.entity_id == entity_id)
-
-            if tenant_id:
-                query = self._apply_tenant_filter(query, tenant_id)
+            query = self._apply_tenant_filter(query, tenant_id)
 
             query = query.order_by(StateTransition.sequence_number.asc())
             transitions = query.all()
@@ -233,8 +230,8 @@ class StateTransitionRepository(BaseRepository[StateTransition]):
         Raises:
             RepositoryError: If there's an error retrieving entities
         """
-        with self._db_operation("get_entities_in_state") as session:
-            tenant_id = TenantContext.get_current_tenant_id()
+        with self._session_operation("get_entities_in_state") as session:
+            tenant_id = self._get_current_tenant_id()
 
             # Subquery to get the latest state transition for each entity
             latest_transitions_subquery = (
@@ -273,15 +270,13 @@ class StateTransitionRepository(BaseRepository[StateTransition]):
 
     def get_state_statistics(
         self,
-        tenant_id: Optional[str] = None,
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
     ) -> StateTransitionStats:
         """
-        Get statistics about state transitions.
+        Get statistics about state transitions for the current tenant.
 
         Args:
-            tenant_id: Optional tenant ID to filter by
             start_time: Optional start time for the statistics period
             end_time: Optional end time for the statistics period
 
@@ -291,10 +286,9 @@ class StateTransitionRepository(BaseRepository[StateTransition]):
         Raises:
             RepositoryError: If there's an error calculating statistics
         """
-        with self._db_operation("get_state_statistics") as session:
-            # If no tenant_id provided, use current tenant context
-            if not tenant_id:
-                tenant_id = TenantContext.get_current_tenant_id()
+        with self._session_operation("get_state_statistics") as session:
+            # Use current tenant context
+            tenant_id = self._get_current_tenant_id()
 
             # Base query
             query = session.query(StateTransition)
@@ -432,7 +426,7 @@ class StateTransitionRepository(BaseRepository[StateTransition]):
             return result or 0
 
         if session is None:
-            with self._db_operation("get_last_sequence_number", entity_id) as new_session:
+            with self._session_operation("get_last_sequence_number", entity_id) as new_session:
                 return get_sequence(new_session)  # type: ignore[no-any-return]
         else:
             return get_sequence(session)  # type: ignore[no-any-return]

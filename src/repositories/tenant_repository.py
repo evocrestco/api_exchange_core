@@ -17,15 +17,15 @@ from src.schemas.tenant_schema import TenantConfigUpdate, TenantCreate, TenantRe
 class TenantRepository(BaseRepository[Tenant]):
     """Repository for tenant data access operations."""
 
-    def __init__(self, db_manager, logger: Optional[logging.Logger] = None):
+    def __init__(self, session, logger: Optional[logging.Logger] = None):
         """
         Initialize the tenant repository.
 
         Args:
-            db_manager: Database manager for database operations
+            session: SQLAlchemy session for database operations
             logger: Optional logger instance
         """
-        super().__init__(db_manager, Tenant, logger)
+        super().__init__(session, Tenant, logger)
 
     def _entity_to_dict(self, tenant: Tenant) -> Dict[str, Any]:
         """
@@ -46,6 +46,25 @@ class TenantRepository(BaseRepository[Tenant]):
             "updated_at": tenant.updated_at,
         }
 
+    def get_current_tenant(self) -> TenantRead:
+        """
+        Get the current tenant from context.
+
+        Returns:
+            TenantRead schema instance for current tenant
+
+        Raises:
+            ValueError: If no tenant context is set
+            RepositoryError: If tenant doesn't exist or there's a database error
+        """
+        tenant_id = self._get_current_tenant_id()
+        
+        with self._session_operation("get_current_tenant", tenant_id) as session:
+            tenant = session.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()
+            if not tenant:
+                raise not_found("Tenant", tenant_id=tenant_id)
+            return TenantRead.model_validate(tenant)
+        
     def get_by_id(self, tenant_id: str) -> TenantRead:
         """
         Get a tenant by ID.
@@ -59,49 +78,13 @@ class TenantRepository(BaseRepository[Tenant]):
         Raises:
             RepositoryError: If no tenant exists with the given ID or there's a database error
         """
-        # Note: Tenant uses tenant_id as primary key, not id
-        # So we need custom logic here
-        with self._db_operation("get_by_id", tenant_id) as session:
+        with self._session_operation("get_by_id", tenant_id) as session:
             tenant = session.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()
             if not tenant:
-                raise not_found(
-                    "Tenant",
-                    tenant_id=tenant_id,
-                )
+                raise not_found("Tenant", tenant_id=tenant_id)
             return TenantRead.model_validate(tenant)
 
-    def get_active_tenants(self) -> List[TenantRead]:
-        """
-        Get all active tenants.
 
-        Returns:
-            List of active TenantRead schema instances
-
-        Raises:
-            RepositoryError: If there's a database error
-        """
-        with self._db_operation("get_active_tenants") as session:
-            tenants = session.query(Tenant).filter(Tenant.is_active.is_(True)).all()
-            return [TenantRead.model_validate(tenant) for tenant in tenants]
-
-    def get_all_tenants(self, include_inactive: bool = False) -> List[TenantRead]:
-        """
-        Get all tenants.
-
-        Args:
-            include_inactive: Whether to include inactive tenants
-
-        Returns:
-            List of TenantRead schema instances
-
-        Raises:
-            RepositoryError: If there's a database error
-        """
-        with self._db_operation("get_all_tenants") as session:
-            if include_inactive:
-                tenants = session.query(Tenant).all()
-                return [TenantRead.model_validate(tenant) for tenant in tenants]
-            return self.get_active_tenants()
 
     def create(self, tenant_data: TenantCreate) -> TenantRead:
         """
@@ -116,25 +99,25 @@ class TenantRepository(BaseRepository[Tenant]):
         Raises:
             RepositoryError: If there's a database error or validation fails
         """
-        # Convert schema to database model
-        tenant = Tenant(
-            tenant_id=tenant_data.tenant_id,
-            customer_name=tenant_data.customer_name,
-            primary_contact_name=tenant_data.primary_contact_name,
-            primary_contact_email=tenant_data.primary_contact_email,
-            primary_contact_phone=tenant_data.primary_contact_phone,
-            address_line1=tenant_data.address_line1,
-            address_line2=tenant_data.address_line2,
-            city=tenant_data.city,
-            state=tenant_data.state,
-            postal_code=tenant_data.postal_code,
-            country=tenant_data.country,
-            tenant_config=tenant_data.tenant_config or {},
-            notes=tenant_data.notes,
-            is_active=tenant_data.is_active,
-        )
+        with self._session_operation("create", tenant_data.tenant_id) as session:
+            # Convert schema to database model
+            tenant = Tenant(
+                tenant_id=tenant_data.tenant_id,
+                customer_name=tenant_data.customer_name,
+                primary_contact_name=tenant_data.primary_contact_name,
+                primary_contact_email=tenant_data.primary_contact_email,
+                primary_contact_phone=tenant_data.primary_contact_phone,
+                address_line1=tenant_data.address_line1,
+                address_line2=tenant_data.address_line2,
+                city=tenant_data.city,
+                state=tenant_data.state,
+                postal_code=tenant_data.postal_code,
+                country=tenant_data.country,
+                tenant_config=tenant_data.tenant_config or {},
+                notes=tenant_data.notes,
+                is_active=tenant_data.is_active,
+            )
 
-        with self._db_operation("create", tenant_data.tenant_id) as session:
             session.add(tenant)
             session.flush()  # Flush to get the generated ID if any
             self.logger.info(f"Created tenant with ID: {tenant.tenant_id}")
@@ -154,7 +137,7 @@ class TenantRepository(BaseRepository[Tenant]):
         Raises:
             RepositoryError: If tenant doesn't exist, there's a database error or validation fails
         """
-        with self._db_operation("update", tenant_id) as session:
+        with self._session_operation("update", tenant_id) as session:
             # Validate tenant exists in database
             existing_tenant = session.query(Tenant).filter_by(tenant_id=tenant_id).first()
             if not existing_tenant:
@@ -187,7 +170,7 @@ class TenantRepository(BaseRepository[Tenant]):
         Raises:
             RepositoryError: If tenant doesn't exist, there's a database error or validation fails
         """
-        with self._db_operation("update_config", tenant_id) as session:
+        with self._session_operation("update_config", tenant_id) as session:
             # Get tenant from database
             tenant = session.query(Tenant).filter_by(tenant_id=tenant_id).first()
             if not tenant:

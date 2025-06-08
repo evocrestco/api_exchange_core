@@ -6,7 +6,7 @@ import logging
 from typing import Any, List, Optional
 
 from src.context.operation_context import operation
-from src.context.service_decorators import handle_repository_errors
+from src.context.service_decorators import handle_repository_errors, transactional
 from src.context.tenant_context import TenantContext, tenant_aware
 from src.exceptions import ErrorCode, RepositoryError, ValidationError
 from src.repositories.tenant_repository import TenantRepository
@@ -62,6 +62,7 @@ class TenantService(BaseService[TenantCreate, TenantRead, TenantUpdate, TenantFi
         super()._handle_service_exception(operation, exception, tenant_id)
 
     @operation()
+    @transactional()
     def create_tenant(self, tenant_data: TenantCreate) -> TenantCreate:
         """
         Create a new tenant with comprehensive validation and logging.
@@ -115,33 +116,10 @@ class TenantService(BaseService[TenantCreate, TenantRead, TenantUpdate, TenantFi
         except Exception as e:
             self._handle_tenant_service_exception("create_tenant", e, tenant_data.tenant_id)
 
-    @operation()
-    def create_tenant_from_dict(self, tenant_id: str, customer_name: str, **kwargs) -> TenantCreate:
-        """
-        Create a new tenant from dictionary data.
-
-        Args:
-            tenant_id: Unique tenant identifier
-            customer_name: Name of the customer
-            **kwargs: Additional tenant details
-
-        Returns:
-            Created tenant as Pydantic model
-
-        Raises:
-            ValueError: If tenant already exists or validation fails
-            ServiceError: If there's an error during creation
-        """
-        try:
-            # Create and validate with Pydantic first
-            tenant_data = TenantCreate(tenant_id=tenant_id, customer_name=customer_name, **kwargs)
-
-            return self.create_tenant(tenant_data)
-        except Exception as e:
-            self._handle_tenant_service_exception("create_tenant_from_dict", e, tenant_id)
 
     @tenant_aware
     @operation()
+    @transactional()
     def update_tenant(self, update_data: TenantUpdate) -> TenantRead:
         """
         Update an existing tenant.
@@ -155,7 +133,7 @@ class TenantService(BaseService[TenantCreate, TenantRead, TenantUpdate, TenantFi
         Raises:
             ServiceError: If tenant not found or there's an error during update
         """
-        tenant_id = TenantContext.get_current_tenant_id()
+        tenant_id = self._get_current_tenant_id()
         try:
             # Update tenant via repository (repository handles the update logic)
             updated_tenant = self.repository.update(tenant_id, update_data)
@@ -189,7 +167,7 @@ class TenantService(BaseService[TenantCreate, TenantRead, TenantUpdate, TenantFi
         Raises:
             ServiceError: If tenant not found or there's an error during update
         """
-        tenant_id = TenantContext.get_current_tenant_id()
+        tenant_id = self._get_current_tenant_id()
         try:
             # Create and validate with Pydantic first
             update_data = TenantUpdate(**kwargs)
@@ -197,13 +175,14 @@ class TenantService(BaseService[TenantCreate, TenantRead, TenantUpdate, TenantFi
         except Exception as e:
             self._handle_tenant_service_exception("update_tenant_from_dict", e, tenant_id)
 
+    @tenant_aware
     @operation()
-    def update_tenant_config(self, tenant_id: str, key: str, value: Any) -> bool:
+    @transactional()
+    def update_tenant_config(self, key: str, value: Any) -> bool:
         """
-        Update a tenant's configuration.
+        Update the current tenant's configuration.
 
         Args:
-            tenant_id: Tenant ID
             key: Configuration key
             value: Configuration value
 
@@ -213,6 +192,7 @@ class TenantService(BaseService[TenantCreate, TenantRead, TenantUpdate, TenantFi
         Raises:
             ServiceError: If there's an error during update
         """
+        tenant_id = self._get_current_tenant_id()
         try:
             # Validate with Pydantic
             config_update = TenantConfigUpdate(key=key, value=value)
@@ -239,49 +219,30 @@ class TenantService(BaseService[TenantCreate, TenantRead, TenantUpdate, TenantFi
         except Exception as e:
             self._handle_tenant_service_exception("update_tenant_config", e, tenant_id)
 
-    @operation()
-    @handle_repository_errors("get_tenants")
-    def get_tenants(self, include_inactive: bool = False) -> List[TenantCreate]:
-        """
-        Get all tenants.
 
-        Args:
-            include_inactive: Whether to include inactive tenants
+    @tenant_aware
+    @operation()
+    @handle_repository_errors("get_current_tenant")
+    def get_current_tenant(self) -> TenantCreate:
+        """
+        Get the current tenant from context.
 
         Returns:
-            List of tenants as Pydantic models
-
-        Raises:
-            ServiceError: If there's an error during retrieval
-        """
-        tenants = self.repository.get_all_tenants(include_inactive)
-        return [TenantCreate.model_validate(tenant) for tenant in tenants]
-
-    @operation()
-    @handle_repository_errors("get_tenant")
-    def get_tenant(self, tenant_id: str) -> TenantCreate:
-        """
-        Get a tenant by ID.
-
-        Args:
-            tenant_id: Tenant ID
-
-        Returns:
-            Tenant as Pydantic model
+            Current tenant as Pydantic model
 
         Raises:
             ServiceError: If tenant not found or there's an error during retrieval
         """
+        tenant_id = self._get_current_tenant_id()
         tenant = self.repository.get_by_id(tenant_id)
         return TenantCreate.model_validate(tenant)
 
+    @tenant_aware
     @operation()
-    def activate_tenant(self, tenant_id: str) -> bool:
+    @transactional()
+    def activate_current_tenant(self) -> bool:
         """
-        Activate a tenant.
-
-        Args:
-            tenant_id: Tenant ID
+        Activate the current tenant.
 
         Returns:
             True if successful, False if tenant not found
@@ -289,6 +250,7 @@ class TenantService(BaseService[TenantCreate, TenantRead, TenantUpdate, TenantFi
         Raises:
             ServiceError: If there's an error during activation
         """
+        tenant_id = self._get_current_tenant_id()
         try:
             # Use repository update with proper schema
             update_data = TenantUpdate(is_active=True)
@@ -313,13 +275,12 @@ class TenantService(BaseService[TenantCreate, TenantRead, TenantUpdate, TenantFi
         except Exception as e:
             self._handle_tenant_service_exception("activate_tenant", e, tenant_id)
 
+    @tenant_aware
     @operation()
-    def deactivate_tenant(self, tenant_id: str) -> bool:
+    @transactional()
+    def deactivate_current_tenant(self) -> bool:
         """
-        Deactivate a tenant.
-
-        Args:
-            tenant_id: Tenant ID
+        Deactivate the current tenant.
 
         Returns:
             True if successful, False if tenant not found
@@ -327,6 +288,7 @@ class TenantService(BaseService[TenantCreate, TenantRead, TenantUpdate, TenantFi
         Raises:
             ServiceError: If there's an error during deactivation
         """
+        tenant_id = self._get_current_tenant_id()
         try:
             # Use repository update with proper schema
             update_data = TenantUpdate(is_active=False)

@@ -24,15 +24,15 @@ class EntityRepository(BaseRepository[Entity]):
     This class provides data access methods for the Entity model.
     """
 
-    def __init__(self, db_manager, logger=None):
+    def __init__(self, session, logger=None):
         """
-        Initialize the repository with a database manager.
+        Initialize the repository with a database session.
 
         Args:
-            db_manager: Database manager for database operations
+            session: SQLAlchemy session for database operations
             logger: Optional logger instance
         """
-        super().__init__(db_manager, Entity, logger)
+        super().__init__(session, Entity, logger)
         self.handler = OperationHandler(logger=self.logger)
 
     @tenant_aware
@@ -51,8 +51,8 @@ class EntityRepository(BaseRepository[Entity]):
         Raises:
             RepositoryError: If a database error occurs
         """
-        with self._db_operation("get_max_version", external_id) as session:
-            tenant_id = TenantContext.get_current_tenant_id()
+        with self._session_operation("get_max_version", external_id) as session:
+            tenant_id = self._get_current_tenant_id()
 
             # Query for the maximum version directly using SQL's MAX function
             max_version = (
@@ -84,8 +84,8 @@ class EntityRepository(BaseRepository[Entity]):
             RepositoryError: If database integrity constraints are violated or another
                 database error occurs
         """
-        with self._db_operation("create") as session:
-            tenant_id = TenantContext.get_current_tenant_id()
+        with self._session_operation("create") as session:
+            tenant_id = self._get_current_tenant_id()
 
             # Prepare entity data using Entity's custom create method
             # Build dict with required parameters first
@@ -168,7 +168,7 @@ class EntityRepository(BaseRepository[Entity]):
         entity = self.get_by_id(entity_id)
 
         if not entity:
-            tenant_id = TenantContext.get_current_tenant_id()
+            tenant_id = self._get_current_tenant_id()
             raise not_found(
                 "Entity",
                 entity_id=entity_id,
@@ -203,8 +203,8 @@ class EntityRepository(BaseRepository[Entity]):
         Raises:
             RepositoryError: If a database error occurs
         """
-        with self._db_operation("get_by_external_id", external_id) as session:
-            tenant_id = TenantContext.get_current_tenant_id()
+        with self._session_operation("get_by_external_id", external_id) as session:
+            tenant_id = self._get_current_tenant_id()
 
             # Base query that applies to all cases
             base_query = session.query(Entity).filter(
@@ -249,7 +249,7 @@ class EntityRepository(BaseRepository[Entity]):
         entity = self.get_by_external_id(external_id, source, version)
 
         if not entity:
-            tenant_id = TenantContext.get_current_tenant_id()
+            tenant_id = self._get_current_tenant_id()
             raise not_found(
                 "Entity",
                 tenant_id=tenant_id,
@@ -276,8 +276,8 @@ class EntityRepository(BaseRepository[Entity]):
         Raises:
             RepositoryError: If a database error occurs
         """
-        with self._db_operation("get_by_content_hash") as session:
-            tenant_id = TenantContext.get_current_tenant_id()
+        with self._session_operation("get_by_content_hash") as session:
+            tenant_id = self._get_current_tenant_id()
 
             entity = (
                 session.query(Entity)
@@ -323,7 +323,7 @@ class EntityRepository(BaseRepository[Entity]):
             RepositoryError: If a database error occurs or trying to version an entity
                 that doesn't exist
         """
-        tenant_id = TenantContext.get_current_tenant_id()
+        tenant_id = self._get_current_tenant_id()
 
         # Get the current max version
         current_max_version = self.get_max_version(external_id, source)
@@ -384,7 +384,7 @@ class EntityRepository(BaseRepository[Entity]):
         Raises:
             RepositoryError: If a database error occurs
         """
-        tenant_id = TenantContext.get_current_tenant_id()
+        tenant_id = self._get_current_tenant_id()
 
         result = self._delete(entity_id)
 
@@ -412,8 +412,8 @@ class EntityRepository(BaseRepository[Entity]):
         Raises:
             RepositoryError: If a database error occurs
         """
-        with self._db_operation("list_entities") as session:
-            tenant_id = TenantContext.get_current_tenant_id()
+        with self._session_operation("list_entities") as session:
+            tenant_id = self._get_current_tenant_id()
             query = session.query(Entity)
 
             # Always filter by tenant_id for tenant isolation
@@ -515,7 +515,7 @@ class EntityRepository(BaseRepository[Entity]):
         Raises:
             RepositoryError: If entity not found or database error occurs
         """
-        with self._db_operation("update_attributes", entity_id):
+        with self._session_operation("update_attributes", entity_id):
             # Get entity for update
             entity = self._get_by_id(entity_id, for_update=True)
             if not entity:

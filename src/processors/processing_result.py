@@ -7,12 +7,13 @@ to indicate processing outcomes and routing decisions.
 
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
     from src.processors.message import Message
+    from src.processors.v2.output_handlers.base import OutputHandler
 
 
 class ProcessingStatus(str, Enum):
@@ -27,6 +28,7 @@ class ProcessingStatus(str, Enum):
     ERROR = "error"  # Processing error that may be retryable
     SKIPPED = "skipped"  # Processing was skipped (e.g., duplicate)
     PARTIAL = "partial"  # Some parts succeeded, some failed
+    DEAD_LETTERED = "dead_lettered"  # Processing failed and was routed to dead letter queue
 
 
 class ProcessingResult(BaseModel):
@@ -47,8 +49,8 @@ class ProcessingResult(BaseModel):
         default_factory=list, description="Messages to route to subsequent pipeline stages"
     )
 
-    routing_info: Dict[str, Any] = Field(
-        default_factory=dict, description="Routing instructions for pipeline management"
+    output_handlers: List[Any] = Field(
+        default_factory=list, description="Type-safe output handlers for structured routing"
     )
 
     # Error information
@@ -102,7 +104,7 @@ class ProcessingResult(BaseModel):
     def create_success(
         cls,
         output_messages: Optional[List["Message"]] = None,
-        routing_info: Optional[Dict[str, Any]] = None,
+        output_handlers: Optional[List[Any]] = None,
         processing_metadata: Optional[Dict[str, Any]] = None,
         entities_created: Optional[List[str]] = None,
         entities_updated: Optional[List[str]] = None,
@@ -115,7 +117,7 @@ class ProcessingResult(BaseModel):
 
         Args:
             output_messages: Messages to route to next stages
-            routing_info: Routing instructions
+            output_handlers: Type-safe output handlers for routing
             processing_metadata: Additional processing metadata
             entities_created: IDs of created entities
             entities_updated: IDs of updated entities
@@ -128,7 +130,7 @@ class ProcessingResult(BaseModel):
             status=ProcessingStatus.SUCCESS,
             success=True,
             output_messages=output_messages or [],
-            routing_info=routing_info or {},
+            output_handlers=output_handlers or [],
             processing_metadata=processing_metadata or {},
             entities_created=entities_created or [],
             entities_updated=entities_updated or [],
@@ -143,7 +145,7 @@ class ProcessingResult(BaseModel):
         error_details: Optional[Dict[str, Any]] = None,
         can_retry: bool = True,
         retry_after_seconds: Optional[int] = None,
-        routing_info: Optional[Dict[str, Any]] = None,
+        output_handlers: Optional[List["OutputHandler"]] = None,
         processing_duration_ms: float = 0.0,
     ) -> "ProcessingResult":
         """
@@ -157,7 +159,7 @@ class ProcessingResult(BaseModel):
             error_details: Additional error context
             can_retry: Whether processing can be retried
             retry_after_seconds: Suggested retry delay
-            routing_info: Routing instructions (e.g., to error queue)
+            output_handlers: Output handlers for error routing (e.g., to error queue)
             processing_duration_ms: Processing duration in milliseconds
 
         Returns:
@@ -173,7 +175,7 @@ class ProcessingResult(BaseModel):
             error_details=error_details or {},
             can_retry=can_retry,
             retry_after_seconds=retry_after_seconds,
-            routing_info=routing_info or {},
+            output_handlers=output_handlers or [],
             processing_duration_ms=processing_duration_ms,
         )
 
@@ -182,7 +184,7 @@ class ProcessingResult(BaseModel):
         cls,
         reason: str,
         processing_metadata: Optional[Dict[str, Any]] = None,
-        routing_info: Optional[Dict[str, Any]] = None,
+        output_handlers: Optional[List["OutputHandler"]] = None,
     ) -> "ProcessingResult":
         """
         Create a skipped processing result.
@@ -192,7 +194,7 @@ class ProcessingResult(BaseModel):
         Args:
             reason: Why processing was skipped
             processing_metadata: Additional metadata
-            routing_info: Routing instructions
+            output_handlers: Output handlers for routing skipped results
 
         Returns:
             ProcessingResult indicating skipped processing
@@ -204,16 +206,20 @@ class ProcessingResult(BaseModel):
                 **(processing_metadata or {}),
                 "skip_reason": reason,
             },
-            routing_info=routing_info or {},
+            output_handlers=output_handlers or [],
         )
 
     def add_output_message(self, message: "Message") -> None:
         """Add an output message for routing."""
         self.output_messages.append(message)
 
-    def add_routing_info(self, key: str, value: Any) -> None:
-        """Add routing information."""
-        self.routing_info[key] = value
+    def add_output_handler(self, handler: Any) -> None:
+        """Add an output handler for structured routing."""
+        self.output_handlers.append(handler)
+
+    def has_output_handlers(self) -> bool:
+        """Check if any output handlers are configured."""
+        return bool(self.output_handlers)
 
     def add_metadata(self, key: str, value: Any) -> None:
         """Add processing metadata."""
@@ -242,6 +248,7 @@ class ProcessingResult(BaseModel):
             "status": self.status.value,
             "success": self.success,
             "output_message_count": len(self.output_messages),
+            "output_handler_count": len(self.output_handlers),
             "entities_created_count": len(self.entities_created),
             "entities_updated_count": len(self.entities_updated),
             "has_error": bool(self.error_message),

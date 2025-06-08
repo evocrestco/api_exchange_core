@@ -1,214 +1,441 @@
 """
-Integration test conftest.py - Cross-component fixtures.
+Integration test configuration.
 
-This module provides fixtures for integration testing:
-- Full service stack with real dependencies
-- End-to-end workflow setups
-- Cross-component test scenarios
+This module provides fixtures and configuration specific to integration tests.
+It builds on the base conftest.py but adds integration-specific setup.
 """
 
+import os
 import pytest
+from pathlib import Path
 
-from src.db.db_config import DatabaseManager
+# Import base fixtures from root conftest
+from tests.conftest import *  # noqa: F403, F401
 
-# ==================== FULL STACK FIXTURES ====================
+# Integration tests need to import all models for proper database setup
+from src.db.db_config import import_all_models
+
+# Azure Storage imports for real queue operations
+from azure.storage.queue import QueueClient, QueueMessage
+import json
+import time
+
+
+@pytest.fixture(scope="session", autouse=True)
+def load_env_for_integration():
+    """
+    Load .env file for integration tests.
+    
+    This ensures that integration tests can use the real processor factory
+    which requires database environment variables.
+    """
+    env_file = Path(__file__).parent / ".env"
+    print(f"DEBUG: Looking for .env at: {env_file}")
+    print(f"DEBUG: .env exists: {env_file.exists()}")
+    
+    if env_file.exists():
+        # Manual .env loading
+        with open(env_file) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    os.environ[key] = value
+                    print(f"DEBUG: Set {key}={value[:20]}...")  # Show first 20 chars
+    
+    print(f"DEBUG: After loading - TENANT_ID={os.getenv('TENANT_ID')}")
+    print(f"DEBUG: After loading - DB_HOST={os.getenv('DB_HOST')}")
+    
+    yield
+    
+    # Cleanup is handled by clean_environment fixture
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_integration_environment():
+    """
+    Set up integration test environment.
+    
+    This fixture runs once per test session and ensures:
+    - All database models are imported
+    - Environment is configured for integration testing
+    """
+    # Import all models to ensure they're registered
+    import_all_models()
+    
+    # Set integration test environment markers
+    os.environ["TESTING_MODE"] = "integration"
+    
+    yield
+    
+    # Cleanup
+    if "TESTING_MODE" in os.environ:
+        del os.environ["TESTING_MODE"]
+
+
+@pytest.fixture(scope="function", autouse=True)
+def clean_environment():
+    """
+    Override the base clean_environment fixture for integration tests.
+    
+    Integration tests need to preserve environment variables loaded from .env file,
+    so we don't clear them like the base fixture does.
+    """
+    # Just yield without clearing - integration tests need the env vars
+    yield
+    # No cleanup - we want to keep the env vars for the whole test session
 
 
 @pytest.fixture(scope="function")
-def full_service_stack(db_manager):
+def integration_db_session(db_session):
     """
-    Complete service stack for integration testing.
-
-    Provides all services configured with the same database manager
-    for testing cross-service interactions.
+    Database session specifically for integration tests.
+    
+    This is an alias for the base db_session fixture but makes it clear
+    that integration tests are using the database.
     """
-    from src.repositories.entity_repository import EntityRepository
-    from src.repositories.processing_error_repository import ProcessingErrorRepository
-    from src.repositories.state_transition_repository import StateTransitionRepository
-    from src.repositories.tenant_repository import TenantRepository
-    from src.services.entity_service import EntityService
-    from src.services.processing_error_service import ProcessingErrorService
-    from src.services.state_tracking_service import StateTrackingService
-    from src.services.tenant_service import TenantService
+    return db_session
 
-    # Create repositories
-    entity_repo = EntityRepository(db_manager)
-    tenant_repo = TenantRepository(db_manager)
-    state_repo = StateTransitionRepository(db_manager)
-    error_repo = ProcessingErrorRepository(db_manager)
 
-    # Create services
-    entity_service = EntityService(entity_repo)
-    tenant_service = TenantService(tenant_repo)
-    state_service = StateTrackingService(state_repo)
-    error_service = ProcessingErrorService(error_repo)
+@pytest.fixture(scope="function") 
+def integration_tenant_context(tenant_context):
+    """
+    Tenant context specifically for integration tests.
+    
+    This is an alias for the base tenant_context fixture.
+    """
+    return tenant_context
 
-    return {
-        "repositories": {
-            "entity": entity_repo,
-            "tenant": tenant_repo,
-            "state_transition": state_repo,
-            "processing_error": error_repo,
-        },
-        "services": {
-            "entity": entity_service,
-            "tenant": tenant_service,
-            "state_tracking": state_service,
-            "processing_error": error_service,
-        },
-    }
+
+# Integration-specific markers
+pytest_markers = [
+    "integration: marks tests as integration tests",
+    "database: marks tests that require database",
+    "processor: marks tests that test processor functionality",
+    "queue: marks tests that involve queue operations",
+]
+
+
+def pytest_configure(config):
+    """Configure pytest with integration-specific markers."""
+    for marker in pytest_markers:
+        config.addinivalue_line("markers", marker)
+
+
+def pytest_collection_modifyitems(config, items):
+    """Automatically mark integration tests."""
+    for item in items:
+        # Mark all tests in integration folder
+        if "integration" in str(item.fspath):
+            item.add_marker(pytest.mark.integration)
+            item.add_marker(pytest.mark.database)
+        
+        # Mark processor tests
+        if "processor" in item.name.lower() or "hello_world" in item.name.lower():
+            item.add_marker(pytest.mark.processor)
+        
+        # Mark queue-related tests
+        if "queue" in item.name.lower() or "output" in item.name.lower():
+            item.add_marker(pytest.mark.queue)
+
+
+# ==================== AZURE STORAGE QUEUE FIXTURES ====================
+
+
+@pytest.fixture(scope="session")
+def azure_storage_connection_string():
+    """Get Azure Storage connection string from environment."""
+    connection_string = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+    if not connection_string:
+        pytest.skip("AZURE_STORAGE_CONNECTION_STRING not configured")
+    return connection_string
 
 
 @pytest.fixture(scope="function")
-def processing_pipeline_setup(full_service_stack, tenant_context):
+def dead_letter_queue_client(azure_storage_connection_string):
     """
-    Setup for testing complete processing pipelines.
-
-    Provides services and initial data for end-to-end workflow testing.
+    Create real dead letter queue client for testing.
+    
+    Uses real Azure Storage (Azurite) - no mocks.
+    Auto-creates queue if it doesn't exist.
+    Cleans up test messages after each test.
     """
-    from tests.fixtures.factories import ExampleOrderEntityFactory
-
-    services = full_service_stack["services"]
-
-    # Create test entity for processing
-    entity = ExampleOrderEntityFactory.create(tenant_id=tenant_context["id"])
-
-    return {
-        "services": services,
-        "tenant_id": tenant_context["id"],
-        "test_entity": {
-            "id": entity.id,
-            "logical_id": entity.logical_id,
-            "canonical_data": entity.canonical_data.copy(),
-        },
-    }
-
-
-# ==================== WORKFLOW FIXTURES ====================
-
-
-@pytest.fixture(scope="function")
-def error_handling_workflow(full_service_stack, tenant_context):
-    """
-    Setup for testing error handling workflows.
-
-    Creates scenarios with errors for testing error recovery,
-    retry logic, and error reporting.
-    """
-    from tests.fixtures.factories import (
-        ConnectionErrorFactory,
-        ExampleOrderEntityFactory,
-        ValidationErrorFactory,
+    queue_name = "test-dead-letter"
+    
+    # Create real Azure Storage queue client
+    queue_client = QueueClient.from_connection_string(
+        conn_str=azure_storage_connection_string,
+        queue_name=queue_name
     )
+    
+    # Create queue if it doesn't exist
+    try:
+        queue_client.create_queue()
+    except Exception:
+        # Queue already exists
+        pass
+    
+    # Track messages sent during test for cleanup
+    sent_messages = []
+    original_send = queue_client.send_message
+    
+    def tracked_send_message(content, **kwargs):
+        result = original_send(content, **kwargs)
+        sent_messages.append(result)
+        return result
+    
+    queue_client.send_message = tracked_send_message
+    queue_client._test_sent_messages = sent_messages
+    
+    yield queue_client
+    
+    # Cleanup: clear all messages from the queue
+    try:
+        queue_client.clear_messages()
+    except Exception:
+        # Queue might not exist or already cleared
+        pass
 
-    services = full_service_stack["services"]
 
-    # Create entity with validation error
-    entity_with_error = ExampleOrderEntityFactory.create(tenant_id=tenant_context["id"])
-    validation_error = ValidationErrorFactory.create(
-        tenant_id=tenant_context["id"], entity_id=entity_with_error.id
-    )
-
-    # Create entity with recoverable error
-    entity_with_recoverable_error = ExampleOrderEntityFactory.create(tenant_id=tenant_context["id"])
-    connection_error = ConnectionErrorFactory.create(
-        tenant_id=tenant_context["id"], entity_id=entity_with_recoverable_error.id
-    )
-
-    return {
-        "services": services,
-        "tenant_id": tenant_context["id"],
-        "validation_error_scenario": {
-            "entity_id": entity_with_error.id,
-            "error_id": validation_error.id,
-            "is_recoverable": False,
-        },
-        "connection_error_scenario": {
-            "entity_id": entity_with_recoverable_error.id,
-            "error_id": connection_error.id,
-            "is_recoverable": True,
-        },
-    }
+@pytest.fixture(scope="function") 
+def queue_message_verifier(dead_letter_queue_client):
+    """
+    Helper for verifying messages in real Azure Storage queues.
+    
+    Provides utilities to check queue contents and verify message structure.
+    """
+    def verify_dlq_message(expected_external_id, expected_error_message, timeout_seconds=5):
+        """
+        Verify a message exists in the dead letter queue with expected content.
+        
+        Args:
+            expected_external_id: Expected external_id in the message
+            expected_error_message: Expected error message content
+            timeout_seconds: How long to wait for message to appear
+            
+        Returns:
+            The parsed message content if found
+            
+        Raises:
+            AssertionError: If message not found or content doesn't match
+        """
+        start_time = time.time()
+        
+        while time.time() - start_time < timeout_seconds:
+            # Peek at messages in queue (don't dequeue them)
+            messages = dead_letter_queue_client.peek_messages(max_messages=32)
+            
+            for message in messages:
+                try:
+                    content = json.loads(message.content)
+                    
+                    # Check if this is our expected message
+                    if (content.get("original_message", {}).get("external_id") == expected_external_id and
+                        expected_error_message in content.get("failure_info", {}).get("error_message", "")):
+                        return content
+                        
+                except (json.JSONDecodeError, KeyError):
+                    # Skip malformed messages
+                    continue
+            
+            # Wait a bit before checking again
+            time.sleep(0.1)
+        
+        # Message not found - get current queue contents for debugging
+        current_messages = []
+        try:
+            messages = dead_letter_queue_client.peek_messages(max_messages=32)
+            for msg in messages:
+                try:
+                    current_messages.append(json.loads(msg.content))
+                except json.JSONDecodeError:
+                    current_messages.append({"raw_content": msg.content})
+        except Exception:
+            current_messages = ["Failed to read queue contents"]
+        
+        raise AssertionError(
+            f"Message with external_id='{expected_external_id}' and error_message containing "
+            f"'{expected_error_message}' not found in dead letter queue within {timeout_seconds} seconds. "
+            f"Current queue contents: {current_messages}"
+        )
+    
+    def get_all_dlq_messages():
+        """Get all messages currently in the dead letter queue."""
+        messages = []
+        try:
+            queue_messages = dead_letter_queue_client.peek_messages(max_messages=32)
+            for msg in queue_messages:
+                try:
+                    messages.append(json.loads(msg.content))
+                except json.JSONDecodeError:
+                    messages.append({"raw_content": msg.content, "parse_error": True})
+        except Exception as e:
+            messages.append({"error": f"Failed to read queue: {str(e)}"})
+        return messages
+    
+    def assert_dlq_empty():
+        """Assert that the dead letter queue is empty."""
+        messages = get_all_dlq_messages()
+        assert len(messages) == 0, f"Expected empty dead letter queue, but found {len(messages)} messages: {messages}"
+    
+    # Create verifier class instance  
+    class QueueVerifier:
+        def verify_dlq_message(self, expected_external_id, expected_error_message, timeout_seconds=5):
+            return verify_dlq_message(expected_external_id, expected_error_message, timeout_seconds)
+        
+        def get_all_dlq_messages(self):
+            return get_all_dlq_messages()
+        
+        def assert_dlq_empty(self):
+            return assert_dlq_empty()
+    
+    return QueueVerifier()
 
 
 @pytest.fixture(scope="function")
-def multi_tenant_workflow(full_service_stack, multi_tenant_context):
+def output_queue_client(azure_storage_connection_string):
     """
-    Setup for testing multi-tenant workflows.
-
-    Creates data across multiple tenants for testing tenant isolation
-    and cross-tenant operations.
+    Create real output queue client for testing processor pipeline output.
+    
+    Uses real Azure Storage (Azurite) - no mocks.
+    Auto-creates queue if it doesn't exist.
+    Cleans up test messages after each test.
     """
-    from tests.fixtures.factories import ExampleOrderEntityFactory
-
-    services = full_service_stack["services"]
-
-    # Create entities for each tenant
-    tenant_entities = {}
-    for tenant in multi_tenant_context:
-        entity = ExampleOrderEntityFactory.create(tenant_id=tenant["id"])
-        tenant_entities[tenant["id"]] = {
-            "entity": {
-                "id": entity.id,
-                "logical_id": entity.logical_id,
-                "canonical_data": entity.canonical_data.copy(),
-            },
-            "tenant_info": tenant,
-        }
-
-    return {
-        "services": services,
-        "tenant_entities": tenant_entities,
-        "tenant_list": multi_tenant_context,
-    }
-
-
-# ==================== PERFORMANCE TEST FIXTURES ====================
-
-
-@pytest.fixture(scope="function")
-def performance_test_data(full_service_stack, tenant_context):
-    """
-    Generate data for performance testing.
-
-    Creates larger datasets for testing performance characteristics
-    of repositories and services.
-    """
-    from tests.fixtures.factories import FixtureDataGenerator
-
-    # Generate multiple orders for performance testing
-    entities = FixtureDataGenerator.order_processing_scenario(
-        full_service_stack["repositories"]["entity"].db_manager.get_session(),
-        tenant_id=tenant_context["id"],
-        order_count=50,  # Larger dataset for performance testing
+    queue_name = "test-output-queue"
+    
+    # Create real Azure Storage queue client
+    queue_client = QueueClient.from_connection_string(
+        conn_str=azure_storage_connection_string,
+        queue_name=queue_name
     )
+    
+    # Create queue if it doesn't exist
+    try:
+        queue_client.create_queue()
+    except Exception:
+        # Queue already exists
+        pass
+    
+    # Track messages sent during test for cleanup
+    sent_messages = []
+    original_send = queue_client.send_message
+    
+    def tracked_send_message(content, **kwargs):
+        result = original_send(content, **kwargs)
+        sent_messages.append(result)
+        return result
+    
+    queue_client.send_message = tracked_send_message
+    queue_client._test_sent_messages = sent_messages
+    
+    yield queue_client
+    
+    # Cleanup: clear all messages from the queue
+    try:
+        queue_client.clear_messages()
+    except Exception:
+        # Queue might not exist or already cleared
+        pass
 
-    return {
-        "services": full_service_stack["services"],
-        "tenant_id": tenant_context["id"],
-        "entity_count": len(entities),
-        "entities": [
-            {"id": entity.id, "logical_id": entity.logical_id, "state": entity.state}
-            for entity in entities
-        ],
-    }
 
-
-# ==================== UTILITY FIXTURES ====================
-
-
-@pytest.fixture(scope="function")
-def integration_test_context():
+@pytest.fixture(scope="function") 
+def output_queue_verifier(output_queue_client):
     """
-    Context information for integration tests.
-
-    Provides metadata and configuration for integration test scenarios.
+    Helper for verifying messages in real Azure Storage output queues.
+    
+    Provides utilities to check queue contents and verify message structure.
     """
-    return {
-        "test_mode": "integration",
-        "database_type": "sqlite",
-        "enable_logging": False,
-        "cleanup_after_test": True,
-        "max_entities_per_test": 100,
-        "timeout_seconds": 30,
-    }
+    def verify_output_message(expected_external_id, timeout_seconds=5):
+        """
+        Verify a message exists in the output queue with expected content.
+        
+        Args:
+            expected_external_id: Expected external_id in the message
+            timeout_seconds: How long to wait for message to appear
+            
+        Returns:
+            The parsed message content if found
+            
+        Raises:
+            AssertionError: If message not found or content doesn't match
+        """
+        start_time = time.time()
+        
+        while time.time() - start_time < timeout_seconds:
+            # Peek at messages in queue (don't dequeue them)
+            messages = output_queue_client.peek_messages(max_messages=32)
+            
+            for message in messages:
+                try:
+                    content = json.loads(message.content)
+                    
+                    # Check if this is our expected message
+                    if content.get("entity_reference", {}).get("external_id") == expected_external_id:
+                        return content
+                        
+                except (json.JSONDecodeError, KeyError):
+                    # Skip malformed messages
+                    continue
+            
+            # Wait a bit before checking again
+            time.sleep(0.1)
+        
+        # Message not found - get current queue contents for debugging
+        current_messages = []
+        try:
+            messages = output_queue_client.peek_messages(max_messages=32)
+            for msg in messages:
+                try:
+                    current_messages.append(json.loads(msg.content))
+                except json.JSONDecodeError:
+                    current_messages.append({"raw_content": msg.content})
+        except Exception:
+            current_messages = ["Failed to read queue contents"]
+        
+        raise AssertionError(
+            f"Message with external_id='{expected_external_id}' not found in output queue "
+            f"within {timeout_seconds} seconds. Current queue contents: {current_messages}"
+        )
+    
+    def get_all_output_messages():
+        """Get all messages currently in the output queue."""
+        messages = []
+        try:
+            queue_messages = output_queue_client.peek_messages(max_messages=32)
+            for msg in queue_messages:
+                try:
+                    messages.append(json.loads(msg.content))
+                except json.JSONDecodeError:
+                    messages.append({"raw_content": msg.content, "parse_error": True})
+        except Exception as e:
+            messages.append({"error": f"Failed to read queue: {str(e)}"})
+        return messages
+    
+    def assert_output_queue_empty():
+        """Assert that the output queue is empty."""
+        messages = get_all_output_messages()
+        assert len(messages) == 0, f"Expected empty output queue, but found {len(messages)} messages: {messages}"
+    
+    def get_message_count():
+        """Get the current number of messages in the output queue."""
+        try:
+            messages = output_queue_client.peek_messages(max_messages=32)
+            return len(list(messages))
+        except Exception:
+            return 0
+    
+    # Create verifier class instance  
+    class OutputQueueVerifier:
+        def verify_output_message(self, expected_external_id, timeout_seconds=5):
+            return verify_output_message(expected_external_id, timeout_seconds)
+        
+        def get_all_output_messages(self):
+            return get_all_output_messages()
+        
+        def assert_output_queue_empty(self):
+            return assert_output_queue_empty()
+            
+        def get_message_count(self):
+            return get_message_count()
+    
+    return OutputQueueVerifier()

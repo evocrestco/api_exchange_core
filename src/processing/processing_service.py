@@ -18,7 +18,6 @@ from src.exceptions import ErrorCode, ServiceError, ValidationError
 from src.processing.duplicate_detection import DuplicateDetectionResult, DuplicateDetectionService
 from src.processing.entity_attributes import EntityAttributeBuilder
 from src.processing.processor_config import ProcessorConfig
-from src.repositories.entity_repository import EntityRepository
 from src.services.entity_service import EntityService
 from src.utils.logger import get_logger
 
@@ -26,6 +25,7 @@ if TYPE_CHECKING:
     from src.processors.message import Message
     from src.processors.processing_result import ProcessingResult as ProcessorResult
     from src.processors.processor_interface import ProcessorInterface
+    from src.processors.v2.message import Message as MessageV2
     from src.services.processing_error_service import ProcessingErrorService
     from src.services.state_tracking_service import StateTrackingService
 
@@ -62,7 +62,6 @@ class ProcessingService:
     def __init__(
         self,
         entity_service: EntityService,
-        entity_repository: EntityRepository,
         duplicate_detection_service: DuplicateDetectionService,
         attribute_builder: EntityAttributeBuilder,
     ):
@@ -71,12 +70,10 @@ class ProcessingService:
 
         Args:
             entity_service: Service for entity operations
-            entity_repository: Repository for direct entity access
             duplicate_detection_service: Service for duplicate detection
             attribute_builder: Service for building entity attributes
         """
         self.entity_service = entity_service
-        self.entity_repository = entity_repository
         self.duplicate_detection_service = duplicate_detection_service
         self.attribute_builder = attribute_builder
         self.logger = get_logger()
@@ -482,4 +479,165 @@ class ProcessingService:
             duplicate_detection_result=duplicate_result,
             processing_metadata={"processor": config.processor_name},
         )
+
+    @tenant_aware
+    @operation(name="processing_service_process_message")
+    def process_message(
+        self,
+        message: "MessageV2",
+        processor: "ProcessorInterface",
+        config: ProcessorConfig,
+    ) -> "ProcessorResult":
+        """
+        Process a message through a processor with output handler support.
+
+        This method integrates the processing service with the v2 processor framework,
+        handling entity persistence and returning results compatible with output handlers.
+
+        Args:
+            message: Message v2 containing entity and payload
+            processor: Processor implementation to execute
+            config: Processor configuration
+
+        Returns:
+            ProcessingResult with output handlers support
+
+        Raises:
+            ValidationError: If validation fails
+            ServiceError: If processing fails
+        """
+        try:
+            start_time = time.time()
+            
+            self.logger.info(
+                f"Processing message through processor",
+                extra={
+                    "message_id": message.message_id,
+                    "correlation_id": message.correlation_id,
+                    "processor": config.processor_name,
+                    "entity_external_id": message.entity_reference.external_id,
+                    "entity_type": message.entity_reference.canonical_type,
+                }
+            )
+
+            # Execute the processor
+            from src.processors.processing_result import ProcessingResult as ProcessorResult
+            processor_result = processor.process(message)
+
+            # Ensure we have a valid result
+            if not isinstance(processor_result, ProcessorResult):
+                raise ServiceError(
+                    f"Processor returned invalid result type: {type(processor_result)}",
+                    error_code=ErrorCode.INTERNAL_ERROR,
+                    operation="process_message",
+                )
+
+            # If processor succeeded, persist entity changes
+            if processor_result.success:
+                # Extract entity information from the message
+                entity_ref = message.entity_reference
+                
+                # Perform duplicate detection if enabled
+                duplicate_result = None
+                if config.enable_duplicate_detection:
+                    duplicate_result = self._perform_duplicate_detection(
+                        content=message.payload,
+                        canonical_type=entity_ref.canonical_type,
+                        source=entity_ref.source,
+                        external_id=entity_ref.external_id,
+                        config=config,
+                    )
+
+                # Process entity persistence
+                persistence_result = self.process_entity(
+                    external_id=entity_ref.external_id,
+                    canonical_type=entity_ref.canonical_type,
+                    source=entity_ref.source,
+                    content=message.payload,
+                    config=config,
+                    custom_attributes=processor_result.processing_metadata,
+                )
+
+                # Update processor result with persistence information
+                processor_result.entities_created = [persistence_result.entity_id] if persistence_result.is_new_entity else []
+                processor_result.entities_updated = [persistence_result.entity_id] if not persistence_result.is_new_entity else []
+                
+                # Add entity persistence metadata
+                processor_result.processing_metadata.update({
+                    "entity_id": persistence_result.entity_id,
+                    "entity_version": persistence_result.entity_version,
+                    "is_new_entity": persistence_result.is_new_entity,
+                    "content_changed": persistence_result.content_changed,
+                })
+
+                if persistence_result.duplicate_detection_result:
+                    processor_result.processing_metadata["duplicate_detection"] = persistence_result.duplicate_detection_result.model_dump(mode='json')
+
+            # Calculate processing duration
+            processing_duration = (time.time() - start_time) * 1000
+            processor_result.processing_duration_ms = processing_duration
+
+            # Set processor info
+            processor_result.processor_info.update({
+                "name": config.processor_name,
+                "version": config.processor_version,
+                "is_source_processor": config.is_source_processor,
+            })
+
+            # Set completion timestamp if successful
+            if processor_result.success:
+                from datetime import datetime, UTC
+                processor_result.completed_at = datetime.now(UTC)
+
+            self.logger.info(
+                f"Message processing completed",
+                extra={
+                    "message_id": message.message_id,
+                    "processor": config.processor_name,
+                    "success": processor_result.success,
+                    "duration_ms": processing_duration,
+                    "output_handlers": len(processor_result.output_handlers),
+                    "entities_created": len(processor_result.entities_created),
+                    "entities_updated": len(processor_result.entities_updated),
+                }
+            )
+
+            return processor_result
+
+        except Exception as e:
+            self.logger.error(
+                f"Message processing failed",
+                extra={
+                    "message_id": message.message_id,
+                    "processor": config.processor_name,
+                    "error": str(e),
+                },
+                exc_info=True,
+            )
+
+            # Create failure result
+            from src.processors.processing_result import ProcessingResult as ProcessorResult, ProcessingStatus
+            from datetime import datetime, UTC
+            
+            processor_result = ProcessorResult(
+                status=ProcessingStatus.FAILED,
+                success=False,
+                error_message=str(e),
+                error_code="PROCESSING_SERVICE_ERROR",
+                error_details={
+                    "operation": "process_message",
+                    "processor": config.processor_name,
+                    "message_id": message.message_id,
+                    "error_type": type(e).__name__,
+                },
+                processing_duration_ms=(time.time() - start_time) * 1000,
+                completed_at=datetime.now(UTC),
+                processor_info={
+                    "name": config.processor_name,
+                    "version": config.processor_version,
+                    "is_source_processor": config.is_source_processor,
+                },
+            )
+
+            return processor_result
 

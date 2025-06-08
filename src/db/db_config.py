@@ -6,19 +6,17 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, declarative_base, scoped_session, sessionmaker
 
-from src.config import get_config
-
 # Base class for all SQLAlchemy models
 Base: Any = declarative_base()
 
 
 class DatabaseConfig(BaseModel):
-    db_type: str = "sqlite"
-    database: str = ":memory:"
-    host: Optional[str] = None
-    port: Optional[str] = None
-    username: Optional[str] = None
-    password: Optional[str] = None
+    db_type: str = "postgres"
+    database: str
+    host: str
+    port: str = "5432"
+    username: str
+    password: str
     pool_size: int = 5
     max_overflow: int = 10
     pool_timeout: int = 30
@@ -38,6 +36,18 @@ class DatabaseConfig(BaseModel):
         raise ValueError(f"Unsupported database type: {self.db_type}")
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def __repr__(self) -> str:
+        """String representation with masked password for security."""
+        return (
+            f"DatabaseConfig("
+            f"db_type='{self.db_type}', "
+            f"host='{self.host}', "
+            f"port='{self.port}', "
+            f"database='{self.database}', "
+            f"username='{self.username}', "
+            f"password='***')"
+        )
 
 
 class DatabaseManager:
@@ -120,60 +130,6 @@ def get_production_config() -> DatabaseConfig:
     )
 
 
-def create_database_manager() -> DatabaseManager:
-    """
-    Create a DatabaseManager based on the centralized configuration.
-    """
-    app_config = get_config()
-
-    # Parse the connection string from centralized config
-    conn_str = app_config.database.connection_string
-
-    if conn_str.startswith("postgresql://") or conn_str.startswith("postgres://"):
-        # Production-like Postgres configuration
-        config = DatabaseConfig(
-            db_type="postgres",
-            database=conn_str,
-            pool_size=app_config.database.pool_size,
-            max_overflow=app_config.database.max_overflow,
-            pool_timeout=app_config.database.pool_timeout,
-            echo=app_config.database.echo,
-            development_mode=app_config.environment == "development",
-        )
-    else:
-        # SQLite configuration (for development/testing)
-        db_path = (
-            conn_str.replace("sqlite:///", "") if conn_str.startswith("sqlite:///") else ":memory:"
-        )
-        config = DatabaseConfig(
-            db_type="sqlite",
-            database=db_path,
-            echo=app_config.database.echo,
-            development_mode=app_config.environment == "development",
-        )
-
-    return DatabaseManager(config)
-
-
-# Global database manager instance
-db_manager: Optional[DatabaseManager] = None
-
-
-def get_db_manager() -> DatabaseManager:
-    """
-    Get or create the global DatabaseManager instance.
-    """
-    global db_manager
-    if db_manager is None:
-        db_manager = create_database_manager()
-    return db_manager
-
-
-def get_db_session() -> Session:
-    """
-    Get a SQLAlchemy session from the global manager.
-    """
-    return get_db_manager().get_session()
 
 
 def import_all_models():
@@ -190,16 +146,19 @@ def import_all_models():
     configure_mappers()
 
 
-def init_db() -> None:
+def init_db(db_manager: DatabaseManager) -> None:
     """
     Initialize the database, creating all tables.
+    
+    Args:
+        db_manager: DatabaseManager instance to use for table creation
     """
     logging.warning("Initializing DB")
     # First ensure all models are imported and registered
     import_all_models()
 
     # Then create tables
-    get_db_manager().create_tables()
+    db_manager.create_tables()
 
 
 def close_db() -> None:

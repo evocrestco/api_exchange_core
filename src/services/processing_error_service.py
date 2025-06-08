@@ -9,7 +9,7 @@ import logging
 from typing import List, Optional
 
 from src.context.operation_context import operation
-from src.context.service_decorators import handle_repository_errors
+from src.context.service_decorators import handle_repository_errors, transactional
 from src.repositories.processing_error_repository import ProcessingErrorRepository
 from src.schemas.processing_error_schema import (
     ProcessingErrorCreate,
@@ -37,6 +37,7 @@ class ProcessingErrorService(
         super().__init__(repository, ProcessingErrorRead, logger)
 
     @operation()
+    @transactional()
     @handle_repository_errors("create_error")
     def create_error(self, error_data: ProcessingErrorCreate) -> str:
         """
@@ -64,7 +65,6 @@ class ProcessingErrorService(
         return error_id
 
     @operation()
-    @handle_repository_errors("get_error")
     def get_error(self, error_id: str) -> ProcessingErrorRead:
         """
         Get a processing error by ID.
@@ -76,11 +76,31 @@ class ProcessingErrorService(
             ProcessingError data
 
         Raises:
-            EntityNotFoundError: If the error doesn't exist
-            ServiceError: If there's an error during retrieval
+            ServiceError: If the error doesn't exist or there's an error during retrieval
         """
-        error_data = self.repository.get_by_id(error_id)
-        return error_data
+        try:
+            # Get the error
+            error_data = self.repository.get_by_id(error_id)
+
+            # Check if error exists
+            if error_data is None:
+                from src.context.tenant_context import TenantContext
+                from src.exceptions import ErrorCode, ServiceError
+                
+                tenant_id = self._get_current_tenant_id()
+                raise ServiceError(
+                    f"Processing error not found: error_id={error_id}",
+                    error_code=ErrorCode.NOT_FOUND,
+                    entity_id=error_id,
+                    tenant_id=tenant_id or "unknown",
+                )
+
+            return error_data
+
+        except Exception as e:
+            if not isinstance(e, ServiceError):
+                self._handle_service_exception("get_error", e, error_id)
+            raise
 
     @operation()
     @handle_repository_errors("get_entity_errors")
@@ -123,6 +143,7 @@ class ProcessingErrorService(
         return errors
 
     @operation()
+    @transactional()
     @handle_repository_errors("delete_error")
     def delete_error(self, error_id: str) -> bool:
         """
@@ -145,6 +166,7 @@ class ProcessingErrorService(
         return result
 
     @operation()
+    @transactional()
     @handle_repository_errors("delete_entity_errors")
     def delete_entity_errors(self, entity_id: str) -> int:
         """
