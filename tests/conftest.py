@@ -289,9 +289,27 @@ def postgres_test_tenant(postgres_db_session):
 
     Returns tenant data as dictionary to prevent accidental modification.
     """
-    # Create tenant directly without factory
+    from src.db.db_tenant_models import Tenant
+    
+    tenant_id = "test_tenant"
+    
+    # Check if tenant already exists
+    existing_tenant = postgres_db_session.query(Tenant).filter(
+        Tenant.tenant_id == tenant_id
+    ).first()
+    
+    if existing_tenant:
+        # Return existing tenant data
+        return {
+            "id": existing_tenant.tenant_id,
+            "name": existing_tenant.customer_name,
+            "is_active": existing_tenant.is_active,
+            "config": existing_tenant.tenant_config.copy() if existing_tenant.tenant_config else {},
+        }
+    
+    # Create tenant if it doesn't exist
     tenant = Tenant(
-        tenant_id="test_tenant",
+        tenant_id=tenant_id,
         customer_name="Test Tenant",
         is_active=True,
         tenant_config={

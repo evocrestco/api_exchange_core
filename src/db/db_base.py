@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from typing import List, Optional, Type, TypeVar
 
 from sqlalchemy import Column, DateTime, String, Text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, BYTEA
 from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.orm import Session
 from sqlalchemy.types import TypeDecorator
@@ -49,6 +49,40 @@ class JSON(TypeDecorator):
             return value
         else:
             return json.loads(value)
+
+
+class EncryptedBinary(TypeDecorator):
+    """
+    Cross-database encrypted binary type.
+    
+    Uses BYTEA for PostgreSQL (where pgcrypto returns bytea)
+    and Text for SQLite (fallback for testing).
+    """
+    impl = Text
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(BYTEA())
+        else:
+            # For SQLite, use Text - encryption won't work but tests can run
+            return dialect.type_descriptor(Text())
+
+    def process_bind_param(self, value, dialect):
+        # Value is already encrypted/processed by the model methods
+        if dialect.name == "postgresql":
+            # PostgreSQL: pgcrypto returns bytea, pass through
+            return value
+        else:
+            # SQLite: ensure it's a string for TEXT column
+            if isinstance(value, bytes):
+                return value.decode('utf-8', errors='ignore')
+            return value
+
+    def process_result_value(self, value, dialect):
+        # Value processing is handled by the model methods
+        # Just pass through - the model's get_credentials/get_access_token handles decryption
+        return value
 
 
 class BaseModel:

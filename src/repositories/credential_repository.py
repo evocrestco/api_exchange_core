@@ -12,7 +12,7 @@ from sqlalchemy import and_, or_, text
 from sqlalchemy.orm import Session
 
 from src.context.tenant_context import tenant_aware
-from src.db.db_credential_models import ExternalCredential
+from src.db.db_credential_models import ExternalCredential, ExternalAccessToken
 from src.exceptions import (
     ErrorCode, 
     RepositoryError, 
@@ -521,5 +521,263 @@ class CredentialRepository(BaseRepository[ExternalCredential]):
                 message="Failed to get expiring credentials",
                 error_code=ErrorCode.DATABASE_ERROR,
                 details={"error": str(e)},
+                cause=e
+            ) from e
+
+    @tenant_aware
+    def create_access_token(
+        self,
+        system_name: str,
+        access_token: str,
+        expires_at: datetime
+    ) -> ExternalAccessToken:
+        """
+        Create a new encrypted access token for the current tenant.
+        
+        Args:
+            system_name: Name of the external system
+            access_token: The access token to encrypt and store
+            expires_at: Token expiration datetime
+            
+        Returns:
+            Created ExternalAccessToken object
+            
+        Raises:
+            ValidationError: If parameters are invalid
+            RepositoryError: If creation fails
+        """
+        try:
+            tenant_id = self._get_current_tenant_id()
+            
+            # Validate input parameters
+            if not system_name or not isinstance(system_name, str):
+                raise ValidationError(
+                    message="system_name must be a non-empty string",
+                    error_code=ErrorCode.INVALID_FORMAT,
+                    details={"system_name": system_name}
+                )
+            
+            if not access_token or not isinstance(access_token, str):
+                raise ValidationError(
+                    message="access_token must be a non-empty string",
+                    error_code=ErrorCode.INVALID_FORMAT,
+                    details={"token_length": len(access_token) if access_token else 0}
+                )
+            
+            if not expires_at or not isinstance(expires_at, datetime):
+                raise ValidationError(
+                    message="expires_at must be a datetime object",
+                    error_code=ErrorCode.INVALID_FORMAT,
+                    details={"expires_at_type": type(expires_at).__name__}
+                )
+            
+            self.logger.debug(
+                "Creating access token",
+                extra={
+                    "tenant_id": tenant_id,
+                    "system_name": system_name,
+                    "expires_at": expires_at.isoformat(),
+                    "token_length": len(access_token)
+                }
+            )
+            
+            # Create token object
+            token_record = ExternalAccessToken(
+                tenant_id=tenant_id,
+                system_name=system_name,
+                expires_at=expires_at
+            )
+            
+            # Set access token (triggers encryption)
+            token_record.set_access_token(access_token, self.session)
+            
+            # Save to database
+            self.session.add(token_record)
+            self.session.flush()  # Get the ID
+            
+            self.logger.debug(
+                "Access token created successfully",
+                extra={
+                    "token_id": token_record.id,
+                    "tenant_id": tenant_id,
+                    "system_name": system_name,
+                    "expires_at": expires_at.isoformat()
+                }
+            )
+            
+            return token_record
+            
+        except (ValidationError, TenantIsolationViolationError):
+            raise
+        except Exception as e:
+            self.logger.error(
+                "Failed to create access token",
+                extra={
+                    "system_name": system_name,
+                    "expires_at": expires_at.isoformat() if expires_at else None,
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                }
+            )
+            raise RepositoryError(
+                message="Failed to create access token",
+                error_code=ErrorCode.DATABASE_ERROR,
+                details={
+                    "system_name": system_name,
+                    "error": str(e)
+                },
+                cause=e
+            ) from e
+
+    @tenant_aware
+    def get_newest_valid_token(
+        self,
+        system_name: str,
+        min_expires_at: datetime
+    ) -> Optional[ExternalAccessToken]:
+        """
+        Get the newest valid access token for a system that expires after min_expires_at.
+        
+        Args:
+            system_name: Name of the external system
+            min_expires_at: Minimum expiration time (tokens must expire after this)
+            
+        Returns:
+            ExternalAccessToken object or None if no valid token found
+            
+        Raises:
+            RepositoryError: If database operation fails
+        """
+        try:
+            tenant_id = self._get_current_tenant_id()
+            
+            self.logger.debug(
+                "Getting newest valid token",
+                extra={
+                    "tenant_id": tenant_id,
+                    "system_name": system_name,
+                    "min_expires_at": min_expires_at.isoformat()
+                }
+            )
+            
+            # Query for valid tokens, ordered by expiration (newest first)
+            token_record = self.session.query(ExternalAccessToken).filter(
+                and_(
+                    ExternalAccessToken.tenant_id == tenant_id,
+                    ExternalAccessToken.system_name == system_name,
+                    ExternalAccessToken.expires_at > min_expires_at
+                )
+            ).order_by(ExternalAccessToken.expires_at.desc()).first()
+            
+            if token_record:
+                self.logger.debug(
+                    "Valid token found",
+                    extra={
+                        "token_id": token_record.id,
+                        "tenant_id": tenant_id,
+                        "system_name": system_name,
+                        "expires_at": token_record.expires_at.isoformat()
+                    }
+                )
+            else:
+                self.logger.debug(
+                    "No valid token found",
+                    extra={
+                        "tenant_id": tenant_id,
+                        "system_name": system_name,
+                        "min_expires_at": min_expires_at.isoformat()
+                    }
+                )
+            
+            return token_record
+            
+        except Exception as e:
+            self.logger.error(
+                "Failed to get newest valid token",
+                extra={
+                    "system_name": system_name,
+                    "min_expires_at": min_expires_at.isoformat(),
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                }
+            )
+            raise RepositoryError(
+                message="Failed to get newest valid token",
+                error_code=ErrorCode.DATABASE_ERROR,
+                details={
+                    "system_name": system_name,
+                    "min_expires_at": min_expires_at.isoformat(),
+                    "error": str(e)
+                },
+                cause=e
+            ) from e
+
+    def delete_expired_tokens(self, cutoff_time: datetime) -> int:
+        """
+        Delete access tokens that expired before cutoff_time across all tenants.
+        
+        This is a system-wide operation typically run by a timer function.
+        
+        Args:
+            cutoff_time: Delete tokens that expired before this time
+            
+        Returns:
+            Number of tokens deleted
+            
+        Raises:
+            RepositoryError: If deletion fails
+        """
+        try:
+            self.logger.debug(
+                "Deleting expired tokens",
+                extra={
+                    "cutoff_time": cutoff_time.isoformat()
+                }
+            )
+            
+            # Count tokens to be deleted for logging
+            count_query = self.session.query(ExternalAccessToken).filter(
+                ExternalAccessToken.expires_at < cutoff_time
+            )
+            token_count = count_query.count()
+            
+            if token_count > 0:
+                # Delete expired tokens
+                deleted_count = count_query.delete(synchronize_session=False)
+                
+                self.logger.info(
+                    "Expired tokens deleted",
+                    extra={
+                        "deleted_count": deleted_count,
+                        "cutoff_time": cutoff_time.isoformat()
+                    }
+                )
+                
+                return deleted_count
+            else:
+                self.logger.debug(
+                    "No expired tokens to delete",
+                    extra={
+                        "cutoff_time": cutoff_time.isoformat()
+                    }
+                )
+                return 0
+            
+        except Exception as e:
+            self.logger.error(
+                "Failed to delete expired tokens",
+                extra={
+                    "cutoff_time": cutoff_time.isoformat(),
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                }
+            )
+            raise RepositoryError(
+                message="Failed to delete expired tokens",
+                error_code=ErrorCode.DATABASE_ERROR,
+                details={
+                    "cutoff_time": cutoff_time.isoformat(),
+                    "error": str(e)
+                },
                 cause=e
             ) from e

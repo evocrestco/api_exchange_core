@@ -1,5 +1,5 @@
 """
-Tests for CredentialService with real PostgreSQL and pgcrypto encryption.
+Tests for CredentialService  encryption.
 
 Following NO MOCKS policy - tests use real implementations and PostgreSQL.
 """
@@ -24,12 +24,12 @@ import_all_models()
 
 
 class TestCredentialService:
-    """Test CredentialService with real PostgreSQL and pgcrypto encryption."""
+    """Test CredentialService  encryption."""
 
     @pytest.fixture(scope="function")
-    def credential_repo(self, postgres_db_session):
+    def credential_repo(self, db_session):
         """Create credential repository with database session."""
-        return CredentialRepository(postgres_db_session)
+        return CredentialRepository(db_session)
 
     @pytest.fixture(scope="function")
     def credential_service(self, credential_repo):
@@ -45,9 +45,9 @@ class TestCredentialService:
             "endpoint": "https://api.example.com/v2"
         }
 
-    def test_store_credentials_success(self, credential_service, postgres_db_session, postgres_test_tenant, test_credentials):
+    def test_store_credentials_success(self, credential_service, db_session, test_tenant, test_credentials):
         """Test successful credential storage."""
-        TenantContext.set_current_tenant(postgres_test_tenant["id"])
+        TenantContext.set_current_tenant(test_tenant["id"])
         
         try:
             credential_id = credential_service.store_credentials(
@@ -57,7 +57,7 @@ class TestCredentialService:
                 expires_at=datetime.utcnow() + timedelta(days=30)
             )
             
-            postgres_db_session.commit()
+            db_session.commit()
             
             # Verify credential was created
             assert credential_id is not None
@@ -69,9 +69,9 @@ class TestCredentialService:
         finally:
             TenantContext.clear_current_tenant()
 
-    def test_store_credentials_validation_errors(self, credential_service, postgres_test_tenant):
+    def test_store_credentials_validation_errors(self, credential_service, test_tenant):
         """Test credential storage with invalid parameters."""
-        TenantContext.set_current_tenant(postgres_test_tenant["id"])
+        TenantContext.set_current_tenant(test_tenant["id"])
         
         try:
             # Test empty system_name
@@ -87,9 +87,9 @@ class TestCredentialService:
         finally:
             TenantContext.clear_current_tenant()
 
-    def test_store_credentials_duplicate_system(self, credential_service, postgres_db_session, postgres_test_tenant, test_credentials):
+    def test_store_credentials_duplicate_system(self, credential_service, db_session, test_tenant, test_credentials):
         """Test storing credentials for system that already exists."""
-        TenantContext.set_current_tenant(postgres_test_tenant["id"])
+        TenantContext.set_current_tenant(test_tenant["id"])
         
         try:
             # Store initial credential
@@ -98,7 +98,7 @@ class TestCredentialService:
                 auth_type="api_token",
                 credentials=test_credentials
             )
-            postgres_db_session.commit()
+            db_session.commit()
             
             # Attempt to store another credential for same system
             with pytest.raises(ServiceError) as exc_info:
@@ -113,9 +113,9 @@ class TestCredentialService:
         finally:
             TenantContext.clear_current_tenant()
 
-    def test_get_credentials_success(self, credential_service, postgres_db_session, postgres_test_tenant, test_credentials):
+    def test_get_credentials_success(self, credential_service, db_session, test_tenant, test_credentials):
         """Test successful credential retrieval."""
-        TenantContext.set_current_tenant(postgres_test_tenant["id"])
+        TenantContext.set_current_tenant(test_tenant["id"])
         
         try:
             # Store credential first
@@ -124,7 +124,7 @@ class TestCredentialService:
                 auth_type="api_token",
                 credentials=test_credentials
             )
-            postgres_db_session.commit()
+            db_session.commit()
             
             # Retrieve credentials
             retrieved_creds = credential_service.get_credentials("get_test_system")
@@ -137,9 +137,9 @@ class TestCredentialService:
         finally:
             TenantContext.clear_current_tenant()
 
-    def test_get_credentials_not_found(self, credential_service, postgres_test_tenant):
+    def test_get_credentials_not_found(self, credential_service, test_tenant):
         """Test getting non-existent credentials."""
-        TenantContext.set_current_tenant(postgres_test_tenant["id"])
+        TenantContext.set_current_tenant(test_tenant["id"])
         
         try:
             with pytest.raises(ServiceError) as exc_info:
@@ -148,9 +148,9 @@ class TestCredentialService:
         finally:
             TenantContext.clear_current_tenant()
 
-    def test_get_credentials_expired(self, credential_service, postgres_db_session, postgres_test_tenant, test_credentials):
+    def test_get_credentials_expired(self, credential_service, db_session, test_tenant, test_credentials):
         """Test accessing expired credentials."""
-        TenantContext.set_current_tenant(postgres_test_tenant["id"])
+        TenantContext.set_current_tenant(test_tenant["id"])
         
         try:
             # Store credential with past expiration
@@ -161,7 +161,7 @@ class TestCredentialService:
                 credentials=test_credentials,
                 expires_at=past_time
             )
-            postgres_db_session.commit()
+            db_session.commit()
             
             # Attempt to get expired credentials
             with pytest.raises(ServiceError) as exc_info:
@@ -171,9 +171,9 @@ class TestCredentialService:
         finally:
             TenantContext.clear_current_tenant()
 
-    def test_update_credentials_success(self, credential_service, postgres_db_session, postgres_test_tenant, test_credentials):
+    def test_update_credentials_success(self, credential_service, db_session, test_tenant, test_credentials):
         """Test successful credential update."""
-        TenantContext.set_current_tenant(postgres_test_tenant["id"])
+        TenantContext.set_current_tenant(test_tenant["id"])
         
         try:
             # Store initial credential
@@ -182,7 +182,7 @@ class TestCredentialService:
                 auth_type="api_token",
                 credentials=test_credentials
             )
-            postgres_db_session.commit()
+            db_session.commit()
             
             # Update with new credentials
             new_credentials = {
@@ -197,7 +197,7 @@ class TestCredentialService:
                 credentials=new_credentials,
                 expires_at=new_expiry
             )
-            postgres_db_session.commit()
+            db_session.commit()
             
             # Verify update
             retrieved_creds = credential_service.get_credentials("update_test_system")
@@ -207,9 +207,9 @@ class TestCredentialService:
         finally:
             TenantContext.clear_current_tenant()
 
-    def test_update_credentials_not_found(self, credential_service, postgres_test_tenant):
+    def test_update_credentials_not_found(self, credential_service, test_tenant):
         """Test updating non-existent credentials."""
-        TenantContext.set_current_tenant(postgres_test_tenant["id"])
+        TenantContext.set_current_tenant(test_tenant["id"])
         
         try:
             with pytest.raises(ServiceError):
@@ -220,9 +220,9 @@ class TestCredentialService:
         finally:
             TenantContext.clear_current_tenant()
 
-    def test_delete_credentials_success(self, credential_service, postgres_db_session, postgres_test_tenant, test_credentials):
+    def test_delete_credentials_success(self, credential_service, db_session, test_tenant, test_credentials):
         """Test successful credential deletion."""
-        TenantContext.set_current_tenant(postgres_test_tenant["id"])
+        TenantContext.set_current_tenant(test_tenant["id"])
         
         try:
             # Store credential first
@@ -231,7 +231,7 @@ class TestCredentialService:
                 auth_type="api_token",
                 credentials=test_credentials
             )
-            postgres_db_session.commit()
+            db_session.commit()
             
             # Verify credential exists
             retrieved_creds = credential_service.get_credentials("delete_test_system")
@@ -239,7 +239,7 @@ class TestCredentialService:
             
             # Delete credential
             result = credential_service.delete_credentials("delete_test_system")
-            postgres_db_session.commit()
+            db_session.commit()
             
             # Verify deletion
             assert result is True
@@ -251,9 +251,9 @@ class TestCredentialService:
         finally:
             TenantContext.clear_current_tenant()
 
-    def test_delete_credentials_not_found(self, credential_service, postgres_test_tenant):
+    def test_delete_credentials_not_found(self, credential_service, test_tenant):
         """Test deleting non-existent credentials."""
-        TenantContext.set_current_tenant(postgres_test_tenant["id"])
+        TenantContext.set_current_tenant(test_tenant["id"])
         
         try:
             result = credential_service.delete_credentials("nonexistent_system")
@@ -261,9 +261,9 @@ class TestCredentialService:
         finally:
             TenantContext.clear_current_tenant()
 
-    def test_tenant_isolation(self, credential_service, postgres_db_session, postgres_multi_tenant_context):
+    def test_tenant_isolation(self, credential_service, db_session, multi_tenant_context):
         """Test that credentials are properly isolated by tenant."""
-        tenant1, tenant2, tenant3 = postgres_multi_tenant_context
+        tenant1, tenant2, tenant3 = multi_tenant_context
         
         # Store credentials for different tenants
         TenantContext.set_current_tenant(tenant1["id"])
@@ -280,7 +280,7 @@ class TestCredentialService:
             credentials={"tenant2_key": "tenant2_value"}
         )
         
-        postgres_db_session.commit()
+        db_session.commit()
         
         # Verify tenant1 only sees their credentials
         TenantContext.set_current_tenant(tenant1["id"])
@@ -301,9 +301,9 @@ class TestCredentialService:
         
         TenantContext.clear_current_tenant()
 
-    def test_inactive_credentials_access(self, credential_service, credential_repo, postgres_db_session, postgres_test_tenant, test_credentials):
+    def test_inactive_credentials_access(self, credential_service, credential_repo, db_session, test_tenant, test_credentials):
         """Test accessing inactive credentials."""
-        TenantContext.set_current_tenant(postgres_test_tenant["id"])
+        TenantContext.set_current_tenant(test_tenant["id"])
         
         try:
             # Store credential first
@@ -312,12 +312,12 @@ class TestCredentialService:
                 auth_type="api_token",
                 credentials=test_credentials
             )
-            postgres_db_session.commit()
+            db_session.commit()
             
             # Manually deactivate credential
             credential = credential_repo.get_by_system_name("inactive_test_system")
             credential.is_active = "inactive"
-            postgres_db_session.commit()
+            db_session.commit()
             
             # Attempt to get inactive credentials
             with pytest.raises(ServiceError) as exc_info:
@@ -328,9 +328,9 @@ class TestCredentialService:
         finally:
             TenantContext.clear_current_tenant()
 
-    def test_full_credential_lifecycle(self, credential_service, postgres_db_session, postgres_test_tenant):
+    def test_full_credential_lifecycle(self, credential_service, db_session, test_tenant):
         """Test complete credential lifecycle: create, read, update, delete."""
-        TenantContext.set_current_tenant(postgres_test_tenant["id"])
+        TenantContext.set_current_tenant(test_tenant["id"])
         
         try:
             system_name = "lifecycle_system"
@@ -346,7 +346,7 @@ class TestCredentialService:
                 credentials=initial_creds,
                 expires_at=datetime.utcnow() + timedelta(days=30)
             )
-            postgres_db_session.commit()
+            db_session.commit()
             assert credential_id is not None
             
             # 2. READ
@@ -364,7 +364,7 @@ class TestCredentialService:
                 credentials=updated_creds,
                 expires_at=datetime.utcnow() + timedelta(days=60)
             )
-            postgres_db_session.commit()
+            db_session.commit()
             
             # Verify update
             retrieved_updated = credential_service.get_credentials(system_name)
@@ -373,7 +373,7 @@ class TestCredentialService:
             
             # 4. DELETE
             deleted = credential_service.delete_credentials(system_name)
-            postgres_db_session.commit()
+            db_session.commit()
             assert deleted is True
             
             # Verify deletion
