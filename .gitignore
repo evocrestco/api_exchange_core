@@ -500,3 +500,5 @@ docker-compose.override.yml
 .serverless/
 
 /CLAUDE.md
+
+elastiapps
