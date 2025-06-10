@@ -1,57 +1,131 @@
-# Unified Processor Framework
+# Unified Processor Framework v2
 
-The API Exchange Core provides a unified processor framework for building data integration pipelines. This framework eliminates the artificial distinctions between "source", "intermediate", and "terminal" processors in favor of a flexible, unified approach.
+The API Exchange Core provides a unified processor framework for building data integration pipelines. Version 2 introduces enhanced operation decorators, context-based processing, and improved output handlers for robust production deployments.
 
 ## Architecture Philosophy
 
-### Unified Processor Interface
+### Unified Processor Interface v2
 
-Instead of forcing processors into rigid categories, we provide a single `ProcessorInterface` that can handle any processing logic:
+Instead of forcing processors into rigid categories, we provide a single `ProcessorInterface` that can handle any processing logic with enhanced context and operation tracking:
 
 ```python
 class ProcessorInterface:
-    def process(self, message: Message) -> ProcessingResult:
+    def process(self, message: Message, context: ProcessorContext) -> ProcessingResult:
         """
-        Process a message and return result with routing information.
+        Process a message using framework context and return result with routing information.
         
         Can perform any combination of:
-        - Create entities from external data
-        - Update existing entities
-        - Transform data
-        - Make routing decisions
+        - Create entities from external data (using context.persist_entity)
+        - Update existing entities (using context.get_entity)
+        - Transform data with operation tracking
+        - Make routing decisions via output handlers
         - Terminate processing chains
         """
         pass
+        
+    def validate_message(self, message: Message) -> bool:
+        """Validate incoming message before processing."""
+        return True
+        
+    def get_processor_info(self) -> Dict[str, Any]:
+        """Return processor metadata for monitoring and debugging."""
+        return {"name": self.__class__.__name__, "version": "1.0.0"}
+        
+    def can_retry(self, error: Exception) -> bool:
+        """Determine if an error is retryable."""
+        return True
 ```
 
-### Key Benefits
+### Key Benefits v2
 
-1. **Flexibility**: Processors can create entities, update them, or just transform data as needed
-2. **Simplicity**: No artificial constraints or complex inheritance hierarchies
-3. **Composability**: Easy to chain processors in any configuration
-4. **Testability**: Simple interface makes testing straightforward
+1. **Enhanced Context**: `ProcessorContext` provides direct access to framework services
+2. **Operation Tracking**: `@operation` decorators provide automatic logging and metrics
+3. **Output Handlers**: Type-safe, configurable routing to queues, files, APIs
+4. **Error Classification**: Built-in retry logic based on error types
+5. **Multi-tenant Ready**: Automatic tenant context management
+6. **Testability**: NO MOCKS policy - use real implementations in tests
 
-## Core Components
+## Core Components v2
 
-### 1. ProcessorInterface
+### 1. ProcessorInterface v2
 
-The single interface all processors implement. Processors receive a `Message` and return a `ProcessingResult`.
+The single interface all processors implement. Processors receive a `Message`, `ProcessorContext` and return a `ProcessingResult` with enhanced routing capabilities.
 
-### 2. Message
+### 2. ProcessorContext
 
-Standardized message format for pipeline communication:
-- **Entity Reference**: Links to entities in the system
-- **Payload**: The actual data being processed
-- **Metadata**: Processing context and routing information
-- **Correlation ID**: For tracking across pipeline stages
+New in v2: Provides direct access to framework services without complex dependency injection:
 
-### 3. ProcessingResult
+```python
+class ProcessorContext:
+    processing_service: ProcessingService
+    state_tracking_service: Optional[StateTrackingService]
+    error_service: Optional[ProcessingErrorService]
+    
+    def persist_entity(self, external_id: str, canonical_type: str, 
+                      source: str, data: Dict[str, Any], **kwargs) -> str:
+        """Create entity directly using framework services."""
+        
+    def get_entity(self, entity_id: str) -> Entity:
+        """Retrieve entity by ID."""
+```
 
-Standardized result format indicating:
-- **Success/Failure**: Processing outcome
-- **Output Messages**: Messages to route to next stages
-- **Routing Information**: Queue destinations and conditions
-- **Entity Operations**: Whether entities were created/updated
+### 3. @operation Decorator
+
+New in v2: Automatic operation tracking, logging, and metrics:
+
+```python
+from src.context.operation_context import operation
+
+class MyProcessor(ProcessorInterface):
+    @operation("my_processor.process")
+    def process(self, message: Message, context: ProcessorContext) -> ProcessingResult:
+        # Business logic here - logging/metrics handled automatically
+        pass
+    
+    @operation("my_processor.validate")  
+    def validate_message(self, message: Message) -> bool:
+        # Validation logic with automatic tracking
+        pass
+```
+
+Benefits:
+- **Automatic Logging**: Operation start/end with duration
+- **Metrics Collection**: Performance and success/failure rates
+- **Error Tracking**: Automatic error categorization and reporting
+- **Correlation IDs**: Request tracing across operations
+
+### 4. Message v2
+
+Enhanced message format for pipeline communication:
+- **Entity Reference**: Links to entities in the system (can be None for new entities)
+- **Payload**: The actual data being processed 
+- **Metadata**: Processing context and operation routing information
+- **Message ID**: Unique identifier for tracking
+- **Message Type**: ENTITY, TIMER, QUEUE, HTTP for different triggers
+
+### 5. ProcessingResult v2
+
+Enhanced result format with output handlers:
+- **Success/Failure**: Processing outcome with detailed error information
+- **Output Handlers**: Type-safe routing to queues, files, APIs (replaces simple routing)
+- **Entity Operations**: IDs of entities created/updated during processing
+- **Processing Metadata**: Custom metrics and debugging information
+- **Retry Logic**: Configurable retry behavior based on error types
+
+```python
+# v2 ProcessingResult with Output Handlers
+result = ProcessingResult.create_success(
+    entities_created=["entity-123"],
+    processing_metadata={"orders_processed": 5}
+)
+
+# Add type-safe output handler
+queue_handler = QueueOutputHandler(
+    destination="next-queue",
+    config={"retry_count": 3, "timeout_seconds": 30}
+)
+result.add_output_handler(queue_handler)
+```
 
 ### 4. ProcessorHandler
 
@@ -82,119 +156,355 @@ Processors can use Core services for entity operations:
 - **EntityService**: Direct entity CRUD operations
 - **StateTrackingService**: State transitions and monitoring
 
-## How to Build and Use a Processor
+## How to Build and Use a Processor v2
 
-### Step 1: Implement ProcessorInterface
+### Step 1: Implement ProcessorInterface v2
 
-Create your processor by implementing the `ProcessorInterface`:
+Create your processor using the enhanced v2 interface with `@operation` decorators and `ProcessorContext`:
 
 ```python
-from src.processors.processor_interface import ProcessorInterface
+from datetime import datetime, UTC
+from typing import Dict, Any
+from src.context.operation_context import operation
+from src.processors.v2.processor_interface import ProcessorInterface, ProcessorContext
 from src.processors.processing_result import ProcessingResult, ProcessingStatus
-from src.processors.message import Message
+from src.processors.v2.message import Message
+from src.processors.v2.output_handlers import QueueOutputHandler
 
 class MyBusinessProcessor(ProcessorInterface):
-    def process(self, message: Message) -> ProcessingResult:
-        # Your business logic here
-        transformed_data = self.transform(message.payload)
+    
+    def __init__(self, config: MyProcessorConfig):
+        """Initialize processor with customer-specific configuration."""
+        self.config = config
         
-        # Return result with routing
-        return ProcessingResult(
-            status=ProcessingStatus.SUCCESS,
-            success=True,
-            output_messages=[
-                Message(
-                    payload=transformed_data,
-                    entity_reference=message.entity_reference,
-                    metadata={"processed_by": "my_processor"}
-                )
-            ],
-            routing_info={"destination": "next-queue"}
-        )
+    @operation("my_processor.process")
+    def process(self, message: Message, context: ProcessorContext) -> ProcessingResult:
+        """Process message with automatic operation tracking."""
+        # Extract operation type from message metadata
+        operation_type = message.metadata.get("operation", "default")
+        
+        if operation_type == "create_entity":
+            return self._handle_entity_creation(message, context)
+        elif operation_type == "transform_data":
+            return self._handle_data_transformation(message, context)
+        else:
+            return ProcessingResult.create_failure(
+                error_message=f"Unknown operation: {operation_type}",
+                error_code="INVALID_OPERATION",
+                can_retry=False
+            )
     
+    @operation("my_processor.create_entity")
+    def _handle_entity_creation(self, message: Message, context: ProcessorContext) -> ProcessingResult:
+        """Create new entity from external data."""
+        try:
+            # Use context to persist entity directly
+            entity_id = context.persist_entity(
+                external_id=message.payload["id"],
+                canonical_type="my_business_object",
+                source="external_api",
+                data=message.payload,
+                metadata={
+                    "processed_at": datetime.now(UTC).isoformat(),
+                    "processor_version": "2.0.0"
+                }
+            )
+            
+            # Create success result with output handler
+            result = ProcessingResult.create_success(
+                entities_created=[entity_id],
+                processing_metadata={
+                    "operation": "create_entity",
+                    "external_id": message.payload["id"]
+                }
+            )
+            
+            # Add type-safe output handler for next stage
+            queue_handler = QueueOutputHandler(
+                destination=self.config.next_stage_queue,
+                config={"retry_count": 3}
+            )
+            result.add_output_handler(queue_handler)
+            
+            return result
+            
+        except Exception as e:
+            return ProcessingResult.create_failure(
+                error_message=f"Entity creation failed: {str(e)}",
+                error_code="ENTITY_CREATION_ERROR", 
+                can_retry=self.can_retry(e)
+            )
+    
+    @operation("my_processor.validate")
     def validate_message(self, message: Message) -> bool:
-        # Optional: Validate message before processing
-        return message.entity_reference is not None
+        """Validate message with automatic tracking."""
+        if not message or not message.payload:
+            return False
+        
+        operation = message.metadata.get("operation")
+        if operation == "create_entity":
+            return "id" in message.payload
+        elif operation == "transform_data":
+            return "data" in message.payload
+        
+        return True
     
-    def get_processor_info(self) -> dict:
-        # Optional: Return processor metadata
+    def can_retry(self, error: Exception) -> bool:
+        """Determine retry behavior based on error type."""
+        # Network errors are retryable
+        if isinstance(error, (ConnectionError, TimeoutError)):
+            return True
+        # Validation errors are not retryable  
+        if isinstance(error, ValueError):
+            return False
+        # Default to retryable
+        return True
+        
+    def get_processor_info(self) -> Dict[str, Any]:
+        """Return processor metadata for monitoring."""
         return {
             "name": "MyBusinessProcessor",
-            "version": "1.0.0",
-            "capabilities": ["transform", "validate"]
+            "version": "2.0.0",
+            "operations": ["create_entity", "transform_data"],
+            "config": self.config.to_dict()
         }
 ```
 
-### Step 2: Create Azure Function with ProcessorHandler
+### Step 2: Create Azure Function with ProcessorHandler v2
 
-Use the framework's `ProcessorHandler` to integrate with Azure Functions:
+Use the framework's v2 `ProcessorHandler` with simplified setup:
 
 ```python
+import os
 import azure.functions as func
-from src.processors.processor_factory import create_processor_handler
-from src.processing.processor_config import ProcessorConfig
-from src.repositories.entity_repository import EntityRepository
-from src.services.entity_service import EntityService
-from src.processing.processing_service import ProcessingService
-from src.db.db_config import get_db_manager
+from src.processors.v2.processor_factory import create_processor_handler
+from src.context.tenant_context import tenant_context
+from src.db.db_config import import_all_models
 from processors.my_business_processor import MyBusinessProcessor
+from processors.my_processor_config import MyProcessorConfig
 
-# Initialize dependencies (typically done once per function app)
-db_manager = get_db_manager()
-entity_repository = EntityRepository(db_manager)
-entity_service = EntityService(entity_repository)
-# ... initialize other services
+# Create the Azure Functions app
+app = func.FunctionApp()
 
-processing_service = ProcessingService(
-    entity_service=entity_service,
-    entity_repository=entity_repository,
-    # ... other dependencies
+# Initialize models
+import_all_models()
+
+# Create processor configuration from environment or hardcoded values
+processor_config = MyProcessorConfig(
+    tenant_id=os.getenv("TENANT_ID", "default-tenant"),
+    next_stage_queue=os.getenv("NEXT_STAGE_QUEUE", "next-queue"),
+    enable_logging=True
 )
 
-# Create processor configuration
-config = ProcessorConfig(
-    processor_name="my_business_processor",
-    processor_version="1.0.0",
-    enable_state_tracking=True,
-    is_source_processor=False
-)
+# Create processor with configuration
+my_processor = MyBusinessProcessor(config=processor_config)
 
-# Create the handler
-handler = create_processor_handler(
-    processor_class=MyBusinessProcessor,
-    config=config,
-    entity_service=entity_service,
-    entity_repository=entity_repository,
-    processing_service=processing_service
-)
+# Create processor handler using factory - handles ALL infrastructure concerns
+my_processor_handler = create_processor_handler(processor=my_processor)
 
-# Azure Function entry point
+# Azure Function entry point - ultra-thin wrapper
+@app.function_name(name="ProcessMyBusinessData")
 @app.queue_trigger(arg_name="msg", queue_name="input-queue")
-@app.queue_output(arg_name="output", queue_name="output-queue")
-def process_message(msg: func.QueueMessage, output: func.Out[str]) -> None:
-    # Parse queue message
-    import json
-    message_data = json.loads(msg.get_body().decode('utf-8'))
+def process_business_data(msg: func.QueueMessage) -> None:
+    """
+    Ultra-thin Azure Function wrapper.
     
-    # Process with handler
-    result = handler.handle_message(message_data)
+    All error handling, retry logic, logging, metrics, and output routing
+    is handled automatically by the processor framework.
+    """
+    # Convert Azure Functions message to framework Message
+    message_data = msg.get_json()
     
-    # Route output messages
-    if result["success"] and result["output_messages"]:
-        for msg in result["output_messages"]:
-            output.set(json.dumps(msg))
+    # Create Message object (framework v2 pattern)
+    from src.processors.v2.message import Message
+    message = Message.create_from_queue_data(message_data)
+    
+    # Execute with framework - handles everything automatically
+    with tenant_context(processor_config.tenant_id):
+        my_processor_handler.execute(message)
+
+# Timer-triggered function example
+@app.function_name(name="ProcessTimerTrigger")
+@app.timer_trigger(schedule="0 */5 * * * *", arg_name="timer")
+def process_timer_trigger(timer: func.TimerRequest) -> None:
+    """Timer trigger example with v2 framework."""
+    # Create timer message using processor helper methods
+    message = my_processor.create_timer_message(timer)
+    
+    with tenant_context(processor_config.tenant_id):
+        my_processor_handler.execute(message)
+
+# HTTP-triggered function example
+@app.function_name(name="ProcessHttpRequest")
+@app.route(route="process", methods=["POST"])
+def process_http_request(req: func.HttpRequest) -> func.HttpResponse:
+    """HTTP trigger example with v2 framework."""
+    try:
+        # Create message from HTTP request
+        message = my_processor.create_http_message(req)
+        
+        with tenant_context(processor_config.tenant_id):
+            result = my_processor_handler.execute(message)
+            
+        # Return HTTP response based on processing result
+        if result.success:
+            return func.HttpResponse(
+                body='{"status": "success"}',
+                status_code=200,
+                headers={"Content-Type": "application/json"}
+            )
+        else:
+            return func.HttpResponse(
+                body=f'{{"status": "error", "message": "{result.error_message}"}}',
+                status_code=400 if result.can_retry else 500,
+                headers={"Content-Type": "application/json"}
+            )
+            
+    except Exception as e:
+        return func.HttpResponse(
+            body=f'{{"status": "error", "message": "Unexpected error: {str(e)}"}}',
+            status_code=500,
+            headers={"Content-Type": "application/json"}
+        )
 ```
 
-### Step 3: What the Framework Provides Automatically
+### Step 3: What the Framework v2 Provides Automatically
 
-When you use `ProcessorHandler`, you get:
+When you use `ProcessorHandler` v2, you get:
 
-1. **Error Handling** - ProcessorHandler catches all errors and classifies them
-2. **Retry Logic** - Automatic exponential backoff for recoverable errors
-3. **Performance Tracking** - Execution duration and metrics
-4. **Tenant Context** - Multi-tenant isolation handled automatically
-5. **Message Validation** - Pre-processing validation
-6. **Logging** - Structured logging with correlation IDs
+1. **Error Handling** - Automatic error classification and routing to dead letter queues
+2. **Retry Logic** - Exponential backoff with configurable retry behavior
+3. **Operation Tracking** - Automatic logging and metrics via `@operation` decorators
+4. **Tenant Context** - Multi-tenant isolation with automatic context management
+5. **Message Validation** - Pre-processing validation via `validate_message()`
+6. **Output Routing** - Type-safe output handlers for queues, files, APIs
+7. **Entity Management** - Direct entity operations via `ProcessorContext`
+8. **State Tracking** - Automatic state transitions and audit trails
+
+### Step 4: Output Handlers v2
+
+The v2 framework introduces type-safe output handlers for robust routing:
+
+```python
+from src.processors.v2.output_handlers import (
+    QueueOutputHandler, 
+    FileOutputHandler,
+    ServiceBusOutputHandler,
+    NoOpOutputHandler
+)
+
+# Queue output with retry configuration
+queue_handler = QueueOutputHandler(
+    destination="next-stage-queue",
+    config={
+        "retry_count": 3,
+        "timeout_seconds": 30,
+        "exponential_backoff": True
+    }
+)
+
+# File output for archival
+file_handler = FileOutputHandler(
+    destination="/data/processed",
+    config={
+        "file_pattern": "order_{timestamp}.json",
+        "compress": True
+    }
+)
+
+# Service Bus for critical messages
+service_bus_handler = ServiceBusOutputHandler(
+    destination="critical-notifications",
+    config={
+        "session_id": "order_processing",
+        "time_to_live": 3600
+    }
+)
+
+# Add handlers to result
+result.add_output_handler(queue_handler)
+result.add_output_handler(file_handler)
+```
+
+### Step 5: Testing with NO MOCKS Policy
+
+The v2 framework follows a strict NO MOCKS policy for better test reliability:
+
+```python
+import pytest
+from src.context.tenant_context import tenant_context
+from src.processors.v2.message import Message
+from processors.my_business_processor import MyBusinessProcessor
+
+class TestMyBusinessProcessor:
+    """Test processor using real implementations."""
+    
+    def test_entity_creation_success(self, processor, processor_context, test_tenant):
+        """Test entity creation with real framework services."""
+        # Use real tenant context
+        with tenant_context(test_tenant["id"]):
+            # Create real message
+            entity_id = processor_context.persist_entity(
+                external_id="test_entity",
+                canonical_type="test_type",
+                source="test",
+                data={"test": "data"}
+            )
+            entity = processor_context.get_entity(entity_id)
+            
+            message = Message.create_entity_message(
+                entity=entity,
+                payload={"id": "test-123", "data": "test_data"}
+            )
+            message.metadata["operation"] = "create_entity"
+            
+            # Execute with real processor context
+            result = processor.process(message, processor_context)
+            
+            # Verify with real results
+            assert result.success is True
+            assert len(result.entities_created) == 1
+            assert len(result.output_handlers) == 1
+    
+    def test_validation_logic(self, processor):
+        """Test validation using real message objects."""
+        # Real message with valid data
+        valid_message = Message.create_entity_message(
+            entity=test_entity,
+            payload={"id": "test-123"}
+        )
+        valid_message.metadata["operation"] = "create_entity"
+        
+        # Real message with invalid data
+        invalid_message = Message.create_entity_message(
+            entity=test_entity,
+            payload={}  # Missing required 'id'
+        )
+        invalid_message.metadata["operation"] = "create_entity"
+        
+        # Test with real validation logic
+        assert processor.validate_message(valid_message) is True
+        assert processor.validate_message(invalid_message) is False
+
+# Fixtures use real framework services
+@pytest.fixture
+def processor(test_config):
+    """Create real processor instance."""
+    return MyBusinessProcessor(config=test_config)
+
+@pytest.fixture  
+def processor_context(processing_service):
+    """Create real processor context."""
+    from src.processors.v2.processor_interface import ProcessorContext
+    return ProcessorContext(processing_service=processing_service)
+```
+
+**Key Testing Principles:**
+- ✅ **NO MOCKS** - Use real framework services and database
+- ✅ **Real Messages** - Create actual `Message` objects  
+- ✅ **Real Context** - Use `ProcessorContext` with real services
+- ✅ **Real Validation** - Test actual processor logic
+- ❌ **Exception**: Only mock Azure SDK timeout/connection scenarios
 
 ### Step 4: Source Processors (Creating Entities)
 
@@ -510,23 +820,97 @@ def process_coffee_order(msg: func.QueueMessage, output: func.Out[str]):
 - ✅ Message validation
 - ✅ Structured logging
 
-## Migration from Old Framework
+## Migration from v1 to v2 Framework
 
-The new unified approach replaces the old Source/Intermediate/Terminal pattern:
+The v2 framework significantly enhances the original unified approach:
 
-| Old Pattern | New Pattern |
-|-------------|-------------|
-| `SourceProcessor` | Any processor that creates entities |
-| `IntermediateProcessor` | Any processor that transforms/routes |
-| `TerminalProcessor` | Any processor that doesn't route further |
+| v1 Pattern | v2 Pattern | Benefits |
+|------------|------------|-----------|
+| `process(message)` | `process(message, context)` | Direct access to framework services |
+| Manual dependency injection | `ProcessorContext` | Simplified service access |
+| Simple error handling | `@operation` decorators | Automatic logging and metrics |
+| Basic routing | Output handlers | Type-safe, configurable routing |
+| Manual entity operations | `context.persist_entity()` | Framework-managed entity lifecycle |
+| Mock-heavy testing | NO MOCKS policy | More reliable, realistic tests |
 
-### Benefits of Migration
+### Benefits of v2 Migration
 
-1. **Reduced Complexity**: No more artificial processor categories
-2. **Increased Flexibility**: Processors can do whatever they need
-3. **Better Testability**: Simpler interfaces and dependency injection
-4. **Core Integration**: Built-in entity management and duplicate detection
-5. **Configuration-Driven**: Behavior controlled by `ProcessorConfig`
+1. **Enhanced Context**: Direct access to framework services via `ProcessorContext`
+2. **Operation Tracking**: Automatic logging, metrics, and performance monitoring
+3. **Type-Safe Routing**: Output handlers replace basic routing dictionaries
+4. **Multi-tenant Ready**: Built-in tenant context management
+5. **Reliable Testing**: NO MOCKS policy ensures tests match production behavior
+6. **Simplified Deployment**: Ultra-thin Azure Functions with framework handling infrastructure
+
+### Real-World Example: Temple Webster Integration
+
+The Temple Webster processor demonstrates v2 best practices:
+
+```python
+class TempleWebsterProcessor(ProcessorInterface):
+    def __init__(self, config: TWProcessorConfig):
+        self.config = config  # Customer-specific configuration
+        
+    @operation("temple_webster.process")
+    def process(self, message: Message, context: ProcessorContext) -> ProcessingResult:
+        operation_type = message.metadata.get("operation", "get_order_details")
+        
+        if operation_type == "list_orders":
+            return self._handle_list_orders(message, context)
+        elif operation_type == "get_order_details":
+            return self._handle_get_order_details(message, context)
+            
+    @operation("temple_webster.list_orders")
+    def _handle_list_orders(self, message: Message, context: ProcessorContext) -> ProcessingResult:
+        # Get TW client using framework context
+        tw_client = self._get_tw_client(context)
+        
+        # Fetch orders from Temple Webster API
+        response = tw_client.list_purchase_orders(...)
+        
+        # Create entities for each order discovered
+        result = ProcessingResult.create_success()
+        for purchase_order in response.data.purchase_order:
+            entity_id = context.persist_entity(
+                external_id=f"tw_order_discovery_{purchase_order}",
+                canonical_type="temple_webster_order_discovery",
+                source="temple_webster_list_orders",
+                data={"purchase_order": purchase_order}
+            )
+            result.add_entity_created(entity_id)
+        
+        # Add output handler for fan-out processing
+        queue_handler = QueueOutputHandler(
+            destination=self.config.order_details_queue,
+            config=self.config.get_queue_config()
+        )
+        result.add_output_handler(queue_handler)
+        
+        return result
+```
+
+### Multi-Customer Deployment Pattern
+
+v2 enables complete customer isolation:
+
+```
+deployments/
+├── customer-a/     # Production customer
+│   └── azure/
+│       ├── function_app.py    # Customer A config
+│       └── host.json          # High-volume settings
+└── customer-b/     # Testing customer  
+    └── azure/
+        ├── function_app.py    # Customer B config
+        └── host.json          # Conservative settings
+```
+
+Each customer gets:
+- ✅ **Isolated Azure Functions app**
+- ✅ **Customer-specific configuration**
+- ✅ **Independent scaling and monitoring**
+- ✅ **Separate databases and queues**
+- ✅ **Shared processor framework code**
 
 ## Next Steps
 
