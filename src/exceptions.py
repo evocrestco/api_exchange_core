@@ -40,6 +40,7 @@ class ErrorCode(str, Enum):
     CONFLICT = "3002"
     LOCKED = "3003"
     EXPIRED = "3004"
+    LIMIT_EXCEEDED = "3005"
 
     # Business logic errors (4xxx)
     BUSINESS_RULE_VIOLATION = "4000"
@@ -468,5 +469,17 @@ class TenantIsolationViolationError(BaseError):
             message=message,
             error_code=ErrorCode.PERMISSION_DENIED,
             status_code=403,
+            **kwargs
+        )
+
+
+class TokenNotAvailableError(BaseError):
+    """Raised when no valid tokens are available and cannot generate new ones."""
+    
+    def __init__(self, message: str = "No valid tokens available", **kwargs):
+        super().__init__(
+            message=message,
+            error_code=ErrorCode.LIMIT_EXCEEDED,
+            status_code=503,  # Service Temporarily Unavailable
             **kwargs
         )
