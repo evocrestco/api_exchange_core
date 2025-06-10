@@ -43,7 +43,7 @@ class APITokenRepository(BaseRepository[APIToken]):
         
         Args:
             session: Database session
-            api_provider: API provider identifier (e.g., "temple_webster", "shopify")
+            api_provider: API provider identifier (e.g., "api_provider_a", "shopify")
             max_tokens: Maximum tokens allowed per tenant (default: 25)
             token_validity_hours: Token validity in hours (default: 1)
         """

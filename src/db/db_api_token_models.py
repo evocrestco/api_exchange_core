@@ -38,7 +38,7 @@ class APIToken(Base, BaseModel):
     )
     
     # API provider identification
-    api_provider = Column(String(50), nullable=False)  # e.g., "temple_webster", "shopify", etc.
+    api_provider = Column(String(50), nullable=False)  # e.g., "api_provider_a", "shopify", etc.
     
     # Token identification - using hash of token for uniqueness without storing plaintext
     token_hash = Column(String(64), nullable=False)

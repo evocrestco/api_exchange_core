@@ -17,11 +17,11 @@ class TestAPITokenService:
     """Test APITokenService functionality with real implementations."""
     
     @pytest.fixture
-    def temple_webster_repo(self, db_session):
-        """Create real repository for Temple Webster testing."""
+    def test_api_provider_repo(self, db_session):
+        """Create real repository for test API provider testing."""
         return APITokenRepository(
             session=db_session,
-            api_provider="temple_webster", 
+            api_provider="test_api_provider", 
             max_tokens=25,
             token_validity_hours=1
         )
@@ -47,10 +47,10 @@ class TestAPITokenService:
         return Mock(return_value="")
     
     @pytest.fixture
-    def token_service(self, temple_webster_repo, mock_token_generator):
+    def token_service(self, test_api_provider_repo, mock_token_generator):
         """Create service with real repository and mock generator."""
         return APITokenService(
-            token_repository=temple_webster_repo,
+            token_repository=test_api_provider_repo,
             token_generator=mock_token_generator
         )
     
@@ -69,11 +69,11 @@ class TestAPITokenService:
             assert token_value == "existing_token_123"
             assert token_id is not None
     
-    def test_get_valid_token_generate_new(self, temple_webster_repo, mock_token_generator, test_tenant):
+    def test_get_valid_token_generate_new(self, test_api_provider_repo, mock_token_generator, test_tenant):
         """Test generating new token when no existing tokens available."""
         # Create service with fresh repository (no existing tokens)
         service = APITokenService(
-            token_repository=temple_webster_repo,
+            token_repository=test_api_provider_repo,
             token_generator=mock_token_generator
         )
         
@@ -88,9 +88,9 @@ class TestAPITokenService:
             stats = service.get_token_statistics()
             assert stats["active_tokens"] == 1
     
-    def test_get_valid_token_no_generator(self, temple_webster_repo, test_tenant):
+    def test_get_valid_token_no_generator(self, test_api_provider_repo, test_tenant):
         """Test getting token when no generator is configured."""
-        service = APITokenService(token_repository=temple_webster_repo)  # No generator
+        service = APITokenService(token_repository=test_api_provider_repo)  # No generator
         
         with tenant_context(test_tenant["id"]):
             # Should raise TokenNotAvailableError when no tokens and no generator
@@ -99,10 +99,10 @@ class TestAPITokenService:
             
             assert "no token generator configured" in str(exc_info.value)
     
-    def test_get_valid_token_generation_failure(self, temple_webster_repo, failing_token_generator, test_tenant):
+    def test_get_valid_token_generation_failure(self, test_api_provider_repo, failing_token_generator, test_tenant):
         """Test handling of token generation failures."""
         service = APITokenService(
-            token_repository=temple_webster_repo,
+            token_repository=test_api_provider_repo,
             token_generator=failing_token_generator
         )
         
@@ -169,7 +169,7 @@ class TestAPITokenService:
             for i in range(3):
                 expired_token = APIToken(
                     tenant_id=test_tenant["id"],
-                    api_provider="temple_webster",
+                    api_provider="test_api_provider",
                     token_hash=APIToken.create_token_hash(f"expired_{i}"),
                     expires_at=datetime.utcnow() - timedelta(hours=1),
                     is_active="active"
@@ -192,15 +192,15 @@ class TestAPITokenService:
             
             stats = token_service.get_token_statistics()
             
-            assert stats["api_provider"] == "temple_webster"
+            assert stats["api_provider"] == "test_api_provider"
             assert stats["active_tokens"] == 2
             assert stats["has_token_generator"] is True
             assert stats["max_tokens_allowed"] == 25
             assert "service_class" in stats
     
-    def test_configure_token_generator(self, temple_webster_repo):
+    def test_configure_token_generator(self, test_api_provider_repo):
         """Test configuring token generator."""
-        service = APITokenService(token_repository=temple_webster_repo)
+        service = APITokenService(token_repository=test_api_provider_repo)
         
         # Initially no generator
         assert service.token_generator is None
@@ -220,7 +220,7 @@ class TestAPITokenService:
             
             expiring_token = APIToken(
                 tenant_id=test_tenant["id"],
-                api_provider="temple_webster",
+                api_provider="test_api_provider",
                 token_hash=APIToken.create_token_hash("expiring_soon"),
                 expires_at=soon_expiry,
                 is_active="active"
@@ -250,15 +250,15 @@ class TestAPITokenService:
         tenant2 = multi_tenant_context[1]
         
         # Create repository using db_session
-        temple_webster_repo = APITokenRepository(
+        test_api_provider_repo = APITokenRepository(
             session=db_session,
-            api_provider="temple_webster", 
+            api_provider="test_api_provider", 
             max_tokens=25,
             token_validity_hours=1
         )
         
         service = APITokenService(
-            token_repository=temple_webster_repo,
+            token_repository=test_api_provider_repo,
             token_generator=mock_token_generator
         )
         

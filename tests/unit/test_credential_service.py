@@ -382,3 +382,153 @@ class TestCredentialService:
             
         finally:
             TenantContext.clear_current_tenant()
+
+    def test_with_token_management_factory(self, credential_repo, db_session, test_tenant):
+        """Test creating CredentialService with token management enabled."""
+        TenantContext.set_current_tenant(test_tenant["id"])
+        
+        try:
+            # Create service with token management
+            credential_service = CredentialService.with_token_management(
+                credential_repository=credential_repo,
+                api_provider="test_api",
+                max_tokens=5,
+                token_validity_hours=2
+            )
+            
+            # Verify service has API token management configured
+            assert credential_service.api_token_service is not None
+            assert credential_service.api_token_service.token_repository.api_provider == "test_api"
+            assert credential_service.api_token_service.token_repository.max_tokens == 5
+            assert credential_service.api_token_service.token_repository.token_validity_hours == 2
+            
+        finally:
+            TenantContext.clear_current_tenant()
+
+    def test_store_access_token_success(self, credential_repo, db_session, test_tenant):
+        """Test storing access token via API token service."""
+        TenantContext.set_current_tenant(test_tenant["id"])
+        
+        try:
+            # Create service with token management
+            credential_service = CredentialService.with_token_management(
+                credential_repository=credential_repo,
+                api_provider="test_api_provider"
+            )
+            
+            # Store access token
+            expires_at = datetime.utcnow() + timedelta(hours=1)
+            token_id = credential_service.store_access_token(
+                system_name="test_api_provider",
+                access_token="test_access_token_123",
+                expires_at=expires_at
+            )
+            db_session.commit()
+            
+            # Verify token was stored
+            assert token_id is not None
+            
+            # Verify we can retrieve it
+            token_data = credential_service.get_valid_access_token("test_api_provider")
+            assert token_data is not None
+            assert token_data["access_token"] == "test_access_token_123"
+            assert "token_id" in token_data
+            
+        finally:
+            TenantContext.clear_current_tenant()
+
+    def test_get_valid_access_token_not_found(self, credential_repo, db_session, test_tenant):
+        """Test getting access token when none exists."""
+        TenantContext.set_current_tenant(test_tenant["id"])
+        
+        try:
+            # Create service with token management
+            credential_service = CredentialService.with_token_management(
+                credential_repository=credential_repo,
+                api_provider="test_api_provider"
+            )
+            
+            # Try to get token when none exists
+            token_data = credential_service.get_valid_access_token("test_api_provider")
+            assert token_data is None
+            
+        finally:
+            TenantContext.clear_current_tenant()
+
+    def test_access_token_without_token_service(self, credential_service, test_tenant):
+        """Test token methods fail when no API token service configured."""
+        TenantContext.set_current_tenant(test_tenant["id"])
+        
+        try:
+            # This service doesn't have API token management configured
+            expires_at = datetime.utcnow() + timedelta(hours=1)
+            
+            # Store should fail
+            with pytest.raises(ServiceError) as exc_info:
+                credential_service.store_access_token(
+                    system_name="test_api_provider",
+                    access_token="test_token",
+                    expires_at=expires_at
+                )
+            assert "API token management not configured" in str(exc_info.value)
+            
+            # Get should fail
+            with pytest.raises(ServiceError) as exc_info:
+                credential_service.get_valid_access_token("test_api_provider")
+            assert "API token management not configured" in str(exc_info.value)
+            
+        finally:
+            TenantContext.clear_current_tenant()
+
+    def test_token_multi_tenant_isolation(self, credential_repo, db_session, multi_tenant_context):
+        """Test that tokens are isolated between tenants."""
+        tenant1 = multi_tenant_context[0]
+        tenant2 = multi_tenant_context[1]
+        
+        # Create service with token management
+        credential_service = CredentialService.with_token_management(
+            credential_repository=credential_repo,
+            api_provider="test_api_provider"
+        )
+        
+        expires_at = datetime.utcnow() + timedelta(hours=1)
+        
+        # Store token for tenant 1
+        TenantContext.set_current_tenant(tenant1["id"])
+        try:
+            credential_service.store_access_token(
+                system_name="test_api_provider",
+                access_token="tenant1_token",
+                expires_at=expires_at
+            )
+            db_session.commit()
+        finally:
+            TenantContext.clear_current_tenant()
+        
+        # Store token for tenant 2
+        TenantContext.set_current_tenant(tenant2["id"])
+        try:
+            credential_service.store_access_token(
+                system_name="test_api_provider",
+                access_token="tenant2_token",
+                expires_at=expires_at
+            )
+            db_session.commit()
+        finally:
+            TenantContext.clear_current_tenant()
+        
+        # Verify tenant 1 only sees their token
+        TenantContext.set_current_tenant(tenant1["id"])
+        try:
+            token_data = credential_service.get_valid_access_token("test_api_provider")
+            assert token_data["access_token"] == "tenant1_token"
+        finally:
+            TenantContext.clear_current_tenant()
+        
+        # Verify tenant 2 only sees their token
+        TenantContext.set_current_tenant(tenant2["id"])
+        try:
+            token_data = credential_service.get_valid_access_token("test_api_provider")
+            assert token_data["access_token"] == "tenant2_token"
+        finally:
+            TenantContext.clear_current_tenant()
