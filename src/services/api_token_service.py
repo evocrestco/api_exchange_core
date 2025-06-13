@@ -77,13 +77,12 @@ class APITokenService:
             }
         )
         
-        # Try to get existing valid token first
-        token_result = self.token_repository.get_valid_token(operation)
-        
-        if token_result:
-            token_value, token_id = token_result
+        # First, try to get existing valid token (no coordination needed)
+        existing_token = self.token_repository.get_valid_token(operation)
+        if existing_token:
+            token_value, token_id = existing_token
             self.logger.info(
-                "Existing token provided",
+                "Found existing valid token",
                 extra={
                     "api_provider": self.token_repository.api_provider,
                     "token_id": token_id,
@@ -92,8 +91,9 @@ class APITokenService:
             )
             return token_value, token_id
         
-        # No existing tokens, try to generate a new one
+        # No existing token - check if we can generate new one
         if not self.token_generator:
+            # No token generator configured
             self.logger.warning(
                 "No valid tokens available and no token generator configured",
                 extra={
@@ -107,91 +107,40 @@ class APITokenService:
                 f"and no token generator configured"
             )
         
-        # Try to generate and store new token
+        # Use coordinated get-or-create pattern for Azure Function coordination  
         try:
-            new_token = self.token_generator()
+            token_result = self.token_repository.get_or_create_token_with_coordination(
+                operation=operation,
+                buffer_minutes=5,
+                token_generator=self.token_generator
+            )
             
-            if not new_token:
-                raise ServiceError(
-                    message="Token generator returned empty token",
-                    error_code=ErrorCode.INTEGRATION_ERROR,
-                    details={
+            if token_result:
+                token_value, token_id = token_result
+                self.logger.info(
+                    "Token provided via coordination",
+                    extra={
                         "api_provider": self.token_repository.api_provider,
+                        "token_id": token_id,
                         "operation": operation
                     }
                 )
-            
-            # Store the new token
-            token_id = self.store_token(
-                token=new_token,
-                generated_by="api_token_service",
-                generation_context={
-                    "trigger": "no_valid_tokens",
-                    "operation": operation,
-                    "generated_at": datetime.utcnow().isoformat()
-                }
-            )
-            
-            self.logger.info(
-                "New token generated and stored",
-                extra={
+                return token_value, token_id
+                
+            # If coordinated method returns None, token generation failed
+            raise ServiceError(
+                message="Failed to generate new token",
+                error_code=ErrorCode.INTEGRATION_ERROR,
+                details={
                     "api_provider": self.token_repository.api_provider,
-                    "token_id": token_id,
                     "operation": operation
                 }
             )
             
-            return new_token, token_id
-            
-        except ValidationError as e:
-            if e.error_code == ErrorCode.LIMIT_EXCEEDED:
-                # Token limit reached, perform cleanup and try once more
-                self.logger.info(
-                    "Token limit reached, attempting cleanup",
-                    extra={
-                        "api_provider": self.token_repository.api_provider,
-                        "tenant_id": tenant_id
-                    }
-                )
-                
-                cleaned = self.cleanup_expired_tokens(force_cleanup=True)
-                
-                if cleaned > 0:
-                    # Try to store token again after cleanup
-                    try:
-                        token_id = self.store_token(
-                            token=new_token,
-                            generated_by="api_token_service_after_cleanup",
-                            generation_context={
-                                "trigger": "post_cleanup",
-                                "tokens_cleaned": cleaned,
-                                "operation": operation,
-                                "generated_at": datetime.utcnow().isoformat()
-                            }
-                        )
-                        
-                        self.logger.info(
-                            "Token stored after cleanup",
-                            extra={
-                                "api_provider": self.token_repository.api_provider,
-                                "token_id": token_id,
-                                "tokens_cleaned": cleaned
-                            }
-                        )
-                        
-                        return new_token, token_id
-                        
-                    except ValidationError:
-                        # Still at limit after cleanup
-                        pass
-                
-                raise TokenNotAvailableError(
-                    f"Token limit reached for {self.token_repository.api_provider} "
-                    f"and cleanup did not free space"
-                )
-            else:
-                raise
         except Exception as e:
+            if isinstance(e, ServiceError):
+                raise
+                
             self.logger.error(
                 "Failed to generate new token",
                 extra={
@@ -334,6 +283,38 @@ class APITokenService:
         })
         
         return stats
+    
+    @handle_repository_errors 
+    def get_coordination_metrics(self) -> Dict[str, Any]:
+        """
+        Get coordination metrics for monitoring system strain.
+        
+        Returns:
+            Dictionary with coordination metrics including attempt counts
+            
+        Raises:
+            ServiceError: If operation fails
+        """
+        tenant_id = TenantContext.get_current_tenant_id()
+        
+        self.logger.debug(
+            "Getting coordination metrics", 
+            extra={
+                "api_provider": self.token_repository.api_provider,
+                "tenant_id": tenant_id
+            }
+        )
+        
+        metrics = self.token_repository.get_coordination_metrics()
+        
+        # Add service-level information
+        metrics.update({
+            "has_token_generator": self.token_generator is not None,
+            "service_class": self.__class__.__name__,
+            "coordination_method": "coordination_table"
+        })
+        
+        return metrics
     
     def configure_token_generator(self, token_generator: Callable[[], str]) -> None:
         """

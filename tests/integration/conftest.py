@@ -23,43 +23,54 @@ from tests.conftest import *  # noqa: F403, F401
 
 
 @pytest.fixture(scope="session", autouse=True)
-def load_env_for_integration():
+def setup_integration_environment():
     """
-    Load .env file for integration tests.
+    Set up environment for ALL integration tests.
     
-    This ensures that integration tests can use the real processor factory
-    which requires database environment variables.
+    This fixture:
+    1. Saves the current environment
+    2. Loads the integration .env file
+    3. Ensures all integration tests use the same environment
+    4. Restores the original environment when done
     """
-    env_file = Path(__file__).parent / ".env"
-    print(f"DEBUG: Looking for .env at: {env_file}")
-    print(f"DEBUG: .env exists: {env_file.exists()}")
+    # Save original environment
+    original_env = dict(os.environ)
     
-    if env_file.exists():
-        # Manual .env loading
-        with open(env_file) as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#') and '=' in line:
-                    key, value = line.split('=', 1)
-                    os.environ[key] = value
-                    print(f"DEBUG: Set {key}={value[:20]}...")  # Show first 20 chars
-    
-    print(f"DEBUG: After loading - TENANT_ID={os.getenv('TENANT_ID')}")
-    print(f"DEBUG: After loading - DB_HOST={os.getenv('DB_HOST')}")
-    
-    yield
-    
-    # Cleanup is handled by clean_environment fixture
+    try:
+        # Load integration test .env file
+        env_file = Path(__file__).parent / ".env"
+        print(f"DEBUG: Loading integration .env from: {env_file}")
+        
+        if env_file.exists():
+            # Manual .env loading to avoid dotenv dependency conflicts
+            with open(env_file) as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        key, value = line.split('=', 1)
+                        os.environ[key] = value
+                        print(f"DEBUG: Set {key}={value[:20]}...")  # Show first 20 chars
+        
+        print(f"DEBUG: Integration environment loaded - TENANT_ID={os.getenv('TENANT_ID')}")
+        print(f"DEBUG: Integration environment loaded - DB_NAME={os.getenv('DB_NAME')}")
+        
+        yield
+        
+    finally:
+        # Restore original environment
+        print("DEBUG: Restoring original environment...")
+        os.environ.clear()
+        os.environ.update(original_env)
 
 
 @pytest.fixture(scope="session", autouse=True)
-def setup_integration_environment():
+def setup_models_and_testing_mode():
     """
-    Set up integration test environment.
+    Set up models and testing mode for integration tests.
     
     This fixture runs once per test session and ensures:
     - All database models are imported
-    - Environment is configured for integration testing
+    - Testing mode is set
     """
     # Import all models to ensure they're registered
     import_all_models()
@@ -85,6 +96,163 @@ def clean_environment():
     # Just yield without clearing - integration tests need the env vars
     yield
     # No cleanup - we want to keep the env vars for the whole test session
+
+
+# ==================== POSTGRESQL FIXTURES ====================
+
+
+@pytest.fixture(scope="session")
+def postgres_engine():
+    """
+    Create PostgreSQL database engine for integration tests.
+    
+    This fixture uses the environment variables set by setup_integration_environment.
+    """
+    # Use environment variables that should already be set by setup_integration_environment
+    db_url = f"postgresql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}"
+    
+    if not all([os.getenv('DB_USER'), os.getenv('DB_PASSWORD'), os.getenv('DB_HOST'), os.getenv('DB_PORT'), os.getenv('DB_NAME')]):
+        raise ValueError("PostgreSQL environment variables not set. Check integration .env file.")
+    
+    from sqlalchemy import create_engine
+    from src.db.db_config import Base
+    
+    engine = create_engine(db_url, echo=False)
+    
+    # Create all tables
+    Base.metadata.create_all(engine)
+    
+    yield engine
+
+
+@pytest.fixture(scope="function")
+def postgres_db_session(postgres_engine):
+    """
+    Create PostgreSQL database session with automatic rollback.
+    
+    This fixture is used for integration tests that require PostgreSQL-specific features.
+    Each test gets a fresh session that automatically rolls back all changes.
+    """
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy import event
+    
+    # Create connection and transaction
+    connection = postgres_engine.connect()
+    transaction = connection.begin()
+
+    # Create session bound to this specific connection
+    Session = sessionmaker(bind=connection)
+    session = Session()
+
+    # Start a savepoint for nested transaction support
+    nested = connection.begin_nested()
+
+    # Configure session events to restart savepoint on commit
+    @event.listens_for(session, "after_transaction_end")
+    def restart_savepoint(session, transaction):
+        if transaction.nested and not transaction._parent.nested:
+            # Restart savepoint after a commit
+            nonlocal nested
+            nested = connection.begin_nested()
+
+    yield session
+
+    # Cleanup - rollback everything
+    session.close()
+    if nested.is_active:
+        nested.rollback()
+    transaction.rollback()
+    connection.close()
+
+
+@pytest.fixture(scope="function")
+def postgres_test_tenant(postgres_db_session):
+    """
+    Create standard test tenant in PostgreSQL.
+
+    Returns tenant data as dictionary to prevent accidental modification.
+    """
+    from src.db.db_tenant_models import Tenant
+    
+    tenant_id = "test_tenant"
+    
+    # Check if tenant already exists
+    existing_tenant = postgres_db_session.query(Tenant).filter(
+        Tenant.tenant_id == tenant_id
+    ).first()
+    
+    if existing_tenant:
+        # Return existing tenant data
+        return {
+            "id": existing_tenant.tenant_id,
+            "name": existing_tenant.customer_name,
+            "is_active": existing_tenant.is_active,
+            "config": existing_tenant.tenant_config.copy() if existing_tenant.tenant_config else {},
+        }
+    
+    # Create tenant if it doesn't exist
+    tenant = Tenant(
+        tenant_id=tenant_id,
+        customer_name="Test Tenant",
+        is_active=True,
+        tenant_config={
+            "hash_algorithm": {"value": "sha256", "updated_at": "2024-01-01T12:00:00Z"},
+            "enable_duplicate_detection": {"value": True, "updated_at": "2024-01-01T12:00:00Z"},
+            "max_retry_attempts": {"value": 3, "updated_at": "2024-01-01T12:00:00Z"},
+        },
+    )
+    postgres_db_session.add(tenant)
+    postgres_db_session.commit()
+
+    # Return as dictionary to prevent direct object modification
+    return {
+        "id": tenant.tenant_id,
+        "name": tenant.customer_name,
+        "is_active": tenant.is_active,
+        "config": tenant.tenant_config.copy() if tenant.tenant_config else {},
+    }
+
+
+@pytest.fixture(scope="function")
+def postgres_multi_tenant_context(postgres_db_session):
+    """
+    Create multiple tenants in PostgreSQL for testing tenant isolation.
+
+    Returns list of tenant dictionaries for parameterized testing.
+    """
+    from src.db.db_tenant_models import Tenant
+    from src.context.tenant_context import TenantContext
+    
+    tenant_data = []
+
+    for i in range(3):
+        tenant = Tenant(
+            tenant_id=f"test_tenant_{i}",
+            customer_name=f"Test Tenant {i}",
+            is_active=True,
+            tenant_config={
+                "test_config": {"value": f"value_{i}", "updated_at": "2024-01-01T12:00:00Z"}
+            },
+        )
+        postgres_db_session.add(tenant)
+        tenant_data.append(
+            {
+                "id": tenant.tenant_id,
+                "name": tenant.customer_name,
+                "is_active": tenant.is_active,
+                "config": tenant.tenant_config.copy() if tenant.tenant_config else {},
+            }
+        )
+
+    postgres_db_session.commit()
+
+    # Ensure clean context
+    TenantContext.clear_current_tenant()
+
+    yield tenant_data
+
+    # Clean up context
+    TenantContext.clear_current_tenant()
 
 
 @pytest.fixture(scope="function")

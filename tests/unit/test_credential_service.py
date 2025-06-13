@@ -383,17 +383,25 @@ class TestCredentialService:
         finally:
             TenantContext.clear_current_tenant()
 
-    def test_with_token_management_factory(self, credential_repo, db_session, test_tenant):
-        """Test creating CredentialService with token management enabled."""
+    def test_credential_service_with_token_management(self, credential_repo, db_session, test_tenant):
+        """Test creating CredentialService with token management using consistent pattern."""
         TenantContext.set_current_tenant(test_tenant["id"])
         
         try:
-            # Create service with token management
-            credential_service = CredentialService.with_token_management(
-                credential_repository=credential_repo,
+            # Create API token repository and service (consistent pattern)
+            from src.repositories.api_token_repository import APITokenRepository
+            from src.services.api_token_service import APITokenService
+            
+            api_token_repo = APITokenRepository(
+                session=credential_repo.session,
                 api_provider="test_api",
                 max_tokens=5,
                 token_validity_hours=2
+            )
+            api_token_service = APITokenService(token_repository=api_token_repo)
+            credential_service = CredentialService(
+                credential_repository=credential_repo,
+                api_token_service=api_token_service
             )
             
             # Verify service has API token management configured
@@ -410,10 +418,18 @@ class TestCredentialService:
         TenantContext.set_current_tenant(test_tenant["id"])
         
         try:
-            # Create service with token management
-            credential_service = CredentialService.with_token_management(
-                credential_repository=credential_repo,
+            # Create API token repository and service (consistent pattern)
+            from src.repositories.api_token_repository import APITokenRepository
+            from src.services.api_token_service import APITokenService
+            
+            api_token_repo = APITokenRepository(
+                session=credential_repo.session,
                 api_provider="test_api_provider"
+            )
+            api_token_service = APITokenService(token_repository=api_token_repo)
+            credential_service = CredentialService(
+                credential_repository=credential_repo,
+                api_token_service=api_token_service
             )
             
             # Store access token
@@ -442,10 +458,18 @@ class TestCredentialService:
         TenantContext.set_current_tenant(test_tenant["id"])
         
         try:
-            # Create service with token management
-            credential_service = CredentialService.with_token_management(
-                credential_repository=credential_repo,
+            # Create API token repository and service (consistent pattern)
+            from src.repositories.api_token_repository import APITokenRepository
+            from src.services.api_token_service import APITokenService
+            
+            api_token_repo = APITokenRepository(
+                session=credential_repo.session,
                 api_provider="test_api_provider"
+            )
+            api_token_service = APITokenService(token_repository=api_token_repo)
+            credential_service = CredentialService(
+                credential_repository=credential_repo,
+                api_token_service=api_token_service
             )
             
             # Try to get token when none exists
@@ -485,10 +509,18 @@ class TestCredentialService:
         tenant1 = multi_tenant_context[0]
         tenant2 = multi_tenant_context[1]
         
-        # Create service with token management
-        credential_service = CredentialService.with_token_management(
-            credential_repository=credential_repo,
+        # Create API token repository and service (consistent pattern)
+        from src.repositories.api_token_repository import APITokenRepository
+        from src.services.api_token_service import APITokenService
+        
+        api_token_repo = APITokenRepository(
+            session=credential_repo.session,
             api_provider="test_api_provider"
+        )
+        api_token_service = APITokenService(token_repository=api_token_repo)
+        credential_service = CredentialService(
+            credential_repository=credential_repo,
+            api_token_service=api_token_service
         )
         
         expires_at = datetime.utcnow() + timedelta(hours=1)

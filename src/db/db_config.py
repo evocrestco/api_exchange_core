@@ -141,6 +141,7 @@ def import_all_models():
     from src.db.db_state_transition_models import StateTransition  # noqa
     from src.db.db_tenant_models import Tenant  # noqa
     from src.db.db_credential_models import ExternalCredential  # noqa
+    from src.db.db_api_token_models import APIToken, APITokenUsageLog, TokenCoordination  # noqa
 
     configure_mappers()
 

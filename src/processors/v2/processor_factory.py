@@ -12,7 +12,7 @@ from typing import Any, Dict, Optional
 
 from pydantic import ValidationError
 
-from src.db.db_config import DatabaseConfig, DatabaseManager
+from src.db.db_config import DatabaseConfig, DatabaseManager, init_db
 from src.processing.duplicate_detection import DuplicateDetectionService
 from src.processing.entity_attributes import EntityAttributeBuilder
 from src.processing.processing_service import ProcessingService
@@ -94,6 +94,10 @@ def create_processor_handler(
     if db_manager is None:
         db_manager = create_db_manager()
         logger.info(f"Created database manager from environment: {db_manager.config}")
+
+    # Initialize database and import all models
+    init_db(db_manager)
+    logger.info("Database initialized with all models imported")
 
     # Create session from db_manager
     session = db_manager.get_session()

@@ -46,43 +46,6 @@ class CredentialService(BaseService[CredentialCreate, CredentialRead, Credential
         self.credential_repository = credential_repository
         self.api_token_service = api_token_service
     
-    @classmethod
-    def with_token_management(
-        cls, 
-        credential_repository: CredentialRepository, 
-        api_provider: str = "api_provider_a",
-        max_tokens: int = 25,
-        token_validity_hours: int = 1
-    ) -> "CredentialService":
-        """
-        Create CredentialService with API token management enabled.
-        
-        Args:
-            credential_repository: Repository for credential operations
-            api_provider: API provider name for token management
-            max_tokens: Maximum tokens allowed per tenant
-            token_validity_hours: Token validity in hours
-            
-        Returns:
-            CredentialService instance with API token management configured
-        """
-        # Create API token repository using the same session
-        api_token_repo = APITokenRepository(
-            session=credential_repository.session,
-            api_provider=api_provider,
-            max_tokens=max_tokens,
-            token_validity_hours=token_validity_hours
-        )
-        
-        # Create API token service
-        api_token_service = APITokenService(
-            token_repository=api_token_repo
-        )
-        
-        return cls(
-            credential_repository=credential_repository,
-            api_token_service=api_token_service
-        )
 
     @tenant_aware
     @handle_repository_errors("get_credentials")

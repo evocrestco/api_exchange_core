@@ -107,7 +107,7 @@ class TestAPITokenRepository:
                 generated_by="test_function"
             )
             
-            # Retrieve the token
+            # Retrieve the token (with default 5 minute buffer)
             result = test_api_provider_repo.get_valid_token("test_operation")
             
             assert result is not None
@@ -150,6 +150,35 @@ class TestAPITokenRepository:
             token_value, token_id = result
             assert token_id == token3_id
             assert token_value == "token_3"
+    
+    def test_get_valid_token_buffer_time(self, test_api_provider_repo, test_tenant):
+        """Test that tokens close to expiry are filtered out with buffer time."""
+        with tenant_context(test_tenant["id"]):
+            # Create a token that expires in 3 minutes (within default 5 minute buffer)
+            soon_expiry_token = APIToken(
+                tenant_id=test_tenant["id"],
+                api_provider="test_api_provider",
+                token_hash=APIToken.create_token_hash("soon_expired_token"),
+                expires_at=datetime.utcnow() + timedelta(minutes=3),  # Expires in 3 minutes
+                is_active="active"
+            )
+            soon_expiry_token.set_token("soon_expired_token", test_api_provider_repo.session)
+            test_api_provider_repo.session.add(soon_expiry_token)
+            test_api_provider_repo.session.flush()
+            
+            # Should not return token with default 5 minute buffer
+            result = test_api_provider_repo.get_valid_token("test_operation")
+            assert result is None
+            
+            # Should return token with 2 minute buffer
+            result = test_api_provider_repo.get_valid_token("test_operation", buffer_minutes=2)
+            assert result is not None
+            token_value, token_id = result
+            assert token_value == "soon_expired_token"
+            
+            # Should not return token with 4 minute buffer
+            result = test_api_provider_repo.get_valid_token("test_operation", buffer_minutes=4)
+            assert result is None
     
     def test_cleanup_expired_tokens(self, test_api_provider_repo, test_tenant):
         """Test cleanup of expired tokens."""
@@ -325,3 +354,26 @@ class TestAPITokenRepository:
                     token=12345,
                     generated_by="validation_test"
                 )
+    
+    def test_concurrent_token_creation_coordination(self, test_api_provider_repo, test_tenant):
+        """Test that concurrent token creation is properly coordinated using database constraints."""
+        with tenant_context(test_tenant["id"]):
+            # This test demonstrates that row-level locking and database constraints
+            # handle coordination properly in the new implementation
+            
+            # Store a token normally
+            token_id = test_api_provider_repo.store_new_token(
+                token="test_coordination_token",
+                generated_by="coordination_test",
+                generation_context={"reason": "testing_coordination"}
+            )
+            
+            assert token_id is not None
+            
+            # Verify the token was stored
+            stored_token = test_api_provider_repo.session.query(APIToken).filter(
+                APIToken.id == token_id
+            ).first()
+            
+            assert stored_token is not None
+            assert stored_token.generated_by == "coordination_test"

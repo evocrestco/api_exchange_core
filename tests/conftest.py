@@ -73,61 +73,7 @@ def test_engine():
     return engine
 
 
-@pytest.fixture(scope="session")
-def postgres_engine():
-    """
-    Create PostgreSQL database engine for tests requiring PostgreSQL-specific features.
-    
-    This fixture is used for tests that need PostgreSQL features like pgcrypto.
-    It always uses PostgreSQL regardless of APP_ENV setting.
-    """
-    from dotenv import load_dotenv
-    load_dotenv(override=True)
-    
-    db_url = f"postgresql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}"
-    engine = create_engine(db_url, echo=False)
-    
-    # Create all tables
-    Base.metadata.create_all(engine)
-    
-    return engine
-
-
-@pytest.fixture(scope="function")
-def postgres_db_session(postgres_engine):
-    """
-    Create PostgreSQL database session with automatic rollback.
-    
-    This fixture is used for tests that require PostgreSQL-specific features.
-    Each test gets a fresh session that automatically rolls back all changes.
-    """
-    # Create connection and transaction
-    connection = postgres_engine.connect()
-    transaction = connection.begin()
-
-    # Create session bound to this specific connection
-    Session = sessionmaker(bind=connection)
-    session = Session()
-
-    # Start a savepoint for nested transaction support
-    nested = connection.begin_nested()
-
-    # Configure session events to restart savepoint on commit
-    @event.listens_for(session, "after_transaction_end")
-    def restart_savepoint(session, transaction):
-        if transaction.nested and not transaction._parent.nested:
-            # Restart savepoint after a commit
-            nonlocal nested
-            nested = connection.begin_nested()
-
-    yield session
-
-    # Cleanup - rollback everything
-    session.close()
-    if nested.is_active:
-        nested.rollback()
-    transaction.rollback()
-    connection.close()
+# PostgreSQL fixtures moved to tests/integration/conftest.py
 
 
 @pytest.fixture(scope="function")
@@ -282,91 +228,7 @@ def multi_tenant_context(db_session):
     TenantContext.clear_current_tenant()
 
 
-@pytest.fixture(scope="function")
-def postgres_test_tenant(postgres_db_session):
-    """
-    Create standard test tenant in PostgreSQL.
-
-    Returns tenant data as dictionary to prevent accidental modification.
-    """
-    from src.db.db_tenant_models import Tenant
-    
-    tenant_id = "test_tenant"
-    
-    # Check if tenant already exists
-    existing_tenant = postgres_db_session.query(Tenant).filter(
-        Tenant.tenant_id == tenant_id
-    ).first()
-    
-    if existing_tenant:
-        # Return existing tenant data
-        return {
-            "id": existing_tenant.tenant_id,
-            "name": existing_tenant.customer_name,
-            "is_active": existing_tenant.is_active,
-            "config": existing_tenant.tenant_config.copy() if existing_tenant.tenant_config else {},
-        }
-    
-    # Create tenant if it doesn't exist
-    tenant = Tenant(
-        tenant_id=tenant_id,
-        customer_name="Test Tenant",
-        is_active=True,
-        tenant_config={
-            "hash_algorithm": {"value": "sha256", "updated_at": "2024-01-01T12:00:00Z"},
-            "enable_duplicate_detection": {"value": True, "updated_at": "2024-01-01T12:00:00Z"},
-            "max_retry_attempts": {"value": 3, "updated_at": "2024-01-01T12:00:00Z"},
-        },
-    )
-    postgres_db_session.add(tenant)
-    postgres_db_session.commit()
-
-    # Return as dictionary to prevent direct object modification
-    return {
-        "id": tenant.tenant_id,
-        "name": tenant.customer_name,
-        "is_active": tenant.is_active,
-        "config": tenant.tenant_config.copy() if tenant.tenant_config else {},
-    }
-
-
-@pytest.fixture(scope="function")
-def postgres_multi_tenant_context(postgres_db_session):
-    """
-    Create multiple tenants in PostgreSQL for testing tenant isolation.
-
-    Returns list of tenant dictionaries for parameterized testing.
-    """
-    tenant_data = []
-
-    for i in range(3):
-        tenant = Tenant(
-            tenant_id=f"test_tenant_{i}",
-            customer_name=f"Test Tenant {i}",
-            is_active=True,
-            tenant_config={
-                "test_config": {"value": f"value_{i}", "updated_at": "2024-01-01T12:00:00Z"}
-            },
-        )
-        postgres_db_session.add(tenant)
-        tenant_data.append(
-            {
-                "id": tenant.tenant_id,
-                "name": tenant.customer_name,
-                "is_active": tenant.is_active,
-                "config": tenant.tenant_config.copy() if tenant.tenant_config else {},
-            }
-        )
-
-    postgres_db_session.commit()
-
-    # Ensure clean context
-    TenantContext.clear_current_tenant()
-
-    yield tenant_data
-
-    # Clean up context
-    TenantContext.clear_current_tenant()
+# PostgreSQL tenant fixtures moved to tests/integration/conftest.py
 
 
 @pytest.fixture(scope="function")

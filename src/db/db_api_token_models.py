@@ -247,3 +247,56 @@ class APITokenUsageLog(Base, BaseModel):
             used_at=datetime.utcnow(),
             **kwargs
         )
+
+
+class TokenCoordination(Base):
+    """
+    Token coordination table for Azure Function coordination.
+    
+    This table provides atomic coordination for token creation across
+    multiple isolated Azure Functions using database-level locking.
+    """
+    
+    __tablename__ = 'token_coordination'
+    
+    # Composite primary key for tenant + API provider coordination
+    tenant_id = Column(String(255), ForeignKey('tenant.tenant_id'), nullable=False, primary_key=True)
+    api_provider = Column(String(255), nullable=False, primary_key=True)
+    
+    # Lock ownership and timing
+    locked_by = Column(String(255), nullable=False)  # Function instance identifier
+    locked_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+    
+    # Coordination attempt tracking for monitoring
+    attempt_count = Column(Integer, nullable=False, default=1)
+    last_attempt_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    
+    # Relationships
+    tenant = relationship("Tenant", backref="token_coordinations")
+    
+    # Indexes for performance
+    __table_args__ = (
+        Index('ix_token_coordination_expires_at', 'expires_at'),
+        Index('ix_token_coordination_locked_at', 'locked_at'),
+        Index('ix_token_coordination_attempt_count', 'attempt_count'),
+    )
+    
+    @classmethod
+    def create_coordination_lock(
+        cls,
+        tenant_id: str,
+        api_provider: str,
+        locked_by: str,
+        lock_duration_seconds: int = 10
+    ) -> "TokenCoordination":
+        """Create a new coordination lock."""
+        return cls(
+            tenant_id=tenant_id,
+            api_provider=api_provider,
+            locked_by=locked_by,
+            locked_at=datetime.utcnow(),
+            expires_at=datetime.utcnow() + timedelta(seconds=lock_duration_seconds),
+            attempt_count=1,
+            last_attempt_at=datetime.utcnow()
+        )

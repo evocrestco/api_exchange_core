@@ -1,8 +1,8 @@
-"""Initial migration with all models
+"""initial_migration_with_all_current_models
 
-Revision ID: 510f441342d0
+Revision ID: 2326b6953c92
 Revises: 
-Create Date: 2025-06-08 23:30:33.153614
+Create Date: 2025-06-12 11:27:01.922778
 
 """
 from typing import Sequence, Union
@@ -10,12 +10,10 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
-
-# Import our custom JSON type
-from src.db.db_base import JSON
+from src.db.db_base import EncryptedBinary, JSON
 
 # revision identifiers, used by Alembic.
-revision: str = '510f441342d0'
+revision: str = '2326b6953c92'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -48,6 +46,55 @@ def upgrade() -> None:
     op.create_index('ix_tenant_customer_name', 'tenant', ['customer_name'], unique=False)
     op.create_index('ix_tenant_is_active', 'tenant', ['is_active'], unique=False)
     op.create_index('ix_tenant_tenant_id', 'tenant', ['tenant_id'], unique=False)
+    op.create_table('api_token_usage_log',
+    sa.Column('tenant_id', sa.String(length=100), nullable=False),
+    sa.Column('api_provider', sa.String(length=50), nullable=False),
+    sa.Column('token_id', sa.String(length=100), nullable=False),
+    sa.Column('token_hash', sa.String(length=64), nullable=False),
+    sa.Column('used_at', sa.DateTime(), nullable=False),
+    sa.Column('operation', sa.String(length=100), nullable=False),
+    sa.Column('endpoint', sa.String(length=200), nullable=True),
+    sa.Column('request_duration_ms', sa.Integer(), nullable=True),
+    sa.Column('response_status', sa.Integer(), nullable=True),
+    sa.Column('success', sa.String(length=10), nullable=False),
+    sa.Column('function_name', sa.String(length=100), nullable=True),
+    sa.Column('correlation_id', sa.String(length=100), nullable=True),
+    sa.Column('usage_context', sa.Text(), nullable=True),
+    sa.Column('id', sa.String(length=36), nullable=False),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenant.tenant_id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index('ix_api_usage_correlation_id', 'api_token_usage_log', ['correlation_id'], unique=False)
+    op.create_index('ix_api_usage_operation', 'api_token_usage_log', ['operation'], unique=False)
+    op.create_index('ix_api_usage_tenant_operation', 'api_token_usage_log', ['tenant_id', 'api_provider', 'operation'], unique=False)
+    op.create_index('ix_api_usage_tenant_provider', 'api_token_usage_log', ['tenant_id', 'api_provider'], unique=False)
+    op.create_index('ix_api_usage_token_id', 'api_token_usage_log', ['token_id'], unique=False)
+    op.create_index('ix_api_usage_used_at', 'api_token_usage_log', ['used_at'], unique=False)
+    op.create_table('api_tokens',
+    sa.Column('tenant_id', sa.String(length=100), nullable=False),
+    sa.Column('api_provider', sa.String(length=50), nullable=False),
+    sa.Column('token_hash', sa.String(length=64), nullable=False),
+    sa.Column('encrypted_token', EncryptedBinary(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('expires_at', sa.DateTime(), nullable=False),
+    sa.Column('last_used_at', sa.DateTime(), nullable=True),
+    sa.Column('usage_count', sa.Integer(), nullable=False),
+    sa.Column('is_active', sa.String(length=10), nullable=False),
+    sa.Column('generated_by', sa.String(length=100), nullable=True),
+    sa.Column('generation_context', sa.Text(), nullable=True),
+    sa.Column('id', sa.String(length=36), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenant.tenant_id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('token_hash', name='uq_api_token_hash')
+    )
+    op.create_index('ix_api_token_created_at', 'api_tokens', ['created_at'], unique=False)
+    op.create_index('ix_api_token_expires_at', 'api_tokens', ['expires_at'], unique=False)
+    op.create_index('ix_api_token_last_used', 'api_tokens', ['last_used_at'], unique=False)
+    op.create_index('ix_api_token_tenant_active', 'api_tokens', ['tenant_id', 'api_provider', 'is_active'], unique=False)
+    op.create_index('ix_api_token_tenant_provider', 'api_tokens', ['tenant_id', 'api_provider'], unique=False)
     op.create_table('entity',
     sa.Column('id', sa.String(length=36), nullable=False),
     sa.Column('tenant_id', sa.String(length=100), nullable=False),
@@ -74,7 +121,7 @@ def upgrade() -> None:
     sa.Column('tenant_id', sa.String(length=100), nullable=False),
     sa.Column('system_name', sa.String(length=100), nullable=False),
     sa.Column('auth_type', sa.String(length=50), nullable=False),
-    sa.Column('encrypted_credentials', sa.Text(), nullable=False),
+    sa.Column('encrypted_credentials', EncryptedBinary(), nullable=False),
     sa.Column('expires_at', sa.DateTime(), nullable=True),
     sa.Column('is_active', sa.String(length=10), nullable=False),
     sa.Column('id', sa.String(length=36), nullable=False),
@@ -86,6 +133,20 @@ def upgrade() -> None:
     )
     op.create_index('ix_credential_system_name', 'external_credentials', ['system_name'], unique=False)
     op.create_index('ix_credential_tenant_id', 'external_credentials', ['tenant_id'], unique=False)
+    op.create_table('token_coordination',
+    sa.Column('tenant_id', sa.String(length=255), nullable=False),
+    sa.Column('api_provider', sa.String(length=255), nullable=False),
+    sa.Column('locked_by', sa.String(length=255), nullable=False),
+    sa.Column('locked_at', sa.DateTime(), nullable=False),
+    sa.Column('expires_at', sa.DateTime(), nullable=False),
+    sa.Column('attempt_count', sa.Integer(), nullable=False),
+    sa.Column('last_attempt_at', sa.DateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenant.tenant_id'], ),
+    sa.PrimaryKeyConstraint('tenant_id', 'api_provider')
+    )
+    op.create_index('ix_token_coordination_attempt_count', 'token_coordination', ['attempt_count'], unique=False)
+    op.create_index('ix_token_coordination_expires_at', 'token_coordination', ['expires_at'], unique=False)
+    op.create_index('ix_token_coordination_locked_at', 'token_coordination', ['locked_at'], unique=False)
     op.create_table('processingerror',
     sa.Column('entity_id', sa.String(length=36), nullable=False),
     sa.Column('tenant_id', sa.String(length=100), nullable=False),
@@ -144,6 +205,10 @@ def downgrade() -> None:
     op.drop_index('ix_processing_error_tenant', table_name='processingerror')
     op.drop_index('ix_processing_error_entity_id', table_name='processingerror')
     op.drop_table('processingerror')
+    op.drop_index('ix_token_coordination_locked_at', table_name='token_coordination')
+    op.drop_index('ix_token_coordination_expires_at', table_name='token_coordination')
+    op.drop_index('ix_token_coordination_attempt_count', table_name='token_coordination')
+    op.drop_table('token_coordination')
     op.drop_index('ix_credential_tenant_id', table_name='external_credentials')
     op.drop_index('ix_credential_system_name', table_name='external_credentials')
     op.drop_table('external_credentials')
@@ -155,6 +220,19 @@ def downgrade() -> None:
     op.drop_index('ix_entity_external_id', table_name='entity')
     op.drop_index('ix_entity_content_hash', table_name='entity')
     op.drop_table('entity')
+    op.drop_index('ix_api_token_tenant_provider', table_name='api_tokens')
+    op.drop_index('ix_api_token_tenant_active', table_name='api_tokens')
+    op.drop_index('ix_api_token_last_used', table_name='api_tokens')
+    op.drop_index('ix_api_token_expires_at', table_name='api_tokens')
+    op.drop_index('ix_api_token_created_at', table_name='api_tokens')
+    op.drop_table('api_tokens')
+    op.drop_index('ix_api_usage_used_at', table_name='api_token_usage_log')
+    op.drop_index('ix_api_usage_token_id', table_name='api_token_usage_log')
+    op.drop_index('ix_api_usage_tenant_provider', table_name='api_token_usage_log')
+    op.drop_index('ix_api_usage_tenant_operation', table_name='api_token_usage_log')
+    op.drop_index('ix_api_usage_operation', table_name='api_token_usage_log')
+    op.drop_index('ix_api_usage_correlation_id', table_name='api_token_usage_log')
+    op.drop_table('api_token_usage_log')
     op.drop_index('ix_tenant_tenant_id', table_name='tenant')
     op.drop_index('ix_tenant_is_active', table_name='tenant')
     op.drop_index('ix_tenant_customer_name', table_name='tenant')
