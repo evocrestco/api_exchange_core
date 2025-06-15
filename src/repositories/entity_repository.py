@@ -8,6 +8,7 @@ and deleting entity records.
 from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 
 from sqlalchemy import func
+from sqlalchemy.orm.attributes import flag_modified
 
 from src.context.operation_context import OperationHandler, operation
 from src.context.tenant_context import TenantContext, tenant_aware
@@ -51,7 +52,7 @@ class EntityRepository(BaseRepository[Entity]):
         Raises:
             RepositoryError: If a database error occurs
         """
-        with self._session_operation("get_max_version", external_id) as session:
+        with self._session_operation("get_max_version", external_id, is_read_only=True) as session:
             tenant_id = self._get_current_tenant_id()
 
             # Query for the maximum version directly using SQL's MAX function
@@ -115,6 +116,7 @@ class EntityRepository(BaseRepository[Entity]):
                 source=temp_entity.source,
                 content_hash=temp_entity.content_hash,
                 attributes=temp_entity.attributes,
+                processing_results=temp_entity.processing_results,
                 version=temp_entity.version,
                 created_at=temp_entity.created_at,
                 updated_at=temp_entity.updated_at,
@@ -203,7 +205,9 @@ class EntityRepository(BaseRepository[Entity]):
         Raises:
             RepositoryError: If a database error occurs
         """
-        with self._session_operation("get_by_external_id", external_id) as session:
+        with self._session_operation(
+            "get_by_external_id", external_id, is_read_only=True
+        ) as session:
             tenant_id = self._get_current_tenant_id()
 
             # Base query that applies to all cases
@@ -276,7 +280,7 @@ class EntityRepository(BaseRepository[Entity]):
         Raises:
             RepositoryError: If a database error occurs
         """
-        with self._session_operation("get_by_content_hash") as session:
+        with self._session_operation("get_by_content_hash", is_read_only=True) as session:
             tenant_id = self._get_current_tenant_id()
 
             entity = (
@@ -412,7 +416,7 @@ class EntityRepository(BaseRepository[Entity]):
         Raises:
             RepositoryError: If a database error occurs
         """
-        with self._session_operation("list_entities") as session:
+        with self._session_operation("list_entities", is_read_only=True) as session:
             tenant_id = self._get_current_tenant_id()
             query = session.query(Entity)
 
@@ -534,3 +538,119 @@ class EntityRepository(BaseRepository[Entity]):
 
             # Commit handled by context manager
             return True
+
+    @tenant_aware
+    @operation(name="entity_add_processing_result")
+    def add_processing_result(self, entity_id: str, processing_result) -> bool:
+        """
+        Add a processing result to an entity's processing history.
+
+        Args:
+            entity_id: Entity ID
+            processing_result: ProcessingResult instance to add to history
+
+        Returns:
+            True if successful
+
+        Raises:
+            RepositoryError: If entity not found or database error occurs
+        """
+        with self._session_operation("add_processing_result", entity_id):
+            # Get entity for update
+            entity = self._get_by_id(entity_id, for_update=True)
+            if not entity:
+                raise RepositoryError(
+                    message=f"Entity not found: {entity_id}",
+                    error_code=ErrorCode.NOT_FOUND,
+                    context={"entity_id": entity_id},
+                )
+
+            # Initialize processing_results if None
+            if entity.processing_results is None:
+                entity.processing_results = []
+
+            # Convert ProcessingResult to dict for JSON storage
+            result_dict = processing_result.model_dump(mode="json")
+
+            # Append to processing results array
+            entity.processing_results.append(result_dict)
+
+            # Flag the JSONB column as modified for SQLAlchemy
+            flag_modified(entity, "processing_results")
+
+            # Update the entity's updated_at timestamp
+            from src.db.db_base import utc_now
+
+            entity.updated_at = utc_now()
+
+            # Commit handled by context manager
+            return True
+
+    @tenant_aware
+    @operation(name="entity_get_processing_summary")
+    def get_processing_summary(self, entity_id: str) -> Dict[str, Any]:
+        """
+        Get a summary of an entity's processing history.
+
+        Args:
+            entity_id: Entity ID
+
+        Returns:
+            Dictionary with processing history summary
+
+        Raises:
+            RepositoryError: If entity not found or database error occurs
+        """
+        with self._session_operation("get_processing_summary", entity_id, is_read_only=True):
+            # Get entity
+            entity = self._get_by_id(entity_id)
+            if not entity:
+                raise RepositoryError(
+                    message=f"Entity not found: {entity_id}",
+                    error_code=ErrorCode.NOT_FOUND,
+                    context={"entity_id": entity_id},
+                )
+
+            # Initialize summary
+            summary = {
+                "total_processing_attempts": 0,
+                "successful_attempts": 0,
+                "failed_attempts": 0,
+                "processors_involved": [],
+                "has_unrecoverable_failures": False,
+                "last_processed_at": None,
+            }
+
+            # Process results if they exist
+            if entity.processing_results:
+                summary["total_processing_attempts"] = len(entity.processing_results)
+
+                processor_names = set()
+
+                for result in entity.processing_results:
+                    # Count successes and failures
+                    if result.get("success", False):
+                        summary["successful_attempts"] += 1
+                    else:
+                        summary["failed_attempts"] += 1
+                        # Check if it's unrecoverable
+                        if not result.get("can_retry", True):
+                            summary["has_unrecoverable_failures"] = True
+
+                    # Track processor names
+                    processor_name = result.get("processing_metadata", {}).get("processor_name")
+                    if processor_name:
+                        processor_names.add(processor_name)
+
+                    # Track last processed time
+                    completed_at = result.get("completed_at")
+                    if completed_at:
+                        if (
+                            not summary["last_processed_at"]
+                            or completed_at > summary["last_processed_at"]
+                        ):
+                            summary["last_processed_at"] = completed_at
+
+                summary["processors_involved"] = sorted(list(processor_names))
+
+            return summary

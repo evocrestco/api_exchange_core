@@ -26,6 +26,7 @@ class Entity(Base):
     version = Column(Integer, nullable=False, default=1)
     content_hash = Column(String(64), nullable=True)
     attributes = Column(JSONB, nullable=True)
+    processing_results = Column(JSONB, nullable=True, default=list)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
 
@@ -86,6 +87,7 @@ class Entity(Base):
             source=source,
             content_hash=content_hash,
             attributes=attributes or {},
+            processing_results=[],
             version=version,
             created_at=utc_now(),
             updated_at=utc_now(),

@@ -489,3 +489,211 @@ class TestEntityRepositoryErrorHandling:
         # Act & Assert
         with pytest.raises((RepositoryError, ValueError)):
             entity_repository.create(EntityCreate(**invalid_data))
+
+
+class TestEntityRepositoryProcessingResults:
+    """Test processing results functionality."""
+
+    def test_create_entity_with_empty_processing_results(self, entity_repository, tenant_context):
+        """Test creating entity with empty processing results array."""
+        # Arrange
+        entity_data = EntityCreate(
+            external_id="test_order_processing_001",
+            tenant_id=tenant_context["id"],
+            canonical_type="order",
+            source="test_system",
+            version=1,
+            content_hash="processing_hash_001",
+            attributes={"status": "RECEIVED"},
+        )
+
+        # Act
+        entity_id = entity_repository.create(entity_data)
+
+        # Assert
+        created_entity = entity_repository.get_by_id(entity_id)
+        assert created_entity is not None
+        assert hasattr(created_entity, 'processing_results')
+        assert created_entity.processing_results == []
+
+    def test_add_processing_result_to_entity(self, entity_repository, tenant_context):
+        """Test adding a processing result to an entity."""
+        from src.processors.processing_result import ProcessingResult, ProcessingStatus
+        
+        # Arrange - Create entity first
+        entity_data = EntityCreate(
+            external_id="test_order_processing_002",
+            tenant_id=tenant_context["id"],
+            canonical_type="order",
+            source="test_system",
+            version=1,
+            content_hash="processing_hash_002",
+            attributes={"status": "RECEIVED"},
+        )
+        entity_id = entity_repository.create(entity_data)
+
+        # Create processing result
+        processing_result = ProcessingResult.create_success(
+            processing_metadata={"operation": "validation", "rules_applied": 5},
+            entities_created=["child_entity_001"],
+            processing_duration_ms=150.5
+        )
+        processing_result.add_metadata("processor_name", "ValidationProcessor")
+
+        # Act
+        entity_repository.add_processing_result(entity_id, processing_result)
+
+        # Assert
+        updated_entity = entity_repository.get_by_id(entity_id)
+        assert len(updated_entity.processing_results) == 1
+        
+        stored_result = updated_entity.processing_results[0]
+        assert stored_result["status"] == ProcessingStatus.SUCCESS.value
+        assert stored_result["success"] is True
+        assert stored_result["processing_metadata"]["operation"] == "validation"
+        assert stored_result["processing_metadata"]["processor_name"] == "ValidationProcessor"
+        assert stored_result["entities_created"] == ["child_entity_001"]
+        assert stored_result["processing_duration_ms"] == 150.5
+        assert "completed_at" in stored_result
+
+    def test_add_multiple_processing_results(self, entity_repository, tenant_context):
+        """Test adding multiple processing results maintains history."""
+        from src.processors.processing_result import ProcessingResult, ProcessingStatus
+        
+        # Arrange - Create entity
+        entity_data = EntityCreate(
+            external_id="test_order_processing_003",
+            tenant_id=tenant_context["id"],
+            canonical_type="order",
+            source="test_system",
+            version=1,
+            content_hash="processing_hash_003",
+            attributes={"status": "RECEIVED"},
+        )
+        entity_id = entity_repository.create(entity_data)
+
+        # Create multiple processing results
+        results = [
+            ProcessingResult.create_success(
+                processing_metadata={"operation": "validation", "processor_name": "ValidationProcessor"},
+                processing_duration_ms=100.0
+            ),
+            ProcessingResult.create_success(
+                processing_metadata={"operation": "transformation", "processor_name": "TransformProcessor"},
+                entities_updated=["entity_001", "entity_002"],
+                processing_duration_ms=250.5
+            ),
+            ProcessingResult.create_failure(
+                error_message="Network timeout",
+                error_code="NETWORK_ERROR",
+                can_retry=True,
+                processing_duration_ms=5000.0
+            )
+        ]
+
+        # Act - Add results one by one
+        for result in results:
+            entity_repository.add_processing_result(entity_id, result)
+
+        # Assert
+        final_entity = entity_repository.get_by_id(entity_id)
+        assert len(final_entity.processing_results) == 3
+        
+        # Check order is maintained (oldest first)
+        assert final_entity.processing_results[0]["processing_metadata"]["operation"] == "validation"
+        assert final_entity.processing_results[1]["processing_metadata"]["operation"] == "transformation"
+        assert final_entity.processing_results[2]["error_message"] == "Network timeout"
+        
+        # Check specific details
+        assert final_entity.processing_results[1]["entities_updated"] == ["entity_001", "entity_002"]
+        assert final_entity.processing_results[2]["success"] is False
+        assert final_entity.processing_results[2]["can_retry"] is True
+
+    def test_processing_result_with_complex_metadata(self, entity_repository, tenant_context):
+        """Test processing result with complex nested metadata."""
+        from src.processors.processing_result import ProcessingResult
+        
+        # Arrange
+        entity_data = EntityCreate(
+            external_id="test_order_processing_004",
+            tenant_id=tenant_context["id"],
+            canonical_type="order",
+            source="test_system",
+            version=1,
+            content_hash="processing_hash_004",
+        )
+        entity_id = entity_repository.create(entity_data)
+
+        # Create complex processing result
+        complex_metadata = {
+            "processor_name": "TempleWebsterProcessor",
+            "operation": "list_orders",
+            "api_response": {
+                "orders_found": 12,
+                "date_range": {
+                    "from": "2023-07-09T00:00:00Z",
+                    "to": "2025-07-10T00:00:00Z"
+                },
+                "filters_applied": ["status", "location"]
+            },
+            "coordination": {
+                "enabled": True,
+                "api_provider": "temple_webster",
+                "pattern": "coordination_table"
+            }
+        }
+
+        processing_result = ProcessingResult.create_success(
+            processing_metadata=complex_metadata,
+            entities_created=["order_001", "order_002", "order_003"],
+            processing_duration_ms=1250.75
+        )
+
+        # Act
+        entity_repository.add_processing_result(entity_id, processing_result)
+
+        # Assert
+        stored_entity = entity_repository.get_by_id(entity_id)
+        stored_result = stored_entity.processing_results[0]
+        
+        assert stored_result["processing_metadata"]["processor_name"] == "TempleWebsterProcessor"
+        assert stored_result["processing_metadata"]["api_response"]["orders_found"] == 12
+        assert stored_result["processing_metadata"]["coordination"]["enabled"] is True
+        assert len(stored_result["entities_created"]) == 3
+        assert stored_result["processing_duration_ms"] == 1250.75
+
+    def test_get_processing_history_summary(self, entity_repository, tenant_context):
+        """Test getting a summary of processing history."""
+        from src.processors.processing_result import ProcessingResult
+        
+        # Arrange - Create entity with processing history
+        entity_data = EntityCreate(
+            external_id="test_order_processing_005",
+            tenant_id=tenant_context["id"],
+            canonical_type="order",
+            source="test_system",
+            version=1,
+            content_hash="processing_hash_005",
+        )
+        entity_id = entity_repository.create(entity_data)
+
+        # Add multiple results
+        results = [
+            ProcessingResult.create_success(processing_metadata={"processor_name": "ProcessorA"}),
+            ProcessingResult.create_success(processing_metadata={"processor_name": "ProcessorB"}),
+            ProcessingResult.create_failure(error_message="Test error", can_retry=False)
+        ]
+        
+        for result in results:
+            entity_repository.add_processing_result(entity_id, result)
+
+        # Act
+        summary = entity_repository.get_processing_summary(entity_id)
+
+        # Assert
+        assert summary["total_processing_attempts"] == 3
+        assert summary["successful_attempts"] == 2
+        assert summary["failed_attempts"] == 1
+        assert summary["processors_involved"] == ["ProcessorA", "ProcessorB"]
+        assert summary["has_unrecoverable_failures"] is True
+        assert "last_processed_at" in summary

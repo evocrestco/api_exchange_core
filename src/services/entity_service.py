@@ -512,3 +512,48 @@ class EntityService(BaseService[EntityCreate, EntityRead, EntityUpdate, EntityFi
             self._handle_repo_error(e, "iter_entities")
         except Exception as e:
             self._handle_service_exception("iter_entities", e)
+
+    @tenant_aware
+    @operation(name="entity_service_add_processing_result")
+    def add_processing_result(self, entity_id: str, processing_result) -> bool:
+        """
+        Add a processing result to an entity's processing history.
+
+        Args:
+            entity_id: Entity ID
+            processing_result: ProcessingResult instance to add to history
+
+        Returns:
+            True if successful
+
+        Raises:
+            ServiceError: If entity not found or other service error occurs
+        """
+        try:
+            return self.repository.add_processing_result(entity_id, processing_result)
+        except RepositoryError as e:
+            self._handle_repo_error(e, "add_processing_result", entity_id=entity_id)
+        except Exception as e:
+            self._handle_service_exception("add_processing_result", e, entity_id=entity_id)
+
+    @tenant_aware
+    @operation(name="entity_service_get_processing_summary")
+    def get_processing_summary(self, entity_id: str) -> Dict[str, Any]:
+        """
+        Get a summary of an entity's processing history.
+
+        Args:
+            entity_id: Entity ID
+
+        Returns:
+            Dictionary with processing history summary
+
+        Raises:
+            ServiceError: If entity not found or other service error occurs
+        """
+        try:
+            return self.repository.get_processing_summary(entity_id)
+        except RepositoryError as e:
+            self._handle_repo_error(e, "get_processing_summary", entity_id=entity_id)
+        except Exception as e:
+            self._handle_service_exception("get_processing_summary", e, entity_id=entity_id)

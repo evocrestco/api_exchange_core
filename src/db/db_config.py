@@ -136,12 +136,12 @@ def import_all_models():
     # Configure mappers to resolve all relationships
     from sqlalchemy.orm import configure_mappers
 
+    from src.db.db_api_token_models import APIToken, APITokenUsageLog, TokenCoordination  # noqa
+    from src.db.db_credential_models import ExternalCredential  # noqa
     from src.db.db_entity_models import Entity  # noqa
     from src.db.db_error_models import ProcessingError  # noqa
     from src.db.db_state_transition_models import StateTransition  # noqa
     from src.db.db_tenant_models import Tenant  # noqa
-    from src.db.db_credential_models import ExternalCredential  # noqa
-    from src.db.db_api_token_models import APIToken, APITokenUsageLog, TokenCoordination  # noqa
 
     configure_mappers()
 

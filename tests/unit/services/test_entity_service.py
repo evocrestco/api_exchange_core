@@ -582,5 +582,165 @@ class TestEntityServiceUpdate:
         assert updated_entity.attributes["original_field"] == "original_value"
 
 
+class TestEntityServiceProcessingResults:
+    """Test processing results functionality."""
+
+    def test_add_processing_result_to_entity(self, entity_service, tenant_context):
+        """Test adding a processing result to an entity via service."""
+        from src.processors.processing_result import ProcessingResult, ProcessingStatus
+        
+        # Arrange - Create entity first
+        entity_id = entity_service.create_entity(
+            external_id="service_processing_001",
+            canonical_type="order",
+            source="test_system",
+            content={"status": "RECEIVED"},
+            attributes={"service_test": True},
+        )
+
+        # Create processing result
+        processing_result = ProcessingResult.create_success(
+            processing_metadata={"operation": "service_validation", "service_layer": True},
+            entities_created=["service_child_001"],
+            processing_duration_ms=200.0
+        )
+        processing_result.add_metadata("processor_name", "ServiceTestProcessor")
+
+        # Act
+        result = entity_service.add_processing_result(entity_id, processing_result)
+
+        # Assert
+        assert result is True
+        
+        # Verify the processing result was stored
+        updated_entity = entity_service.get_entity(entity_id)
+        assert len(updated_entity.processing_results) == 1
+        
+        stored_result = updated_entity.processing_results[0]
+        assert stored_result["status"] == ProcessingStatus.SUCCESS.value
+        assert stored_result["success"] is True
+        assert stored_result["processing_metadata"]["operation"] == "service_validation"
+        assert stored_result["processing_metadata"]["processor_name"] == "ServiceTestProcessor"
+        assert stored_result["entities_created"] == ["service_child_001"]
+        assert stored_result["processing_duration_ms"] == 200.0
+
+    def test_add_processing_result_nonexistent_entity(self, entity_service, tenant_context):
+        """Test adding processing result to non-existent entity."""
+        from src.processors.processing_result import ProcessingResult
+        
+        # Arrange
+        nonexistent_id = str(uuid.uuid4())
+        processing_result = ProcessingResult.create_success(
+            processing_metadata={"operation": "test"}
+        )
+
+        # Act & Assert
+        with pytest.raises(ServiceError) as exc_info:
+            entity_service.add_processing_result(nonexistent_id, processing_result)
+        
+        assert exc_info.value.error_code == ErrorCode.NOT_FOUND
+
+    def test_get_processing_summary(self, entity_service, tenant_context):
+        """Test getting processing summary via service."""
+        from src.processors.processing_result import ProcessingResult
+        
+        # Arrange - Create entity with processing history
+        entity_id = entity_service.create_entity(
+            external_id="service_processing_002",
+            canonical_type="order",
+            source="test_system",
+            content={"status": "RECEIVED"},
+        )
+
+        # Add multiple processing results
+        results = [
+            ProcessingResult.create_success(processing_metadata={"processor_name": "ServiceProcessorA"}),
+            ProcessingResult.create_success(processing_metadata={"processor_name": "ServiceProcessorB"}),
+            ProcessingResult.create_failure(error_message="Service test error", can_retry=False)
+        ]
+        
+        for result in results:
+            entity_service.add_processing_result(entity_id, result)
+
+        # Act
+        summary = entity_service.get_processing_summary(entity_id)
+
+        # Assert
+        assert summary["total_processing_attempts"] == 3
+        assert summary["successful_attempts"] == 2
+        assert summary["failed_attempts"] == 1
+        assert summary["processors_involved"] == ["ServiceProcessorA", "ServiceProcessorB"]
+        assert summary["has_unrecoverable_failures"] is True
+        assert "last_processed_at" in summary
+
+    def test_get_processing_summary_nonexistent_entity(self, entity_service, tenant_context):
+        """Test getting processing summary for non-existent entity."""
+        # Arrange
+        nonexistent_id = str(uuid.uuid4())
+
+        # Act & Assert
+        with pytest.raises(ServiceError) as exc_info:
+            entity_service.get_processing_summary(nonexistent_id)
+        
+        assert exc_info.value.error_code == ErrorCode.NOT_FOUND
+
+    def test_get_processing_summary_empty_history(self, entity_service, tenant_context):
+        """Test getting processing summary for entity with no processing history."""
+        # Arrange - Create entity without processing results
+        entity_id = entity_service.create_entity(
+            external_id="service_processing_003",
+            canonical_type="order",
+            source="test_system",
+            content={"status": "RECEIVED"},
+        )
+
+        # Act
+        summary = entity_service.get_processing_summary(entity_id)
+
+        # Assert
+        assert summary["total_processing_attempts"] == 0
+        assert summary["successful_attempts"] == 0
+        assert summary["failed_attempts"] == 0
+        assert summary["processors_involved"] == []
+        assert summary["has_unrecoverable_failures"] is False
+        assert summary["last_processed_at"] is None
+
+    def test_processing_result_with_entity_data(self, entity_service, tenant_context):
+        """Test processing result with entity data fields."""
+        from src.processors.processing_result import ProcessingResult
+        
+        # Arrange - Create entity
+        entity_id = entity_service.create_entity(
+            external_id="service_processing_entity_data",
+            canonical_type="order",
+            source="test_system",
+            content={"status": "RECEIVED"},
+        )
+
+        # Create processing result with entity data
+        processing_result = ProcessingResult.create_success(
+            processing_metadata={"processor_name": "TestProcessor"}
+        )
+        processing_result.set_entity_data(
+            data={"canonical_order": {"id": "12345", "status": "processed"}},
+            metadata={"operation": "test_operation", "source": "test"}
+        )
+
+        # Act
+        result = entity_service.add_processing_result(entity_id, processing_result)
+
+        # Assert
+        assert result is True
+        
+        # Verify the processing result was stored with entity data
+        updated_entity = entity_service.get_entity(entity_id)
+        assert len(updated_entity.processing_results) == 1
+        
+        stored_result = updated_entity.processing_results[0]
+        assert stored_result["entity_data"]["canonical_order"]["id"] == "12345"
+        assert stored_result["entity_metadata"]["operation"] == "test_operation"
+        assert processing_result.has_entity_data() is True
+
+
 class TestEntityServiceErrorHandling:
     """Test error handling and edge cases."""

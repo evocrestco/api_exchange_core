@@ -427,59 +427,43 @@ class ErrorTelemetry:
 
 class CredentialError(BaseError):
     """Base exception for credential-related errors."""
-    
+
     def __init__(self, message: str = "Credential error", **kwargs):
         super().__init__(
-            message=message,
-            error_code=ErrorCode.INTEGRATION_ERROR,
-            status_code=500,
-            **kwargs
+            message=message, error_code=ErrorCode.INTEGRATION_ERROR, status_code=500, **kwargs
         )
 
 
 class CredentialNotFoundError(BaseError):
     """Raised when a requested credential is not found."""
-    
+
     def __init__(self, message: str = "Credential not found", **kwargs):
-        super().__init__(
-            message=message,
-            error_code=ErrorCode.NOT_FOUND,
-            status_code=404,
-            **kwargs
-        )
+        super().__init__(message=message, error_code=ErrorCode.NOT_FOUND, status_code=404, **kwargs)
 
 
 class CredentialExpiredError(BaseError):
     """Raised when attempting to use expired credentials."""
-    
+
     def __init__(self, message: str = "Credential has expired", **kwargs):
-        super().__init__(
-            message=message,
-            error_code=ErrorCode.EXPIRED,
-            status_code=401,
-            **kwargs
-        )
+        super().__init__(message=message, error_code=ErrorCode.EXPIRED, status_code=401, **kwargs)
 
 
 class TenantIsolationViolationError(BaseError):
     """Raised when tenant isolation is violated in credential operations."""
-    
+
     def __init__(self, message: str = "Tenant isolation violation detected", **kwargs):
         super().__init__(
-            message=message,
-            error_code=ErrorCode.PERMISSION_DENIED,
-            status_code=403,
-            **kwargs
+            message=message, error_code=ErrorCode.PERMISSION_DENIED, status_code=403, **kwargs
         )
 
 
 class TokenNotAvailableError(BaseError):
     """Raised when no valid tokens are available and cannot generate new ones."""
-    
+
     def __init__(self, message: str = "No valid tokens available", **kwargs):
         super().__init__(
             message=message,
             error_code=ErrorCode.LIMIT_EXCEEDED,
             status_code=503,  # Service Temporarily Unavailable
-            **kwargs
+            **kwargs,
         )

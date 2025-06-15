@@ -360,7 +360,7 @@ class FileOutputHandler(OutputHandler):
                 file_stats = file_path.stat()
 
                 self.logger.info(
-                    f"Message written to file successfully",
+                    "Message written to file successfully",
                     extra={
                         "file_path": str(file_path),
                         "message_id": message.message_id,
@@ -463,7 +463,7 @@ class FileOutputHandler(OutputHandler):
             _, duration_ms = self._execute_with_timing(lambda: None)
 
             self.logger.error(
-                f"Unexpected error in FileOutputHandler",
+                "Unexpected error in FileOutputHandler",
                 extra={
                     "destination": self.destination,
                     "message_id": message.message_id,

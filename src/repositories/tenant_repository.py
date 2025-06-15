@@ -59,7 +59,7 @@ class TenantRepository(BaseRepository[Tenant]):
         """
         tenant_id = self._get_current_tenant_id()
 
-        with self._session_operation("get_current_tenant", tenant_id) as session:
+        with self._session_operation("get_current_tenant", tenant_id, is_read_only=True) as session:
             tenant = session.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()
             if not tenant:
                 raise not_found("Tenant", tenant_id=tenant_id)
@@ -78,7 +78,7 @@ class TenantRepository(BaseRepository[Tenant]):
         Raises:
             RepositoryError: If no tenant exists with the given ID or there's a database error
         """
-        with self._session_operation("get_by_id", tenant_id) as session:
+        with self._session_operation("get_by_id", tenant_id, is_read_only=True) as session:
             tenant = session.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()
             if not tenant:
                 raise not_found("Tenant", tenant_id=tenant_id)

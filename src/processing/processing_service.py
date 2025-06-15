@@ -510,7 +510,7 @@ class ProcessingService:
             start_time = time.time()
 
             self.logger.info(
-                f"Processing message through processor",
+                "Processing message through processor",
                 extra={
                     "message_id": message.message_id,
                     "correlation_id": message.correlation_id,
@@ -602,7 +602,7 @@ class ProcessingService:
                 processor_result.completed_at = datetime.now(UTC)
 
             self.logger.info(
-                f"Message processing completed",
+                "Message processing completed",
                 extra={
                     "message_id": message.message_id,
                     "processor": config.processor_name,
@@ -618,7 +618,7 @@ class ProcessingService:
 
         except Exception as e:
             self.logger.error(
-                f"Message processing failed",
+                "Message processing failed",
                 extra={
                     "message_id": message.message_id,
                     "processor": config.processor_name,

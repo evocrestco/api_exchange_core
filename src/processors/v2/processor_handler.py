@@ -124,6 +124,12 @@ class ProcessorHandler:
                 error_service=self.error_service,
             )
 
+            # Note: We don't create stub entities here anymore since processors
+            # may handle their own entity creation. The entity_id will be obtained
+            # from the message.entity if it exists, or from ProcessingResult if the
+            # processor uses the new approach.
+            entity_id = getattr(message.entity, "id", None) if message.entity else None
+
             # Execute processor - let it control everything
             result = self.processor.process(message, context)
 
@@ -132,10 +138,18 @@ class ProcessorHandler:
             result.processing_duration_ms = duration_ms
             result.processor_info = self.processor.get_processor_info()
 
+            # Get entity_id from result if processor created entities
+            if result.entities_created and not entity_id:
+                entity_id = result.entities_created[0]  # Use first created entity
+
+            # Update entity with processor results if needed
+            if result.has_entity_data() and entity_id:
+                self._update_entity_with_result_data(entity_id, result, context)
+
             # Handle result
             if result.success:
                 self.logger.info(
-                    f"Processor v2 execution completed successfully",
+                    "Processor v2 execution completed successfully",
                     extra={
                         "processor_class": self.processor.__class__.__name__,
                         "message_id": message.message_id,
@@ -144,6 +158,10 @@ class ProcessorHandler:
                         "output_handlers": len(result.output_handlers),
                     },
                 )
+
+                # Record processing result to entity if entity exists
+                if entity_id:
+                    self._record_processing_result(entity_id, result)
 
                 # Process output handlers if any are configured
                 if result.output_handlers:
@@ -156,8 +174,12 @@ class ProcessorHandler:
                     self._send_to_dead_letter_queue(message, result)
                     result.status = ProcessingStatus.DEAD_LETTERED
 
+                # Record processing result to entity even on failure if entity exists
+                if entity_id:
+                    self._record_processing_result(entity_id, result)
+
                 self.logger.error(
-                    f"Processor v2 execution failed",
+                    "Processor v2 execution failed",
                     extra={
                         "processor_class": self.processor.__class__.__name__,
                         "message_id": message.message_id,
@@ -175,7 +197,7 @@ class ProcessorHandler:
             can_retry = self.processor.can_retry(e)
 
             self.logger.error(
-                f"Unexpected error in processor v2",
+                "Unexpected error in processor v2",
                 extra={
                     "processor_class": self.processor.__class__.__name__,
                     "message_id": message.message_id,
@@ -192,6 +214,11 @@ class ProcessorHandler:
                 can_retry=can_retry,
                 duration_ms=duration_ms,
             )
+
+            # Record processing result to entity even on unexpected error if entity exists
+            entity_id = getattr(message.entity, "id", None) if message.entity else None
+            if entity_id:
+                self._record_processing_result(entity_id, result)
 
             # Send to DLQ if not retryable
             if not can_retry and self.dead_letter_queue_client:
@@ -362,7 +389,7 @@ class ProcessorHandler:
 
         # Log overall output handler execution summary
         self.logger.info(
-            f"Output handler processing completed",
+            "Output handler processing completed",
             extra={
                 "processor_class": self.processor.__class__.__name__,
                 "message_id": message.message_id,
@@ -389,3 +416,162 @@ class ProcessorHandler:
             }
             for hr in handler_results
         ]
+
+    def _record_processing_result(
+        self, entity_id: str, processing_result: ProcessingResult
+    ) -> None:
+        """
+        Record processing result to entity's processing history.
+
+        Args:
+            entity_id: ID of the entity to record result for
+            processing_result: ProcessingResult to record
+        """
+        try:
+            # Get EntityService from processing_service
+            if hasattr(self.processing_service, "entity_service"):
+                entity_service = self.processing_service.entity_service
+                entity_service.add_processing_result(entity_id, processing_result)
+
+                self.logger.debug(
+                    f"Recorded processing result for entity {entity_id}",
+                    extra={
+                        "entity_id": entity_id,
+                        "processor_class": self.processor.__class__.__name__,
+                        "success": processing_result.success,
+                        "status": processing_result.status.value,
+                        "processing_duration_ms": processing_result.processing_duration_ms,
+                    },
+                )
+            else:
+                self.logger.warning(
+                    "Cannot record processing result - entity service not available",
+                    extra={
+                        "entity_id": entity_id,
+                        "processor_class": self.processor.__class__.__name__,
+                    },
+                )
+
+        except Exception as e:
+            # Don't fail the main processing if recording result fails
+            self.logger.error(
+                f"Failed to record processing result for entity {entity_id}: {str(e)}",
+                extra={
+                    "entity_id": entity_id,
+                    "processor_class": self.processor.__class__.__name__,
+                    "error": str(e),
+                },
+                exc_info=True,
+            )
+
+    def _ensure_entity_exists(self, message: Message, context: ProcessorContext) -> Optional[str]:
+        """
+        Ensure entity exists for source processors.
+
+        Creates a stub entity if one doesn't exist, returns entity_id.
+
+        Args:
+            message: Message with entity information
+            context: Processor context
+
+        Returns:
+            Entity ID if entity exists or was created, None otherwise
+        """
+        if message.entity and hasattr(message.entity, "id") and message.entity.id:
+            return message.entity.id
+
+        # For source processors, create stub entity
+        if hasattr(message.entity, "external_id") and hasattr(message.entity, "canonical_type"):
+            try:
+                entity_id = context.persist_entity(
+                    external_id=message.entity.external_id,
+                    canonical_type=message.entity.canonical_type,
+                    source=getattr(message.entity, "source", "unknown"),
+                    data={"status": "processing"},
+                    metadata={"created_by": "processor_handler", "stage": "stub"},
+                )
+
+                # Update message entity with the ID
+                message.entity.id = entity_id
+
+                self.logger.debug(
+                    "Created stub entity for source processor",
+                    extra={
+                        "entity_id": entity_id,
+                        "external_id": message.entity.external_id,
+                        "canonical_type": message.entity.canonical_type,
+                        "processor_class": self.processor.__class__.__name__,
+                    },
+                )
+
+                return entity_id
+
+            except Exception as e:
+                self.logger.error(
+                    f"Failed to create stub entity: {str(e)}",
+                    extra={
+                        "external_id": getattr(message.entity, "external_id", "unknown"),
+                        "canonical_type": getattr(message.entity, "canonical_type", "unknown"),
+                        "processor_class": self.processor.__class__.__name__,
+                        "error": str(e),
+                    },
+                    exc_info=True,
+                )
+                return None
+
+        return None
+
+    def _update_entity_with_result_data(
+        self, entity_id: str, result: ProcessingResult, context: ProcessorContext
+    ) -> None:
+        """
+        Update entity with data from ProcessingResult.
+
+        Args:
+            entity_id: ID of entity to update
+            result: ProcessingResult with entity data
+            context: Processor context
+        """
+        try:
+            # Update entity attributes with the processor result data
+            if hasattr(context.processing_service, "entity_service"):
+                entity_service = context.processing_service.entity_service
+
+                # Merge existing metadata with new metadata
+                update_attributes = result.entity_data.copy()
+                if result.entity_metadata:
+                    update_attributes.update(result.entity_metadata)
+
+                # Add processing metadata
+                update_attributes.update(
+                    {
+                        "processed_by": self.processor.__class__.__name__,
+                        "processed_at": result.completed_at.isoformat(),
+                        "processing_duration_ms": result.processing_duration_ms,
+                        "processing_status": "completed" if result.success else "failed",
+                    }
+                )
+
+                entity_service.update_entity_attributes(entity_id, update_attributes)
+
+                self.logger.debug(
+                    "Updated entity with processor result data",
+                    extra={
+                        "entity_id": entity_id,
+                        "processor_class": self.processor.__class__.__name__,
+                        "data_keys": list(result.entity_data.keys()) if result.entity_data else [],
+                        "success": result.success,
+                    },
+                )
+
+        except Exception as e:
+            # Don't fail the main processing if entity update fails
+            self.logger.error(
+                f"Failed to update entity with result data: {str(e)}",
+                extra={
+                    "entity_id": entity_id,
+                    "processor_class": self.processor.__class__.__name__,
+                    "error": str(e),
+                },
+                exc_info=True,
+            )

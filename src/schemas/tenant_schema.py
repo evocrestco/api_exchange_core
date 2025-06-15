@@ -111,31 +111,25 @@ class TokenManagementConfig(BaseModel):
     """
     Schema for token management configuration.
     """
-    
+
     refresh_buffer_minutes: int = Field(
         default=20,
         ge=5,
         le=60,
-        description="How early to refresh tokens before expiry (5-60 minutes)"
+        description="How early to refresh tokens before expiry (5-60 minutes)",
     )
     cleanup_frequency_minutes: int = Field(
-        default=20,
-        ge=5,
-        le=120,
-        description="How often to run token cleanup (5-120 minutes)"
+        default=20, ge=5, le=120, description="How often to run token cleanup (5-120 minutes)"
     )
     cleanup_age_minutes: int = Field(
         default=40,
         ge=30,
         le=180,
-        description="How old tokens must be before deletion (30-180 minutes)"
+        description="How old tokens must be before deletion (30-180 minutes)",
     )
-    
-    model_config = ConfigDict(
-        from_attributes=True,
-        extra="forbid"  # Strict validation
-    )
-    
+
+    model_config = ConfigDict(from_attributes=True, extra="forbid")  # Strict validation
+
     @field_validator("cleanup_age_minutes")
     def validate_cleanup_age(cls, v: int, info) -> int:
         """Ensure cleanup age is greater than refresh buffer."""
@@ -148,40 +142,38 @@ class TokenManagementConfig(BaseModel):
 def get_token_management_config(tenant_config: Dict[str, Any]) -> TokenManagementConfig:
     """
     Extract token management configuration from tenant config.
-    
+
     Args:
         tenant_config: Tenant configuration dictionary
-        
+
     Returns:
         TokenManagementConfig with defaults for missing values
     """
     token_config_data = tenant_config.get("token_management", {})
-    
+
     # Handle TenantConfigValue wrapper if present
     if isinstance(token_config_data, dict) and "value" in token_config_data:
         token_config_data = token_config_data["value"]
-    
+
     return TokenManagementConfig(**token_config_data)
 
 
 def set_token_management_config(
-    tenant_config: Dict[str, Any],
-    token_config: TokenManagementConfig
+    tenant_config: Dict[str, Any], token_config: TokenManagementConfig
 ) -> Dict[str, Any]:
     """
     Set token management configuration in tenant config.
-    
+
     Args:
         tenant_config: Existing tenant configuration dictionary
         token_config: New token management configuration
-        
+
     Returns:
         Updated tenant configuration dictionary
     """
     updated_config = tenant_config.copy()
     updated_config["token_management"] = TenantConfigValue(
-        value=token_config.model_dump(),
-        updated_at=datetime.now().isoformat()
+        value=token_config.model_dump(), updated_at=datetime.now().isoformat()
     )
     return updated_config
 

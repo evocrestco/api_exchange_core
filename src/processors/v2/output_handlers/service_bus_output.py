@@ -415,7 +415,7 @@ class ServiceBusOutputHandler(OutputHandler):
             _, duration_ms = self._execute_with_timing(lambda: None)
 
             self.logger.error(
-                f"Unexpected error in ServiceBusOutputHandler",
+                "Unexpected error in ServiceBusOutputHandler",
                 extra={
                     "destination": self.destination,
                     "destination_type": self.destination_type,

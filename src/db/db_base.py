@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from typing import List, Optional, Type, TypeVar
 
 from sqlalchemy import Column, DateTime, String, Text
-from sqlalchemy.dialects.postgresql import JSONB, BYTEA
+from sqlalchemy.dialects.postgresql import BYTEA, JSONB
 from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.orm import Session
 from sqlalchemy.types import TypeDecorator
@@ -54,10 +54,11 @@ class JSON(TypeDecorator):
 class EncryptedBinary(TypeDecorator):
     """
     Cross-database encrypted binary type.
-    
+
     Uses BYTEA for PostgreSQL (where pgcrypto returns bytea)
     and Text for SQLite (fallback for testing).
     """
+
     impl = Text
     cache_ok = True
 
@@ -76,7 +77,7 @@ class EncryptedBinary(TypeDecorator):
         else:
             # SQLite: ensure it's a string for TEXT column
             if isinstance(value, bytes):
-                return value.decode('utf-8', errors='ignore')
+                return value.decode("utf-8", errors="ignore")
             return value
 
     def process_result_value(self, value, dialect):

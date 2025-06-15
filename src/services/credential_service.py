@@ -6,33 +6,40 @@ proper tenant isolation, security validation, and comprehensive audit trails.
 """
 
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from src.context.service_decorators import handle_repository_errors
 from src.context.tenant_context import TenantContext, tenant_aware
 from src.db.db_credential_models import ExternalCredential
 from src.exceptions import (
-    ErrorCode, 
-    ServiceError, 
-    ValidationError,
-    CredentialError, 
-    CredentialNotFoundError,
+    CredentialError,
     CredentialExpiredError,
+    CredentialNotFoundError,
+    ErrorCode,
+    ServiceError,
     TenantIsolationViolationError,
-    TokenNotAvailableError
+    TokenNotAvailableError,
+    ValidationError,
 )
-from src.repositories.credential_repository import CredentialRepository
 from src.repositories.api_token_repository import APITokenRepository
-from src.schemas.credential_schema import CredentialRead, CredentialCreate, CredentialUpdate, CredentialFilter
-from src.services.base_service import BaseService
+from src.repositories.credential_repository import CredentialRepository
+from src.schemas.credential_schema import (
+    CredentialCreate,
+    CredentialFilter,
+    CredentialRead,
+    CredentialUpdate,
+)
 from src.services.api_token_service import APITokenService
+from src.services.base_service import BaseService
 from src.utils.logger import get_logger
 
 
-class CredentialService(BaseService[CredentialCreate, CredentialRead, CredentialUpdate, CredentialFilter]):
+class CredentialService(
+    BaseService[CredentialCreate, CredentialRead, CredentialUpdate, CredentialFilter]
+):
     """
     Service for managing external system credentials.
-    
+
     This service provides:
     - High-level credential operations with business logic
     - Comprehensive audit logging for security compliance
@@ -41,54 +48,51 @@ class CredentialService(BaseService[CredentialCreate, CredentialRead, Credential
     - Token lifecycle management
     """
 
-    def __init__(self, credential_repository: CredentialRepository, api_token_service: Optional[APITokenService] = None):
+    def __init__(
+        self,
+        credential_repository: CredentialRepository,
+        api_token_service: Optional[APITokenService] = None,
+    ):
         super().__init__(credential_repository, CredentialRead)
         self.credential_repository = credential_repository
         self.api_token_service = api_token_service
-    
 
     @tenant_aware
     @handle_repository_errors("get_credentials")
     def get_credentials(self, system_name: str) -> Dict[str, Any]:
         """
         Get decrypted credentials for a specific external system.
-        
+
         Args:
             system_name: Name of the external system
-            
+
         Returns:
             Dictionary containing decrypted credential data
-            
+
         Raises:
             CredentialNotFoundError: If credential doesn't exist
             CredentialExpiredError: If credential has expired
             ServiceError: If operation fails
         """
         tenant_id = TenantContext.get_current_tenant_id()
-        
+
         self.logger.info(
             "Credential access attempt",
             extra={
                 "tenant_id": tenant_id,
                 "system_name": system_name,
-                "operation": "get_credentials"
-            }
+                "operation": "get_credentials",
+            },
         )
-        
+
         # Get credential from repository
         credential = self.credential_repository.get_by_system_name(system_name)
         if not credential:
             self.logger.warning(
-                "Credential not found",
-                extra={
-                    "tenant_id": tenant_id,
-                    "system_name": system_name
-                }
+                "Credential not found", extra={"tenant_id": tenant_id, "system_name": system_name}
             )
-            raise CredentialNotFoundError(
-                f"No credentials found for system '{system_name}'"
-            )
-        
+            raise CredentialNotFoundError(f"No credentials found for system '{system_name}'")
+
         # Check if credential is expired
         if credential.is_expired():
             self.logger.warning(
@@ -96,13 +100,13 @@ class CredentialService(BaseService[CredentialCreate, CredentialRead, Credential
                 extra={
                     "credential_id": credential.id,
                     "system_name": system_name,
-                    "expires_at": credential.expires_at.isoformat() if credential.expires_at else None
-                }
+                    "expires_at": (
+                        credential.expires_at.isoformat() if credential.expires_at else None
+                    ),
+                },
             )
-            raise CredentialExpiredError(
-                f"Credentials for system '{system_name}' have expired"
-            )
-        
+            raise CredentialExpiredError(f"Credentials for system '{system_name}' have expired")
+
         # Check if credential is active
         if credential.is_active != "active":
             self.logger.warning(
@@ -110,13 +114,13 @@ class CredentialService(BaseService[CredentialCreate, CredentialRead, Credential
                 extra={
                     "credential_id": credential.id,
                     "system_name": system_name,
-                    "status": credential.is_active
-                }
+                    "status": credential.is_active,
+                },
             )
             raise CredentialExpiredError(
                 f"Credentials for system '{system_name}' are not active (status: {credential.is_active})"
             )
-        
+
         # Log successful access
         self.logger.info(
             "Credential access granted",
@@ -124,26 +128,23 @@ class CredentialService(BaseService[CredentialCreate, CredentialRead, Credential
                 "credential_id": credential.id,
                 "system_name": system_name,
                 "auth_type": credential.auth_type,
-                "expires_at": credential.expires_at.isoformat() if credential.expires_at else None
-            }
+                "expires_at": credential.expires_at.isoformat() if credential.expires_at else None,
+            },
         )
-        
+
         # Get decrypted credentials
         credentials = credential.get_credentials(self.credential_repository.session)
         if not credentials:
             self.logger.error(
                 "Failed to decrypt credential data",
-                extra={
-                    "credential_id": credential.id,
-                    "system_name": system_name
-                }
+                extra={"credential_id": credential.id, "system_name": system_name},
             )
             raise ServiceError(
                 message="Failed to decrypt credential data",
                 error_code=ErrorCode.INTEGRATION_ERROR,
-                details={"system_name": system_name}
+                details={"system_name": system_name},
             )
-        
+
         return credentials
 
     @tenant_aware
@@ -154,27 +155,27 @@ class CredentialService(BaseService[CredentialCreate, CredentialRead, Credential
         auth_type: str,
         credentials: Dict[str, Any],
         expires_at: Optional[datetime] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Store new credentials for an external system.
-        
+
         Args:
             system_name: Name of the external system
             auth_type: Type of authentication (e.g., 'api_token', 'oauth')
             credentials: Dictionary containing credential data to encrypt
             expires_at: Optional expiration datetime
             metadata: Optional non-sensitive metadata
-            
+
         Returns:
             ID of the created credential
-            
+
         Raises:
             ValidationError: If parameters are invalid
             ServiceError: If operation fails
         """
         tenant_id = TenantContext.get_current_tenant_id()
-        
+
         self.logger.info(
             "Storing new credentials",
             extra={
@@ -183,18 +184,18 @@ class CredentialService(BaseService[CredentialCreate, CredentialRead, Credential
                 "auth_type": auth_type,
                 "expires_at": expires_at.isoformat() if expires_at else None,
                 "has_metadata": metadata is not None,
-                "credential_keys": list(credentials.keys()) if credentials else []
-            }
+                "credential_keys": list(credentials.keys()) if credentials else [],
+            },
         )
-        
+
         # Validate system_name
         if not system_name or not isinstance(system_name, str):
             raise ValidationError(
                 message="system_name must be a non-empty string",
                 error_code=ErrorCode.INVALID_FORMAT,
-                details={"system_name": system_name}
+                details={"system_name": system_name},
             )
-        
+
         # Check if credential already exists
         existing = self.credential_repository.get_by_system_name(system_name)
         if existing:
@@ -203,36 +204,36 @@ class CredentialService(BaseService[CredentialCreate, CredentialRead, Credential
                 extra={
                     "tenant_id": tenant_id,
                     "system_name": system_name,
-                    "existing_credential_id": existing.id
-                }
+                    "existing_credential_id": existing.id,
+                },
             )
             raise ValidationError(
                 message=f"Credentials for system '{system_name}' already exist. Use update_credentials instead.",
                 error_code=ErrorCode.DUPLICATE,
-                details={"system_name": system_name}
+                details={"system_name": system_name},
             )
-        
+
         # Create new credential
         try:
             credential = self.credential_repository.create_credential(
                 system_name=system_name,
                 auth_type=auth_type,
                 credentials=credentials,
-                expires_at=expires_at
+                expires_at=expires_at,
             )
-            
+
             self.logger.info(
                 "Credentials stored successfully",
                 extra={
                     "credential_id": credential.id,
                     "tenant_id": tenant_id,
                     "system_name": system_name,
-                    "auth_type": auth_type
-                }
+                    "auth_type": auth_type,
+                },
             )
-            
+
             return credential.id
-            
+
         except Exception as e:
             self.logger.error(
                 "Failed to store credentials",
@@ -241,57 +242,52 @@ class CredentialService(BaseService[CredentialCreate, CredentialRead, Credential
                     "system_name": system_name,
                     "auth_type": auth_type,
                     "error": str(e),
-                    "error_type": type(e).__name__
-                }
+                    "error_type": type(e).__name__,
+                },
             )
             raise
 
     @tenant_aware
     @handle_repository_errors("update_credentials")
     def update_credentials(
-        self,
-        system_name: str,
-        credentials: Dict[str, Any],
-        expires_at: Optional[datetime] = None
+        self, system_name: str, credentials: Dict[str, Any], expires_at: Optional[datetime] = None
     ) -> None:
         """
         Update existing credentials for an external system.
-        
+
         Args:
             system_name: Name of the external system
             credentials: New credential data to encrypt
             expires_at: Optional new expiration datetime
-            
+
         Raises:
             CredentialNotFoundError: If credential doesn't exist
             ServiceError: If operation fails
         """
         tenant_id = TenantContext.get_current_tenant_id()
-        
+
         self.logger.info(
             "Updating credentials",
             extra={
                 "tenant_id": tenant_id,
                 "system_name": system_name,
                 "expires_at": expires_at.isoformat() if expires_at else None,
-                "credential_keys": list(credentials.keys()) if credentials else []
-            }
+                "credential_keys": list(credentials.keys()) if credentials else [],
+            },
         )
-        
+
         # Update credential
         credential = self.credential_repository.update_credentials(
-            system_name=system_name,
-            credentials=credentials,
-            expires_at=expires_at
+            system_name=system_name, credentials=credentials, expires_at=expires_at
         )
-        
+
         self.logger.info(
             "Credentials updated successfully",
             extra={
                 "credential_id": credential.id,
                 "tenant_id": tenant_id,
-                "system_name": system_name
-            }
+                "system_name": system_name,
+            },
         )
 
     @tenant_aware
@@ -299,68 +295,53 @@ class CredentialService(BaseService[CredentialCreate, CredentialRead, Credential
     def delete_credentials(self, system_name: str) -> bool:
         """
         Delete credentials for an external system.
-        
+
         Args:
             system_name: Name of the external system
-            
+
         Returns:
             True if credential was deleted, False if not found
-            
+
         Raises:
             ServiceError: If operation fails
         """
         tenant_id = TenantContext.get_current_tenant_id()
-        
+
         self.logger.info(
-            "Deleting credentials",
-            extra={
-                "tenant_id": tenant_id,
-                "system_name": system_name
-            }
+            "Deleting credentials", extra={"tenant_id": tenant_id, "system_name": system_name}
         )
-        
+
         deleted = self.credential_repository.delete_credential(system_name)
-        
+
         if deleted:
             self.logger.info(
                 "Credentials deleted successfully",
-                extra={
-                    "tenant_id": tenant_id,
-                    "system_name": system_name
-                }
+                extra={"tenant_id": tenant_id, "system_name": system_name},
             )
         else:
             self.logger.debug(
                 "No credentials found to delete",
-                extra={
-                    "tenant_id": tenant_id,
-                    "system_name": system_name
-                }
+                extra={"tenant_id": tenant_id, "system_name": system_name},
             )
-        
+
         return deleted
 
     @tenant_aware
-    def store_access_token(
-        self,
-        system_name: str,
-        access_token: str,
-        expires_at: datetime
-    ) -> str:
+    def store_access_token(self, system_name: str, access_token: str, expires_at: datetime) -> str:
         """
         Store an access token for an external system using the API token management system.
-        
+
         This method provides compatibility with clients expecting token storage but delegates
         to the serverless-native API token management system.
-        
+
         Args:
             system_name: Name of the external system (e.g., "api_provider_a")
             access_token: The access token to store
             expires_at: When the token expires
-            
+
         Returns:
             Token ID
-            
+
         Raises:
             ServiceError: If API token service not configured or operation fails
         """
@@ -368,20 +349,20 @@ class CredentialService(BaseService[CredentialCreate, CredentialRead, Credential
             raise ServiceError(
                 message="API token management not configured for this credential service",
                 error_code=ErrorCode.CONFIGURATION_ERROR,
-                details={"system_name": system_name}
+                details={"system_name": system_name},
             )
-        
+
         tenant_id = TenantContext.get_current_tenant_id()
-        
+
         self.logger.info(
             "Storing access token via API token service",
             extra={
                 "tenant_id": tenant_id,
                 "system_name": system_name,
-                "expires_at": expires_at.isoformat()
-            }
+                "expires_at": expires_at.isoformat(),
+            },
         )
-        
+
         try:
             token_id = self.api_token_service.store_token(
                 token=access_token,
@@ -389,21 +370,17 @@ class CredentialService(BaseService[CredentialCreate, CredentialRead, Credential
                 generation_context={
                     "source": "credential_service",
                     "system_name": system_name,
-                    "stored_at": datetime.utcnow().isoformat()
-                }
+                    "stored_at": datetime.utcnow().isoformat(),
+                },
             )
-            
+
             self.logger.info(
                 "Access token stored successfully",
-                extra={
-                    "tenant_id": tenant_id,
-                    "system_name": system_name,
-                    "token_id": token_id
-                }
+                extra={"tenant_id": tenant_id, "system_name": system_name, "token_id": token_id},
             )
-            
+
             return token_id
-            
+
         except Exception as e:
             self.logger.error(
                 "Failed to store access token",
@@ -411,38 +388,33 @@ class CredentialService(BaseService[CredentialCreate, CredentialRead, Credential
                     "tenant_id": tenant_id,
                     "system_name": system_name,
                     "error": str(e),
-                    "error_type": type(e).__name__
-                }
+                    "error_type": type(e).__name__,
+                },
             )
             raise ServiceError(
                 message=f"Failed to store access token for {system_name}",
                 error_code=ErrorCode.INTEGRATION_ERROR,
-                details={
-                    "system_name": system_name,
-                    "error": str(e)
-                },
-                cause=e
+                details={"system_name": system_name, "error": str(e)},
+                cause=e,
             ) from e
 
     @tenant_aware
     def get_valid_access_token(
-        self,
-        system_name: str,
-        buffer_minutes: int = 20
+        self, system_name: str, buffer_minutes: int = 20
     ) -> Optional[Dict[str, Any]]:
         """
         Get a valid access token for an external system.
-        
+
         This method provides compatibility with clients expecting token retrieval but delegates
         to the serverless-native API token management system.
-        
+
         Args:
             system_name: Name of the external system (e.g., "api_provider_a")
             buffer_minutes: Consider tokens invalid if they expire within this many minutes
-            
+
         Returns:
             Dictionary with access_token and expires_at keys, or None if no valid token
-            
+
         Raises:
             ServiceError: If API token service not configured or operation fails
         """
@@ -450,59 +422,53 @@ class CredentialService(BaseService[CredentialCreate, CredentialRead, Credential
             raise ServiceError(
                 message="API token management not configured for this credential service",
                 error_code=ErrorCode.CONFIGURATION_ERROR,
-                details={"system_name": system_name}
+                details={"system_name": system_name},
             )
-        
+
         tenant_id = TenantContext.get_current_tenant_id()
-        
+
         self.logger.debug(
             "Retrieving valid access token via API token service",
             extra={
                 "tenant_id": tenant_id,
                 "system_name": system_name,
-                "buffer_minutes": buffer_minutes
-            }
+                "buffer_minutes": buffer_minutes,
+            },
         )
-        
+
         try:
             result = self.api_token_service.get_valid_token(
                 operation=f"get_access_token_{system_name}"
             )
-            
+
             if not result:
                 self.logger.debug(
                     "No valid access token available",
-                    extra={
-                        "tenant_id": tenant_id,
-                        "system_name": system_name
-                    }
+                    extra={"tenant_id": tenant_id, "system_name": system_name},
                 )
                 return None
-            
+
             token_value, token_id = result
-            
+
             # Get token details to check expiration with buffer
             stats = self.api_token_service.get_token_statistics()
-            
+
             # Note: This is a simplified implementation. In a full implementation,
             # we would need to check the specific token's expiration time against the buffer.
             # For now, we trust that the API token service returned a valid token.
-            
+
             # Return in the format expected by external clients
             return {
                 "access_token": token_value,
                 "expires_at": datetime.utcnow() + timedelta(hours=1),  # Approximate
-                "token_id": token_id
+                "token_id": token_id,
             }
-            
+
         except TokenNotAvailableError:
             # This is expected when no tokens exist and no generator is configured
             self.logger.debug(
                 "No valid access tokens available",
-                extra={
-                    "tenant_id": tenant_id,
-                    "system_name": system_name
-                }
+                extra={"tenant_id": tenant_id, "system_name": system_name},
             )
             return None
         except Exception as e:
@@ -512,16 +478,12 @@ class CredentialService(BaseService[CredentialCreate, CredentialRead, Credential
                     "tenant_id": tenant_id,
                     "system_name": system_name,
                     "error": str(e),
-                    "error_type": type(e).__name__
-                }
+                    "error_type": type(e).__name__,
+                },
             )
             raise ServiceError(
                 message=f"Failed to retrieve access token for {system_name}",
                 error_code=ErrorCode.INTEGRATION_ERROR,
-                details={
-                    "system_name": system_name,
-                    "error": str(e)
-                },
-                cause=e
+                details={"system_name": system_name, "error": str(e)},
+                cause=e,
             ) from e
-

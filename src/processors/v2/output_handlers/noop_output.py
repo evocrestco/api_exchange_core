@@ -79,7 +79,7 @@ class NoOpOutputHandler(OutputHandler):
         def _execute_noop():
             # Log the no-op operation for debugging/auditing
             self.logger.debug(
-                f"No-op output handler executed - no downstream routing",
+                "No-op output handler executed - no downstream routing",
                 extra={
                     "handler_name": self._handler_name,
                     "destination": self.destination,

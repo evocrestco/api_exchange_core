@@ -158,8 +158,19 @@ class ProcessorContext:
         """
         Persist entity data and return entity_id.
 
+        DEPRECATED: This method is deprecated. Instead, processors should return
+        entity data in ProcessingResult using result.set_entity_data(). The framework
+        will handle entity persistence automatically.
+
         This is how processors save data without knowing about EntityService details.
         """
+        import warnings
+
+        warnings.warn(
+            "ProcessorContext.persist_entity() is deprecated. Use ProcessingResult.set_entity_data() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         # Create default config for v2 processors
         from src.processing.processor_config import ProcessorConfig
 

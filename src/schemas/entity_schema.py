@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -40,6 +40,10 @@ class EntityUpdate(BaseModel):
 
 class EntityRead(EntityBase, IdMixin, TimestampMixin):
     """Schema for reading entity data."""
+
+    processing_results: List[Dict[str, Any]] = Field(
+        default_factory=list, description="Processing history for the entity"
+    )
 
     model_config = {"from_attributes": True}
 

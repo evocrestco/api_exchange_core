@@ -156,7 +156,9 @@ class BaseRepository(Generic[T]):
             )
 
     @contextmanager
-    def _session_operation(self, operation_name: str, entity_id: Optional[str] = None):
+    def _session_operation(
+        self, operation_name: str, entity_id: Optional[str] = None, is_read_only: bool = False
+    ):
         """
         Context manager for operations on existing session with error handling.
 
@@ -166,6 +168,7 @@ class BaseRepository(Generic[T]):
         Args:
             operation_name: Name of the operation for error reporting
             entity_id: Optional ID of the entity being operated on
+            is_read_only: If True, skip flush to avoid transaction conflicts on read operations
 
         Yields:
             The existing session
@@ -176,8 +179,10 @@ class BaseRepository(Generic[T]):
         try:
             yield self.session
             # NOTE: We don't commit here - that's handled by the service layer
-            # We only flush to catch constraint violations early
-            self.session.flush()
+            # Only flush for write operations to catch constraint violations early
+            # Read operations don't need flush and it can cause transaction conflicts
+            if not is_read_only:
+                self.session.flush()
         except Exception as e:
             # NOTE: We don't rollback here - that's handled by the service layer
             self._handle_db_error(e, operation_name, entity_id)

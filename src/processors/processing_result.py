@@ -84,6 +84,15 @@ class ProcessingResult(BaseModel):
         default_factory=list, description="IDs of entities updated during processing"
     )
 
+    # Entity data for source processors
+    entity_data: Optional[Dict[str, Any]] = Field(
+        default=None, description="Entity data to be persisted (for source processors)"
+    )
+
+    entity_metadata: Optional[Dict[str, Any]] = Field(
+        default=None, description="Entity metadata for persistence (for source processors)"
+    )
+
     # Timing information
     processing_duration_ms: Optional[float] = Field(
         default=None, description="Processing duration in milliseconds"
@@ -236,6 +245,17 @@ class ProcessingResult(BaseModel):
     def has_entities_changed(self) -> bool:
         """Check if any entities were created or updated."""
         return bool(self.entities_created or self.entities_updated)
+
+    def set_entity_data(
+        self, data: Dict[str, Any], metadata: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """Set entity data for source processors."""
+        self.entity_data = data
+        self.entity_metadata = metadata or {}
+
+    def has_entity_data(self) -> bool:
+        """Check if entity data is available for persistence."""
+        return self.entity_data is not None
 
     def get_summary(self) -> Dict[str, Any]:
         """
