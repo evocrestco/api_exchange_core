@@ -93,15 +93,10 @@ class TestServiceBusOutputHandler:
             content_hash=calculate_entity_hash({"test": "servicebus"})
         )
         
-        return Message(
-            message_id=f"sb-msg-{uuid.uuid4().hex[:8]}",
-            correlation_id=f"sb-corr-{uuid.uuid4().hex[:8]}",
-            created_at=datetime.now(UTC),
-            message_type=MessageType.ENTITY_PROCESSING,
-            entity=entity,  # Use entity directly in v2 format
+        return Message.from_entity(
+            entity=entity,
             payload={"service": "bus", "value": 456},
-            retry_count=0,
-            max_retries=3
+            correlation_id=f"sb-corr-{uuid.uuid4().hex[:8]}"
         )
     
     @pytest.fixture
@@ -289,10 +284,10 @@ class TestServiceBusOutputHandler:
             # Parse and verify message body
             message_body = json.loads(call_args[1]["body"])
             
-            # Verify message metadata
-            assert message_body["message_metadata"]["message_id"] == mock_message.message_id
-            assert message_body["message_metadata"]["correlation_id"] == mock_message.correlation_id
-            assert message_body["message_metadata"]["message_type"] == "entity_processing"
+            # Verify simplified message structure (new format)
+            assert message_body["message_id"] == mock_message.message_id
+            assert message_body["correlation_id"] == mock_message.correlation_id
+            assert message_body["message_type"] == "entity_processing"
             
             # Verify entity reference
             assert message_body["entity_reference"]["external_id"] == mock_message.entity_reference.external_id

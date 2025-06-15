@@ -192,14 +192,11 @@ class FileOutputHandler(OutputHandler):
         """
         # Prepare data structure
         output_data = {
-            "message_metadata": {
-                "message_id": message.message_id,
-                "correlation_id": message.correlation_id,
-                "created_at": message.created_at.isoformat(),
-                "message_type": message.message_type.value,
-                "retry_count": message.retry_count,
-                "max_retries": message.max_retries,
-            },
+            "message_id": message.message_id,
+            "correlation_id": message.correlation_id,
+            "created_at": message.created_at.isoformat(),
+            "message_type": message.message_type.value,
+            "retry_count": message.retry_count,
             "entity_reference": {
                 "id": message.entity_reference.id,
                 "external_id": message.entity_reference.external_id,

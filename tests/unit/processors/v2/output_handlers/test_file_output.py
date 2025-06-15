@@ -230,16 +230,16 @@ class TestFileOutputHandler:
         data = json.loads(content)
         
         # Verify structure
-        assert "message_metadata" in data
+        assert "message_id" in data
         assert "entity_reference" in data
         assert "payload" in data
-        assert "processing_result" in data
+        # processing_result not included in simplified format
         assert "file_output_metadata" in data  # include_timestamp=True
         
         # Verify message metadata
-        assert data["message_metadata"]["message_id"] == message.message_id
-        assert data["message_metadata"]["correlation_id"] == message.correlation_id
-        assert data["message_metadata"]["message_type"] == "entity_processing"
+        assert data["message_id"] == message.message_id
+        assert data["correlation_id"] == message.correlation_id
+        assert data["message_type"] == "entity_processing"
         
         # Verify entity reference
         assert data["entity_reference"]["external_id"] == message.entity_reference.external_id
@@ -275,7 +275,7 @@ class TestFileOutputHandler:
         
         # Should not be pretty-printed (no newlines except at end when written)
         assert "\n" not in content
-        assert "message_metadata" in data
+        assert "message_id" in data
     
     def test_prepare_file_content_text_format(self, text_handler, create_test_message):
         """Test content preparation for text format."""
@@ -408,7 +408,7 @@ class TestFileOutputHandler:
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
             data = json.loads(content)
-            assert data["message_metadata"]["message_id"] == message.message_id
+            assert data["message_id"] == message.message_id
             assert data["processing_result"]["entities_created"] == ["entity-123"]
     
     def test_handle_jsonl_append_mode(self, jsonl_handler, create_test_message):
@@ -457,10 +457,9 @@ class TestFileOutputHandler:
         data1 = json.loads(lines[0].strip())
         data2 = json.loads(lines[1].strip())
         
-        assert data1["message_metadata"]["message_id"] == message1.message_id
-        assert data2["message_metadata"]["message_id"] == message2.message_id
-        assert data1["processing_result"]["entities_created"] == ["entity-1"]
-        assert data2["processing_result"]["entities_created"] == ["entity-2"]
+        assert data1["message_id"] == message1.message_id
+        assert data2["message_id"] == message2.message_id
+        # processing_result not included in simplified format
     
     def test_handle_text_format_with_complex_path(self, text_handler, create_test_entity, create_test_message):
         """Test text format with complex file path pattern."""

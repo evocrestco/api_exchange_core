@@ -219,12 +219,11 @@ class TestQueueOutputHandler:
         # Parse JSON to verify structure
         message_data = json.loads(message_content)
         
-        # Verify message metadata
-        assert message_data["message_metadata"]["message_id"] == test_message.message_id
-        assert message_data["message_metadata"]["correlation_id"] == test_message.correlation_id
-        assert message_data["message_metadata"]["message_type"] == "entity_processing"
-        assert message_data["message_metadata"]["retry_count"] == 0
-        assert message_data["message_metadata"]["max_retries"] == 3
+        # Verify simplified message structure (new format)
+        assert message_data["message_id"] == test_message.message_id
+        assert message_data["correlation_id"] == test_message.correlation_id
+        assert message_data["message_type"] == "entity_processing"
+        assert message_data["retry_count"] == 0
         
         # Verify entity reference
         assert message_data["entity_reference"]["id"] == test_message.entity_reference.id
@@ -236,17 +235,14 @@ class TestQueueOutputHandler:
         # Verify payload
         assert message_data["payload"] == {"data": "test", "value": 123}
         
-        # Verify processing result
-        assert message_data["processing_result"]["status"] == "success"
-        assert message_data["processing_result"]["success"] is True
-        assert message_data["processing_result"]["entities_created"] == ["entity-123", "entity-456"]
-        assert message_data["processing_result"]["entities_updated"] == ["entity-789"]
-        assert message_data["processing_result"]["processing_metadata"]["score"] == 95
-        assert message_data["processing_result"]["processor_info"]["name"] == "TestProcessor"
+        # Verify metadata
+        assert message_data["metadata"] == test_message.metadata
         
-        # Verify routing metadata
-        assert message_data["routing_metadata"]["source_handler"] == "QueueOutputHandler"
-        assert message_data["routing_metadata"]["target_queue"] == "test-output-queue"
+        # Verify created_at timestamp
+        assert "created_at" in message_data
+        
+        # Note: processing_result and routing_metadata are NOT included in the new simplified format
+        # Processing results are now stored in Entity.processing_results, not in transport messages
     
     def test_handle_success_with_real_queue(self, handler, test_message, test_processing_result, cleanup_queues):
         """Test successful message handling with real Azure Storage Queue."""

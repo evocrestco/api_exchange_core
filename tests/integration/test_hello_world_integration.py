@@ -122,8 +122,8 @@ def test_message():
         content_hash=calculate_entity_hash(payload)
     )
     
-    # Create message with entity
-    return Message.create_entity_message(
+    # Create message with entity reference
+    return Message.from_entity(
         entity=entity,
         payload=payload
     )
@@ -222,7 +222,7 @@ class TestHelloWorldIntegration:
                 content_hash=calculate_entity_hash(payload)
             )
             
-            message = Message.create_entity_message(entity=entity, payload=payload)
+            message = Message.from_entity(entity=entity, payload=payload)
             
             # Execute via ProcessorHandler - it will handle tenant context from TENANT_ID env var
             result = hello_world_processor_handler.execute(message)
@@ -295,7 +295,7 @@ class TestHelloWorldIntegration:
             content_hash=calculate_entity_hash(payload)
         )
         
-        message = Message.create_entity_message(entity=entity, payload=payload)
+        message = Message.from_entity(entity=entity, payload=payload)
         
         # Execute via ProcessorHandler - it will handle tenant context from TENANT_ID env var
         result = hello_world_processor_handler.execute(message)
@@ -338,7 +338,7 @@ class TestHelloWorldIntegration:
             content_hash=calculate_entity_hash(payload)
         )
         
-        message = Message.create_entity_message(entity=entity, payload=payload)
+        message = Message.from_entity(entity=entity, payload=payload)
         
         # Execute processor to create entity
         result = hello_world_processor_handler.execute(message)
@@ -447,7 +447,7 @@ class TestHelloWorldIntegration:
                 content_hash=calculate_entity_hash(payload)
             )
             
-            message = Message.create_entity_message(entity=entity, payload=payload)
+            message = Message.from_entity(entity=entity, payload=payload)
             
             # Execute processor with tenant context
             result = hello_world_processor_handler.execute(message)
@@ -561,7 +561,7 @@ class TestHelloWorldIntegration:
             content_hash=calculate_entity_hash(payload)
         )
         
-        message = Message.create_entity_message(entity=entity, payload=payload)
+        message = Message.from_entity(entity=entity, payload=payload)
         
         # Execute processor with state tracking
         result = processor_with_state.execute(message)
@@ -635,7 +635,7 @@ class TestHelloWorldIntegration:
             content_hash=calculate_entity_hash(payload)
         )
         
-        message1 = Message.create_entity_message(entity=entity1, payload=payload)
+        message1 = Message.from_entity(entity=entity1, payload=payload)
         
         # Execute first message
         result1 = hello_world_processor_handler.execute(message1)
@@ -651,7 +651,7 @@ class TestHelloWorldIntegration:
             content_hash=calculate_entity_hash(payload)  # Same content hash
         )
         
-        message2 = Message.create_entity_message(entity=entity2, payload=payload)
+        message2 = Message.from_entity(entity=entity2, payload=payload)
         
         # Execute second message
         result2 = hello_world_processor_handler.execute(message2)
@@ -743,7 +743,7 @@ class TestHelloWorldIntegration:
             content_hash=calculate_entity_hash(payload)
         )
         
-        message = Message.create_entity_message(entity=entity, payload=payload)
+        message = Message.from_entity(entity=entity, payload=payload)
         
         # Execute failing processor
         result = failing_processor_handler.execute(message)
@@ -818,7 +818,7 @@ class TestHelloWorldIntegration:
             content_hash=calculate_entity_hash(payload)
         )
         
-        message = Message.create_entity_message(entity=entity, payload=payload)
+        message = Message.from_entity(entity=entity, payload=payload)
         
         # Execute retryable failing processor
         result = retryable_processor_handler.execute(message)
@@ -880,7 +880,7 @@ class TestHelloWorldIntegration:
             content_hash=calculate_entity_hash(payload)
         )
         
-        message = Message.create_entity_message(entity=entity, payload=payload)
+        message = Message.from_entity(entity=entity, payload=payload)
         
         # Execute processor with invalid message
         result = validation_processor_handler.execute(message)
@@ -989,7 +989,7 @@ class TestHelloWorldIntegration:
             content_hash=calculate_entity_hash(payload)
         )
         
-        message = Message.create_entity_message(entity=entity, payload=payload)
+        message = Message.from_entity(entity=entity, payload=payload)
         
         # Verify output queue is initially empty
         output_queue_verifier.assert_output_queue_empty()
@@ -1038,25 +1038,25 @@ class TestHelloWorldIntegration:
         # THE KEY TEST: Verify message actually made it to the output queue
         output_message = output_queue_verifier.verify_output_message(external_id, timeout_seconds=5)
         
-        # Verify output message structure
+        # Verify output message structure (simplified format - processing results stored in Entity.processing_results)
+        assert "message_id" in output_message
+        assert "correlation_id" in output_message
         assert "entity_reference" in output_message
-        assert "processing_result" in output_message
-        assert "routing_metadata" in output_message
+        assert "payload" in output_message
+        assert "metadata" in output_message
+        assert "created_at" in output_message
+        assert "retry_count" in output_message
         
         # Verify entity information in output message
         assert output_message["entity_reference"]["external_id"] == external_id
         assert output_message["entity_reference"]["canonical_type"] == "greeting"
         assert output_message["entity_reference"]["source"] == "hello_world_generator"
         
-        # Verify result information in output message
-        assert output_message["processing_result"]["status"] == "success"
-        assert output_message["processing_result"]["success"] is True
-        assert len(output_message["processing_result"]["entities_created"]) == 1
-        assert output_message["processing_result"]["entities_created"][0] == entity_id
-        
-        # Verify routing metadata in output message
-        assert output_message["routing_metadata"]["source_handler"] == "QueueOutputHandler"
-        assert output_message["routing_metadata"]["target_queue"] == "test-output-queue"
+        # Verify that payload contains the original data (processed data is stored in Entity.processing_results)
+        assert "test_type" in output_message["payload"]
+        assert output_message["payload"]["test_type"] == "queue_output_integration"
+        assert "message" in output_message["payload"]
+        assert output_message["payload"]["message"] == "Hello, Queue Output Test!"
         
         # Verify exactly one message in queue  
         assert output_queue_verifier.get_message_count() == 1
@@ -1153,7 +1153,7 @@ class TestHelloWorldIntegration:
             content_hash=calculate_entity_hash(payload)
         )
         
-        message = Message.create_entity_message(entity=entity, payload=payload)
+        message = Message.from_entity(entity=entity, payload=payload)
         
         # Execute processor
         result = processor_handler.execute(message)

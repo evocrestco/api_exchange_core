@@ -218,19 +218,15 @@ class QueueOutputHandler(OutputHandler):
         """
         Prepare message content for queue delivery.
 
-        Creates a structured message containing both the original message data
-        and the processing result for downstream consumers.
+        Creates a simple message that Azure Functions can easily consume.
+        Processing results are stored in Entity.processing_results, not in transport messages.
         """
         try:
+            # Simple message structure - just transport the essential data
             queue_message = {
-                "message_metadata": {
-                    "message_id": message.message_id,
-                    "correlation_id": message.correlation_id,
-                    "created_at": message.created_at.isoformat(),
-                    "message_type": message.message_type.value,
-                    "retry_count": message.retry_count,
-                    "max_retries": message.max_retries,
-                },
+                "message_id": message.message_id,
+                "correlation_id": message.correlation_id,
+                "message_type": message.message_type.value,
                 "entity_reference": {
                     "id": message.entity_reference.id,
                     "external_id": message.entity_reference.external_id,
@@ -240,21 +236,9 @@ class QueueOutputHandler(OutputHandler):
                     "tenant_id": message.entity_reference.tenant_id,
                 },
                 "payload": message.payload,
-                "processing_result": {
-                    "status": result.status.value,
-                    "success": result.success,
-                    "entities_created": result.entities_created,
-                    "entities_updated": result.entities_updated,
-                    "processing_metadata": result.processing_metadata,
-                    "processor_info": result.processor_info,
-                    "processing_duration_ms": result.processing_duration_ms,
-                    "completed_at": result.completed_at.isoformat(),
-                },
-                "routing_metadata": {
-                    "source_handler": self._handler_name,
-                    "target_queue": self.destination,
-                    "sent_at": message.created_at.isoformat(),
-                },
+                "metadata": message.metadata,
+                "created_at": message.created_at.isoformat(),
+                "retry_count": message.retry_count,
             }
 
             return json.dumps(queue_message, default=str)

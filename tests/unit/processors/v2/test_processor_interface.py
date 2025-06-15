@@ -110,34 +110,36 @@ class TestDefaultMethodImplementations:
             entity = processor_context.get_entity(entity_id)
             
             # Create message with real entity
-            return Message.create_entity_message(
+            return Message.from_entity(
                 entity=entity,
                 payload={"test": "data"}
             )
     
-    def test_validate_message_default_accepts_all(self, processor, sample_message):
+    def test_validate_message_default_accepts_all(self, processor, sample_message, processor_context):
         """Default validate_message accepts all messages."""
         assert processor.validate_message(sample_message) is True
         
-        # Test with various message types using the same entity but different payloads
-        entity = sample_message.entity
+        # Test with various message types using the same entity ID but different payloads
+        entity_id = sample_message.entity_reference.id
+        entity = processor_context.get_entity(entity_id)
         
-        empty_message = Message.create_entity_message(entity=entity, payload={})
+        empty_message = Message.from_entity(entity=entity, payload={})
         assert processor.validate_message(empty_message) is True
         
-        complex_message = Message.create_entity_message(
+        complex_message = Message.from_entity(
             entity=entity,
             payload={"nested": {"data": [1, 2, 3]}, "status": "complex"}
         )
         assert processor.validate_message(complex_message) is True
     
-    def test_validate_message_custom_implementation(self, sample_message):
+    def test_validate_message_custom_implementation(self, sample_message, processor_context):
         """Custom validate_message can reject messages."""
         processor = ValidatingProcessor()
-        entity = sample_message.entity
+        entity_id = sample_message.entity_reference.id
+        entity = processor_context.get_entity(entity_id)
         
-        valid_message = Message.create_entity_message(entity=entity, payload={"valid": True})
-        invalid_message = Message.create_entity_message(entity=entity, payload={"valid": False})
+        valid_message = Message.from_entity(entity=entity, payload={"valid": True})
+        invalid_message = Message.from_entity(entity=entity, payload={"valid": False})
         
         assert processor.validate_message(valid_message) is True
         assert processor.validate_message(invalid_message) is False
@@ -201,7 +203,7 @@ class TestProcessorContextIntegration:
             entity = processor_context.get_entity(entity_id)
             
             # Create message with real entity
-            return Message.create_entity_message(
+            return Message.from_entity(
                 entity=entity,
                 payload={
                     "order_id": "test-order-123",
@@ -291,7 +293,7 @@ class TestMessageProcessingWorkflow:
             entity = processor_context.get_entity(entity_id)
             
             # Create message with test payload
-            message = Message.create_entity_message(entity=entity, payload=message_data)
+            message = Message.from_entity(entity=entity, payload=message_data)
             
             is_valid = processor.validate_message(message)
             assert is_valid is expected_valid

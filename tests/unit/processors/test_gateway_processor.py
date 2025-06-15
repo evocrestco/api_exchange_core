@@ -65,16 +65,15 @@ class TestGatewayProcessor:
             version=1
         )
         
-        return Message(
-            message_id=str(uuid4()),
-            message_type=MessageType.ENTITY_PROCESSING,
+        return Message.from_entity(
             entity=entity,
             payload={
                 "order_id": "TEST-001",
                 "amount": 1500,
                 "shipping": "express",
                 "items": ["item1", "item2"]
-            }
+            },
+            correlation_id=str(uuid4())
         )
     
     @pytest.fixture
@@ -204,15 +203,14 @@ class TestGatewayProcessor:
             version=1
         )
         
-        message = Message(
-            message_id=str(uuid4()),
-            message_type=MessageType.ENTITY_PROCESSING,
+        message = Message.from_entity(
             entity=entity,
             payload={
                 "customer": {"type": "premium"},
                 "items": ["special", "regular"],
                 "value": 1000
-            }
+            },
+            correlation_id=str(uuid4())
         )
         
         processor = GatewayProcessor(config, queue_config)

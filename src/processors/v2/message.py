@@ -1,11 +1,10 @@
 """
 Message classes v2 for processor pipeline communication.
 
-Key improvements from v1:
-- Takes Entity directly instead of EntityReference
-- Eliminates circular dependencies
-- EntityReference created on-demand from Entity
-- Cleaner entity creation sequence
+Simplified message structure for queue transport:
+- Uses EntityReference instead of full Entity for lightweight transport
+- Removes processing-specific fields (moved to Entity.processing_results)
+- Simplified structure works better with Azure Functions queue triggers
 """
 
 from datetime import datetime
@@ -13,7 +12,7 @@ from enum import Enum
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 from src.schemas.entity_schema import EntityReference
 
@@ -29,46 +28,36 @@ class MessageType(str, Enum):
 
 
 class Message(BaseModel):
-    """Message format v2 - takes Entity directly."""
+    """Lightweight message for queue transport between processors."""
 
+    # Message identification
     message_id: str = Field(default_factory=lambda: str(uuid4()))
     correlation_id: str = Field(default_factory=lambda: str(uuid4()))
     message_type: MessageType = Field(default=MessageType.ENTITY_PROCESSING)
 
-    # Entity - direct reference to the actual entity
-    entity: Any = Field()
+    # Entity reference (not full entity) - for lightweight transport
+    entity_reference: EntityReference = Field()
 
+    # The actual data being processed
     payload: Dict[str, Any] = Field()
+
+    # Optional metadata for routing/processing hints
     metadata: Dict[str, Any] = Field(default_factory=dict)
-    routing_info: Dict[str, Any] = Field(default_factory=dict)
 
+    # Timestamps
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    processed_at: Optional[datetime] = Field(default=None)
 
+    # Simple retry tracking
     retry_count: int = Field(default=0)
-    max_retries: int = Field(default=3)
-
-    @property
-    def entity_reference(self) -> EntityReference:
-        """Get EntityReference from the entity on-demand."""
-        return EntityReference.from_entity(self.entity)
-
-    def mark_processed(self) -> None:
-        """Mark the message as processed."""
-        self.processed_at = datetime.utcnow()
 
     def increment_retry(self) -> None:
         """Increment retry count."""
         self.retry_count += 1
 
-    def can_retry(self) -> bool:
-        """Check if message can be retried."""
-        return self.retry_count < self.max_retries
-
     @classmethod
     def create_entity_message(
         cls,
-        entity,
+        entity_reference: EntityReference,
         payload: Dict[str, Any],
         correlation_id: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
@@ -76,9 +65,24 @@ class Message(BaseModel):
         """Create message for entity processing."""
         return cls(
             correlation_id=correlation_id or str(uuid4()),
-            entity=entity,
+            entity_reference=entity_reference,
             payload=payload,
             metadata=metadata or {},
         )
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    @classmethod
+    def from_entity(
+        cls,
+        entity: Any,
+        payload: Dict[str, Any],
+        correlation_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> "Message":
+        """Create message from an entity object (backward compatibility)."""
+        entity_ref = EntityReference.from_entity(entity)
+        return cls.create_entity_message(
+            entity_reference=entity_ref,
+            payload=payload,
+            correlation_id=correlation_id,
+            metadata=metadata,
+        )

@@ -44,15 +44,10 @@ def test_entity():
 @pytest.fixture
 def test_message(test_entity):
     """Create a test message with entity."""
-    return Message(
-        message_id=f"msg-{uuid.uuid4().hex[:8]}",
-        correlation_id=f"corr-{uuid.uuid4().hex[:8]}",
-        created_at=datetime.now(UTC),
-        message_type=MessageType.ENTITY_PROCESSING,
+    return Message.from_entity(
         entity=test_entity,
         payload={"data": "test", "value": 123},
-        retry_count=0,
-        max_retries=3
+        correlation_id=f"corr-{uuid.uuid4().hex[:8]}"
     )
 
 
@@ -93,15 +88,11 @@ def create_test_message(create_test_entity):
         if entity is None:
             entity = create_test_entity()
         
-        return Message(
-            message_id=kwargs.get('message_id', f"msg-{uuid.uuid4().hex[:8]}"),
-            correlation_id=kwargs.get('correlation_id', f"corr-{uuid.uuid4().hex[:8]}"),
-            created_at=kwargs.get('created_at', datetime.now(UTC)),
-            message_type=kwargs.get('message_type', MessageType.ENTITY_PROCESSING),
+        return Message.from_entity(
             entity=entity,
             payload=payload or {"data": "test", "value": 123},
-            retry_count=kwargs.get('retry_count', 0),
-            max_retries=kwargs.get('max_retries', 3)
+            correlation_id=kwargs.get('correlation_id', f"corr-{uuid.uuid4().hex[:8]}"),
+            metadata=kwargs.get('metadata', {})
         )
     return _create
 

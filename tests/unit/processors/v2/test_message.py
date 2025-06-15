@@ -40,7 +40,7 @@ class TestMessageCreation:
             
             # Create message with real entity
             payload = {"test_data": "message content", "value": 42}
-            message = Message.create_entity_message(
+            message = Message.from_entity(
                 entity=entity,
                 payload=payload
             )
@@ -49,15 +49,15 @@ class TestMessageCreation:
             message.message_type = message_type
             
             # Verify message structure
-            assert message.entity == entity
+            assert message.entity_reference is not None
+            assert message.entity_reference.external_id == entity.external_id
+            assert message.entity_reference.canonical_type == entity.canonical_type
             assert message.payload == payload
             assert message.message_type == message_type
             assert message.message_id is not None
             assert message.correlation_id is not None
             assert isinstance(message.created_at, datetime)
-            assert message.processed_at is None
             assert message.retry_count == 0
-            assert message.max_retries == 3
     
     def test_message_defaults(self, entity_service, tenant_context):
         """Test Message default values and auto-generation."""
@@ -72,7 +72,7 @@ class TestMessageCreation:
             entity = entity_service.get_entity(entity_id)
             
             # Create message with minimal data
-            message = Message.create_entity_message(
+            message = Message.from_entity(
                 entity=entity,
                 payload={"minimal": "data"}
             )
@@ -82,10 +82,7 @@ class TestMessageCreation:
             assert len(message.correlation_id) > 0
             assert message.message_type == MessageType.ENTITY_PROCESSING
             assert message.metadata == {}
-            assert message.routing_info == {}
             assert message.retry_count == 0
-            assert message.max_retries == 3
-            assert message.processed_at is None
             assert isinstance(message.created_at, datetime)
     
     def test_custom_correlation_id_and_metadata(self, entity_service, tenant_context):
@@ -104,7 +101,7 @@ class TestMessageCreation:
             custom_correlation_id = "custom-correlation-123"
             custom_metadata = {"processor": "test", "stage": "validation"}
             
-            message = Message.create_entity_message(
+            message = Message.from_entity(
                 entity=entity,
                 payload={"test": "data"},
                 correlation_id=custom_correlation_id,
@@ -133,7 +130,7 @@ class TestEntityReferenceIntegration:
             entity = entity_service.get_entity(entity_id)
             
             # Create message
-            message = Message.create_entity_message(
+            message = Message.from_entity(
                 entity=entity,
                 payload={"reference_test": True}
             )
@@ -173,11 +170,11 @@ class TestEntityReferenceIntegration:
             entity_v3 = entity_service.get_entity(entity_id_v3)
             
             # Create messages with different entity versions
-            message_v1 = Message.create_entity_message(
+            message_v1 = Message.from_entity(
                 entity=entity_v1,
                 payload={"version": 1}
             )
-            message_v3 = Message.create_entity_message(
+            message_v3 = Message.from_entity(
                 entity=entity_v3,
                 payload={"version": 3}
             )
@@ -218,11 +215,11 @@ class TestEntityReferenceIntegration:
             entity_t2 = entity_service.get_entity(entity_id_t2)
         
         # Create messages with entities from different tenants
-        message_t1 = Message.create_entity_message(
+        message_t1 = Message.from_entity(
             entity=entity_t1,
             payload={"tenant": "t1"}
         )
-        message_t2 = Message.create_entity_message(
+        message_t2 = Message.from_entity(
             entity=entity_t2,
             payload={"tenant": "t2"}
         )
@@ -238,7 +235,7 @@ class TestMessageLifecycle:
     """Test Message lifecycle methods and state management."""
     
     def test_mark_processed(self, entity_service, tenant_context):
-        """Test mark_processed sets processed_at timestamp."""
+        """Test that Message can be created and used (lifecycle now managed elsewhere)."""
         with tenant_ctx(tenant_context["id"]):
             # Create real entity
             entity_id = entity_service.create_entity(
@@ -250,25 +247,17 @@ class TestMessageLifecycle:
             entity = entity_service.get_entity(entity_id)
             
             # Create message
-            message = Message.create_entity_message(
+            message = Message.from_entity(
                 entity=entity,
                 payload={"lifecycle": "test"}
             )
             
-            # Initially not processed
-            assert message.processed_at is None
-            
-            # Mark as processed
-            before_mark = datetime.utcnow()
-            message.mark_processed()
-            after_mark = datetime.utcnow()
-            
-            # Verify processed timestamp
-            assert message.processed_at is not None
-            assert before_mark <= message.processed_at <= after_mark
+            # Message creation should work (processing state tracked elsewhere)
+            assert message.entity_reference.external_id == "test-processed-001"
+            assert message.payload == {"lifecycle": "test"}
     
     def test_retry_management(self, entity_service, tenant_context):
-        """Test retry count management and retry limits."""
+        """Test retry count increment functionality."""
         with tenant_ctx(tenant_context["id"]):
             # Create real entity
             entity_id = entity_service.create_entity(
@@ -280,64 +269,21 @@ class TestMessageLifecycle:
             entity = entity_service.get_entity(entity_id)
             
             # Create message
-            message = Message.create_entity_message(
+            message = Message.from_entity(
                 entity=entity,
                 payload={"retry": "test"}
             )
             
             # Initial retry state
             assert message.retry_count == 0
-            assert message.max_retries == 3
-            assert message.can_retry() is True
             
             # Increment retries
             message.increment_retry()
             assert message.retry_count == 1
-            assert message.can_retry() is True
             
             message.increment_retry()
             assert message.retry_count == 2
-            assert message.can_retry() is True
-            
-            message.increment_retry()
-            assert message.retry_count == 3
-            assert message.can_retry() is False  # At max retries
-            
-            # Should still allow incrementing beyond max
-            message.increment_retry()
-            assert message.retry_count == 4
-            assert message.can_retry() is False
     
-    @pytest.mark.parametrize("max_retries,expected_can_retry", [
-        (0, False),  # No retries allowed
-        (1, True),   # One retry allowed
-        (5, True),   # Multiple retries allowed
-        (10, True),  # High retry limit
-    ])
-    def test_custom_max_retries(
-        self, max_retries, expected_can_retry, entity_service, tenant_context
-    ):
-        """Test custom max_retries configuration."""
-        with tenant_ctx(tenant_context["id"]):
-            # Create real entity
-            entity_id = entity_service.create_entity(
-                external_id=f"test-max-retry-{max_retries}",
-                canonical_type="max_retry_test",
-                source="test_source",
-                attributes={}
-            )
-            entity = entity_service.get_entity(entity_id)
-            
-            # Create message with custom max_retries
-            message = Message.create_entity_message(
-                entity=entity,
-                payload={"max_retries": max_retries}
-            )
-            message.max_retries = max_retries
-            
-            # Verify custom max_retries
-            assert message.max_retries == max_retries
-            assert message.can_retry() == expected_can_retry
 
 
 class TestMessageValidation:
@@ -356,11 +302,11 @@ class TestMessageValidation:
             entity = entity_service.get_entity(entity_id)
             
             # Valid message creation should work
-            message = Message.create_entity_message(
+            message = Message.from_entity(
                 entity=entity,
                 payload={"valid": "data"}
             )
-            assert message.entity == entity
+            assert message.entity_reference.external_id == entity.external_id
             assert message.payload == {"valid": "data"}
     
     @pytest.mark.parametrize("payload_data", [
@@ -390,7 +336,7 @@ class TestMessageValidation:
             entity = entity_service.get_entity(entity_id)
             
             # Create message with varied payload
-            message = Message.create_entity_message(
+            message = Message.from_entity(
                 entity=entity,
                 payload=payload_data
             )
@@ -398,8 +344,8 @@ class TestMessageValidation:
             # Verify payload preserved correctly
             assert message.payload == payload_data
     
-    def test_metadata_and_routing_info_optional(self, entity_service, tenant_context):
-        """Test metadata and routing_info are optional and default to empty dict."""
+    def test_metadata_optional(self, entity_service, tenant_context):
+        """Test metadata is optional and defaults to empty dict."""
         with tenant_ctx(tenant_context["id"]):
             # Create real entity
             entity_id = entity_service.create_entity(
@@ -410,19 +356,18 @@ class TestMessageValidation:
             )
             entity = entity_service.get_entity(entity_id)
             
-            # Create message without metadata/routing_info
-            message = Message.create_entity_message(
+            # Create message without metadata
+            message = Message.from_entity(
                 entity=entity,
                 payload={"test": "data"}
             )
             
             # Verify defaults
             assert message.metadata == {}
-            assert message.routing_info == {}
             
             # Create message with custom metadata
             custom_metadata = {"processor": "test", "version": "2.0"}
-            message_with_metadata = Message.create_entity_message(
+            message_with_metadata = Message.from_entity(
                 entity=entity,
                 payload={"test": "data"},
                 metadata=custom_metadata
@@ -430,4 +375,3 @@ class TestMessageValidation:
             
             # Verify custom metadata preserved
             assert message_with_metadata.metadata == custom_metadata
-            assert message_with_metadata.routing_info == {}  # Still defaults

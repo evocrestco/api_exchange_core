@@ -429,15 +429,10 @@ class TestProcessingServiceMessageIntegration:
             canonical_type="test_type"
         )
         
-        return Message(
-            message_id=f"test-msg-{uuid.uuid4().hex[:8]}",
-            correlation_id=f"test-corr-{uuid.uuid4().hex[:8]}",
-            created_at=datetime.now(UTC),
-            message_type=MessageType.ENTITY_PROCESSING,
+        return Message.from_entity(
             entity=entity,
             payload={"data": "test_payload"},
-            retry_count=0,
-            max_retries=3
+            correlation_id=f"test-corr-{uuid.uuid4().hex[:8]}"
         )
 
     def test_process_message_success_new_entity(self, processing_service, test_processor, create_test_message):
@@ -448,26 +443,26 @@ class TestProcessingServiceMessageIntegration:
 
         from src.processors.v2.message import Message, MessageType
 
-        # Create a simple entity-like object that doesn't exist in database
-        class MockEntity:
-            def __init__(self):
-                self.id = None  # No ID means it doesn't exist in DB yet
-                self.tenant_id = "test_tenant"
-                self.external_id = f"new-entity-{uuid.uuid4().hex[:8]}"
-                self.canonical_type = "test_type"
-                self.source = "test_source"
-                self.version = 1
+        # Create an EntityReference for a non-existent entity (for new entity creation)
+        from src.schemas.entity_schema import EntityReference
         
-        mock_entity = MockEntity()
+        entity_ref = EntityReference(
+            id=None,  # No ID means it doesn't exist in DB yet
+            tenant_id="test_tenant",
+            external_id=f"new-entity-{uuid.uuid4().hex[:8]}",
+            canonical_type="test_type",
+            source="test_source",
+            version=1
+        )
+        
         message = Message(
             message_id=f"test-msg-{uuid.uuid4().hex[:8]}",
             correlation_id=f"test-corr-{uuid.uuid4().hex[:8]}",
             created_at=datetime.now(UTC),
             message_type=MessageType.ENTITY_PROCESSING,
-            entity=mock_entity,
+            entity_reference=entity_ref,
             payload={"data": "test_payload"},
-            retry_count=0,
-            max_retries=3
+            retry_count=0
         )
         
         config = ProcessorConfig(

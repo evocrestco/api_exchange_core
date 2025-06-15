@@ -106,9 +106,7 @@ class TestGatewayProcessorIntegration:
     @pytest.fixture
     def test_message(self, test_entity):
         """Create test message with real entity."""
-        return Message(
-            message_id=str(uuid4()),
-            message_type=MessageType.ENTITY_PROCESSING,
+        return Message.from_entity(
             entity=test_entity,
             payload={
                 "order_id": "TEST-ORDER-001",
@@ -116,7 +114,8 @@ class TestGatewayProcessorIntegration:
                 "shipping": "express",
                 "customer": {"type": "premium"},
                 "items": ["item1", "item2"]
-            }
+            },
+            correlation_id=str(uuid4())
         )
     
     def test_single_rule_match_with_real_queue(
@@ -251,15 +250,14 @@ class TestGatewayProcessorIntegration:
             }
         }
         
-        message = Message(
-            message_id=str(uuid4()),
-            message_type=MessageType.ENTITY_PROCESSING,
+        message = Message.from_entity(
             entity=test_entity,
             payload={
                 "customer": {"type": "premium"},
                 "items": ["item1", "item2"],
                 "amount": 2000
-            }
+            },
+            correlation_id=str(uuid4())
         )
         
         processor = GatewayProcessor(config)
@@ -314,18 +312,19 @@ class TestGatewayProcessorIntegration:
         # Parse the message and verify structure (should be the only message in this unique queue)
         queue_message_content = json.loads(messages[0].content)
         
-        # Verify message structure matches QueueOutputHandler format
-        assert "message_metadata" in queue_message_content
+        # Verify message structure matches new simplified format (no processing_result in queue messages)
+        assert "message_id" in queue_message_content
+        assert "correlation_id" in queue_message_content
         assert "entity_reference" in queue_message_content  
         assert "payload" in queue_message_content
-        assert "processing_result" in queue_message_content
-        assert "routing_metadata" in queue_message_content
+        assert "metadata" in queue_message_content
+        assert "created_at" in queue_message_content
+        assert "retry_count" in queue_message_content
         
         # Verify specific content
-        assert queue_message_content["message_metadata"]["message_id"] == test_message.message_id
+        assert queue_message_content["message_id"] == test_message.message_id
         assert queue_message_content["entity_reference"]["external_id"] == "TEST-ORDER-001"
         assert queue_message_content["payload"]["amount"] == 1500
-        assert queue_message_content["processing_result"]["success"] is True
         
         # Clean up the destination queue
         try:

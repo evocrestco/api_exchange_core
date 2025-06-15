@@ -88,13 +88,13 @@ class ProcessorHandler:
 
         try:
             # Check if entity exists in message
-            if message.entity.id is None:
+            if message.entity_reference.id is None:
                 self.logger.info(
-                    f"Entity not persisted yet, will be handled by processor",
+                    "Entity not persisted yet, will be handled by processor",
                     extra={
                         "processor_class": self.processor.__class__.__name__,
-                        "external_id": message.entity.external_id,
-                        "canonical_type": message.entity.canonical_type,
+                        "external_id": message.entity_reference.external_id,
+                        "canonical_type": message.entity_reference.canonical_type,
                     },
                 )
 
@@ -104,7 +104,7 @@ class ProcessorHandler:
                 extra={
                     "processor_class": self.processor.__class__.__name__,
                     "message_id": message.message_id,
-                    "external_id": message.entity.external_id,
+                    "external_id": message.entity_reference.external_id,
                 },
             )
 
@@ -126,9 +126,9 @@ class ProcessorHandler:
 
             # Note: We don't create stub entities here anymore since processors
             # may handle their own entity creation. The entity_id will be obtained
-            # from the message.entity if it exists, or from ProcessingResult if the
+            # from the message.entity_reference if it exists, or from ProcessingResult if the
             # processor uses the new approach.
-            entity_id = getattr(message.entity, "id", None) if message.entity else None
+            entity_id = message.entity_reference.id if message.entity_reference else None
 
             # Execute processor - let it control everything
             result = self.processor.process(message, context)
@@ -166,8 +166,6 @@ class ProcessorHandler:
                 # Process output handlers if any are configured
                 if result.output_handlers:
                     self._process_output_handlers(message, result)
-
-                message.mark_processed()
             else:
                 # Handle failure - route to DLQ if not retryable
                 if not result.can_retry and self.dead_letter_queue_client:
@@ -216,7 +214,7 @@ class ProcessorHandler:
             )
 
             # Record processing result to entity even on unexpected error if entity exists
-            entity_id = getattr(message.entity, "id", None) if message.entity else None
+            entity_id = getattr(message.entity_reference, "id", None) if message.entity_reference else None
             if entity_id:
                 self._record_processing_result(entity_id, result)
 
@@ -247,7 +245,7 @@ class ProcessorHandler:
             dead_letter_message = {
                 "original_message": {
                     "message_id": message.message_id,
-                    "external_id": message.entity.external_id,
+                    "external_id": message.entity_reference.external_id,
                     "payload": message.payload,
                 },
                 "failure_info": {
@@ -477,29 +475,29 @@ class ProcessorHandler:
         Returns:
             Entity ID if entity exists or was created, None otherwise
         """
-        if message.entity and hasattr(message.entity, "id") and message.entity.id:
-            return message.entity.id
+        if message.entity_reference and hasattr(message.entity_reference, "id") and message.entity_reference.id:
+            return message.entity_reference.id
 
         # For source processors, create stub entity
-        if hasattr(message.entity, "external_id") and hasattr(message.entity, "canonical_type"):
+        if hasattr(message.entity_reference, "external_id") and hasattr(message.entity_reference, "canonical_type"):
             try:
                 entity_id = context.persist_entity(
-                    external_id=message.entity.external_id,
-                    canonical_type=message.entity.canonical_type,
-                    source=getattr(message.entity, "source", "unknown"),
+                    external_id=message.entity_reference.external_id,
+                    canonical_type=message.entity_reference.canonical_type,
+                    source=getattr(message.entity_reference, "source", "unknown"),
                     data={"status": "processing"},
                     metadata={"created_by": "processor_handler", "stage": "stub"},
                 )
 
-                # Update message entity with the ID
-                message.entity.id = entity_id
+                # Update message entity reference with the ID
+                message.entity_reference.id = entity_id
 
                 self.logger.debug(
                     "Created stub entity for source processor",
                     extra={
                         "entity_id": entity_id,
-                        "external_id": message.entity.external_id,
-                        "canonical_type": message.entity.canonical_type,
+                        "external_id": message.entity_reference.external_id,
+                        "canonical_type": message.entity_reference.canonical_type,
                         "processor_class": self.processor.__class__.__name__,
                     },
                 )
@@ -510,8 +508,8 @@ class ProcessorHandler:
                 self.logger.error(
                     f"Failed to create stub entity: {str(e)}",
                     extra={
-                        "external_id": getattr(message.entity, "external_id", "unknown"),
-                        "canonical_type": getattr(message.entity, "canonical_type", "unknown"),
+                        "external_id": getattr(message.entity_reference, "external_id", "unknown"),
+                        "canonical_type": getattr(message.entity_reference, "canonical_type", "unknown"),
                         "processor_class": self.processor.__class__.__name__,
                         "error": str(e),
                     },
