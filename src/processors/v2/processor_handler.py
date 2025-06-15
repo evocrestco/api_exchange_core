@@ -88,13 +88,13 @@ class ProcessorHandler:
 
         try:
             # Check if entity exists in message
-            if message.entity_reference.id is None:
+            if message.entity_reference is None or message.entity_reference.id is None:
                 self.logger.info(
                     "Entity not persisted yet, will be handled by processor",
                     extra={
                         "processor_class": self.processor.__class__.__name__,
-                        "external_id": message.entity_reference.external_id,
-                        "canonical_type": message.entity_reference.canonical_type,
+                        "external_id": getattr(message.entity_reference, "external_id", "unknown") if message.entity_reference else "unknown",
+                        "canonical_type": getattr(message.entity_reference, "canonical_type", "unknown") if message.entity_reference else "unknown",
                     },
                 )
 
@@ -104,7 +104,7 @@ class ProcessorHandler:
                 extra={
                     "processor_class": self.processor.__class__.__name__,
                     "message_id": message.message_id,
-                    "external_id": message.entity_reference.external_id,
+                    "external_id": getattr(message.entity_reference, "external_id", "unknown") if message.entity_reference else "unknown",
                 },
             )
 
@@ -245,7 +245,7 @@ class ProcessorHandler:
             dead_letter_message = {
                 "original_message": {
                     "message_id": message.message_id,
-                    "external_id": message.entity_reference.external_id,
+                    "external_id": getattr(message.entity_reference, "external_id", "unknown") if message.entity_reference else "unknown",
                     "payload": message.payload,
                 },
                 "failure_info": {

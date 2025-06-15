@@ -36,7 +36,7 @@ class Message(BaseModel):
     message_type: MessageType = Field(default=MessageType.ENTITY_PROCESSING)
 
     # Entity reference (not full entity) - for lightweight transport
-    entity_reference: EntityReference = Field()
+    entity_reference: Optional[EntityReference] = Field(default=None)
 
     # The actual data being processed
     payload: Dict[str, Any] = Field()
