@@ -16,8 +16,8 @@ class OrderProcessor(ProcessorInterface):
         # Process the order
         order_data = message.payload
 
-        # Persist entity
-        entity_id = context.persist_entity(
+        # Create entity
+        entity_id = context.create_entity(
             external_id=order_data["order_id"],
             canonical_type="order",
             source="order_system",
@@ -128,7 +128,7 @@ class ConfigurableProcessor(ProcessorInterface):
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from src.processors.processing_result import ProcessingResult
 from src.processors.v2.message import Message
@@ -147,7 +147,8 @@ class ProcessorContext:
         self.state_tracking_service = state_tracking_service
         self.error_service = error_service
 
-    def persist_entity(
+
+    def create_entity(
         self,
         external_id: str,
         canonical_type: str,
@@ -156,22 +157,21 @@ class ProcessorContext:
         metadata: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
-        Persist entity data and return entity_id.
-
-        DEPRECATED: This method is deprecated. Instead, processors should return
-        entity data in ProcessingResult using result.set_entity_data(). The framework
-        will handle entity persistence automatically.
-
-        This is how processors save data without knowing about EntityService details.
+        Create an entity for tracking data entering the system.
+        
+        This should be used by source processors when data first touches our system.
+        Returns the created entity_id.
+        
+        Args:
+            external_id: External identifier for the entity
+            canonical_type: Type of entity (e.g., 'order', 'product')
+            source: Source system identifier
+            data: The actual entity data
+            metadata: Optional metadata about the entity
+            
+        Returns:
+            str: The created entity_id
         """
-        import warnings
-
-        warnings.warn(
-            "ProcessorContext.persist_entity() is deprecated. Use ProcessingResult.set_entity_data() instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        # Create default config for v2 processors
         from src.processing.processor_config import ProcessorConfig
 
         default_config = ProcessorConfig(
@@ -190,6 +190,215 @@ class ProcessorContext:
             source_metadata=metadata or {},
         )
         return result.entity_id
+
+    def create_message(
+        self,
+        entity_id: str,
+        payload: Dict[str, Any],
+        metadata: Optional[Dict[str, Any]] = None,
+        message_type: str = "entity_processing",
+    ) -> Message:
+        """
+        Create a message with an entity reference.
+        
+        This should be used when you already have an entity and need to create
+        a message for pipeline processing.
+        
+        Args:
+            entity_id: ID of the existing entity
+            payload: Message payload data
+            metadata: Optional message metadata
+            message_type: Type of message (default: "entity_processing")
+            
+        Returns:
+            Message: The created message with entity reference
+        """
+        # Get entity details to build entity reference
+        entity = self.processing_service.entity_service.get_entity(entity_id)
+        if not entity:
+            raise ValueError(f"Entity not found: {entity_id}")
+            
+        from src.processors.v2.message import Message, EntityReference, MessageType
+        
+        entity_ref = EntityReference(
+            id=entity.id,
+            external_id=entity.external_id,
+            canonical_type=entity.canonical_type,
+            source=entity.source,
+            version=entity.version,
+            tenant_id=entity.tenant_id,
+        )
+        
+        return Message(
+            message_type=MessageType(message_type),
+            entity_reference=entity_ref,
+            payload=payload,
+            metadata=metadata or {},
+        )
+
+    def create_entity_and_message(
+        self,
+        external_id: str,
+        canonical_type: str,
+        source: str,
+        data: Dict[str, Any],
+        payload: Optional[Dict[str, Any]] = None,
+        entity_metadata: Optional[Dict[str, Any]] = None,
+        message_metadata: Optional[Dict[str, Any]] = None,
+        message_type: str = "entity_processing",
+    ) -> Tuple[str, Message]:
+        """
+        Create both an entity and a message in one operation.
+        
+        This is the common case for source processors - data enters the system
+        and needs both tracking (entity) and processing (message).
+        
+        Args:
+            external_id: External identifier for the entity
+            canonical_type: Type of entity (e.g., 'order', 'product')
+            source: Source system identifier
+            data: The actual entity data
+            payload: Message payload (defaults to entity data if not provided)
+            entity_metadata: Optional metadata for the entity
+            message_metadata: Optional metadata for the message
+            message_type: Type of message (default: "entity_processing")
+            
+        Returns:
+            Tuple[str, Message]: The created entity_id and message
+        """
+        # Create entity first
+        entity_id = self.create_entity(
+            external_id=external_id,
+            canonical_type=canonical_type,
+            source=source,
+            data=data,
+            metadata=entity_metadata,
+        )
+        
+        # Create message with entity reference
+        # If no payload provided, use the entity data
+        message_payload = payload if payload is not None else data
+        
+        message = self.create_message(
+            entity_id=entity_id,
+            payload=message_payload,
+            metadata=message_metadata,
+            message_type=message_type,
+        )
+        
+        return entity_id, message
+
+    def send_output(
+        self,
+        message: Message,
+        handler_type: str,
+        destinations: Optional[List[str]] = None,
+        **handler_params
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Send a message to one or more outputs using the specified handler type.
+        
+        Args:
+            message: The message to send
+            handler_type: Type of output handler ('queue', 'service_bus', etc.)
+            destinations: List of destinations (for queue handler)
+            **handler_params: Additional parameters for the handler
+            
+        Returns:
+            Dict mapping each destination to its result (success, error info, etc.)
+            
+        Example:
+            results = context.send_output(
+                message, 
+                handler_type='queue',
+                destinations=['orders-queue', 'analytics-queue']
+            )
+            # results = {
+            #     'orders-queue': {'success': True, 'message_id': 'abc123'},
+            #     'analytics-queue': {'success': False, 'error': 'Queue not found'}
+            # }
+        """
+        # This will be implemented in ProcessorHandler since it has access to output handlers
+        raise NotImplementedError(
+            "send_output should be called through ProcessorHandler, not directly on ProcessorContext"
+        )
+
+    def create_and_send_output(
+        self,
+        external_id: str,
+        canonical_type: str,
+        source: str,
+        data: Dict[str, Any],
+        handler_type: str,
+        destinations: Optional[List[str]] = None,
+        payload: Optional[Dict[str, Any]] = None,
+        entity_metadata: Optional[Dict[str, Any]] = None,
+        message_metadata: Optional[Dict[str, Any]] = None,
+        message_type: str = "entity_processing",
+        **handler_params
+    ) -> Dict[str, Any]:
+        """
+        Create entity, create message, and send to output in one operation.
+        
+        This is a convenience method for the common pattern of source processors
+        that need to create tracking and immediately route for processing.
+        
+        Args:
+            external_id: External identifier for the entity
+            canonical_type: Type of entity (e.g., 'order', 'product')
+            source: Source system identifier
+            data: The actual entity data
+            handler_type: Type of output handler ('queue', 'service_bus', etc.)
+            destinations: List of destinations (for queue handler)
+            payload: Message payload (defaults to entity data if not provided)
+            entity_metadata: Optional metadata for the entity
+            message_metadata: Optional metadata for the message
+            message_type: Type of message (default: "entity_processing")
+            **handler_params: Additional parameters for the handler
+            
+        Returns:
+            Dict with entity_id, message, and send results
+            
+        Example:
+            result = context.create_and_send_output(
+                external_id='ORDER-123',
+                canonical_type='order',
+                source='webhooks',
+                data=order_data,
+                handler_type='queue',
+                destinations=['processing-queue']
+            )
+            # result = {
+            #     'entity_id': 'abc-123',
+            #     'message': <Message>,
+            #     'send_results': {'processing-queue': {'success': True}}
+            # }
+        """
+        # Create entity and message
+        entity_id, message = self.create_entity_and_message(
+            external_id=external_id,
+            canonical_type=canonical_type,
+            source=source,
+            data=data,
+            payload=payload,
+            entity_metadata=entity_metadata,
+            message_metadata=message_metadata,
+            message_type=message_type,
+        )
+        
+        # Send output
+        send_results = self.send_output(
+            message=message,
+            handler_type=handler_type,
+            destinations=destinations,
+            **handler_params
+        )
+        
+        return {
+            'entity_id': entity_id,
+            'message': message,
+            'send_results': send_results,
+        }
 
     def track_state(
         self,

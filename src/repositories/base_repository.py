@@ -418,8 +418,8 @@ class BaseRepository(Generic[T]):
                 error_code=ErrorCode.VALIDATION_FAILED,
             )
 
-        # Convert schema to dict
-        data_dict = create_schema.model_dump()
+        # Convert schema to dict, ensuring JSON compatibility for JSONB columns
+        data_dict = create_schema.model_dump(mode='json')
 
         # Ensure tenant_id is set
         data_dict["tenant_id"] = tenant_id

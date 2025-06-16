@@ -54,37 +54,26 @@ class TestGatewayProcessor:
         }
     
     @pytest.fixture
-    def sample_message(self):
+    def sample_message(self, processor_context, tenant_context):
         """Create a sample message for testing."""
-        # Create a real entity object (as it would exist in a message)
-        entity = Entity.create(
-            tenant_id="test-tenant",
-            external_id="TEST-001",
-            canonical_type="test_order",
-            source="test_system",
-            version=1
-        )
+        from src.context.tenant_context import tenant_context as tenant_ctx
         
-        return Message.from_entity(
-            entity=entity,
-            payload={
-                "order_id": "TEST-001",
-                "amount": 1500,
-                "shipping": "express",
-                "items": ["item1", "item2"]
-            },
-            correlation_id=str(uuid4())
-        )
+        with tenant_ctx(tenant_context["id"]):
+            # Gateway processes existing entities, so create entity and message
+            entity_id, message = processor_context.create_entity_and_message(
+                external_id="TEST-001",
+                canonical_type="test_order",
+                source="test_system",
+                data={"order_id": "TEST-001"},
+                payload={
+                    "order_id": "TEST-001",
+                    "amount": 1500,
+                    "shipping": "express",
+                    "items": ["item1", "item2"]
+                }
+            )
+            return message
     
-    @pytest.fixture
-    def mock_context(self):
-        """Create a processor context for testing."""
-        # Gateway processor doesn't use context services, so we can pass None
-        return ProcessorContext(
-            processing_service=None,
-            state_tracking_service=None,
-            error_service=None
-        )
     
     def test_initialization(self, basic_routing_config, queue_config):
         """Test processor initialization."""
@@ -95,13 +84,13 @@ class TestGatewayProcessor:
         assert processor.default_destination == "standard-queue"
         assert processor.queue_config == queue_config
     
-    def test_single_rule_match(self, basic_routing_config, queue_config, sample_message, mock_context):
+    def test_single_rule_match(self, basic_routing_config, queue_config, sample_message, processor_context):
         """Test routing with single rule match."""
         # Modify message to match only high_value rule
         sample_message.payload["shipping"] = "standard"
         
         processor = GatewayProcessor(basic_routing_config, queue_config)
-        result = processor.process(sample_message, mock_context)
+        result = processor.process(sample_message, processor_context)
         
         assert result.success
         assert len(result.output_handlers) == 1
@@ -112,10 +101,10 @@ class TestGatewayProcessor:
         assert "high_value" in routing_metadata["matched_rules"]
         assert "high-value-queue" in routing_metadata["destinations"]
     
-    def test_multiple_rule_match(self, basic_routing_config, queue_config, sample_message, mock_context):
+    def test_multiple_rule_match(self, basic_routing_config, queue_config, sample_message, processor_context):
         """Test routing with multiple rule matches."""
         processor = GatewayProcessor(basic_routing_config, queue_config)
-        result = processor.process(sample_message, mock_context)
+        result = processor.process(sample_message, processor_context)
         
         assert result.success
         assert len(result.output_handlers) == 2
@@ -129,20 +118,20 @@ class TestGatewayProcessor:
         assert len(routing_metadata["matched_rules"]) == 2
         assert len(routing_metadata["destinations"]) == 2
     
-    def test_no_rule_match_uses_default(self, basic_routing_config, queue_config, sample_message, mock_context):
+    def test_no_rule_match_uses_default(self, basic_routing_config, queue_config, sample_message, processor_context):
         """Test routing to default destination when no rules match."""
         # Modify message to not match any rules
         sample_message.payload["amount"] = 500
         sample_message.payload["shipping"] = "standard"
         
         processor = GatewayProcessor(basic_routing_config, queue_config)
-        result = processor.process(sample_message, mock_context)
+        result = processor.process(sample_message, processor_context)
         
         assert result.success
         assert len(result.output_handlers) == 1
         assert result.output_handlers[0].destination == "standard-queue"
     
-    def test_stop_on_match(self, queue_config, sample_message, mock_context):
+    def test_stop_on_match(self, queue_config, sample_message, processor_context):
         """Test stop_on_match functionality."""
         config = {
             "rules": [
@@ -161,7 +150,7 @@ class TestGatewayProcessor:
         }
         
         processor = GatewayProcessor(config, queue_config)
-        result = processor.process(sample_message, mock_context)
+        result = processor.process(sample_message, processor_context)
         
         assert result.success
         assert len(result.output_handlers) == 1
@@ -172,8 +161,10 @@ class TestGatewayProcessor:
         assert len(routing_metadata["matched_rules"]) == 1
         assert "first_rule" in routing_metadata["matched_rules"]
     
-    def test_field_path_navigation(self, queue_config, mock_context):
+    def test_field_path_navigation(self, queue_config, processor_context, tenant_context):
         """Test different field path navigation scenarios."""
+        from src.context.tenant_context import tenant_context as tenant_ctx
+        
         config = {
             "rules": [
                 {
@@ -194,27 +185,22 @@ class TestGatewayProcessor:
             ]
         }
         
-        # Create message with nested structures
-        entity = Entity.create(
-            tenant_id="test-tenant",
-            external_id="TEST-001",
-            canonical_type="test_order",
-            source="test_system",
-            version=1
-        )
-        
-        message = Message.from_entity(
-            entity=entity,
-            payload={
-                "customer": {"type": "premium"},
-                "items": ["special", "regular"],
-                "value": 1000
-            },
-            correlation_id=str(uuid4())
-        )
-        
-        processor = GatewayProcessor(config, queue_config)
-        result = processor.process(message, mock_context)
+        with tenant_ctx(tenant_context["id"]):
+            # Create entity and message with nested structures - using processor context to ensure database persistence
+            entity_id, message = processor_context.create_entity_and_message(
+                external_id="TEST-001",
+                canonical_type="test_order",
+                source="test_system",
+                data={"order_id": "TEST-001"},
+                payload={
+                    "customer": {"type": "premium"},
+                    "items": ["special", "regular"],
+                    "value": 1000
+                }
+            )
+            
+            processor = GatewayProcessor(config, queue_config)
+            result = processor.process(message, processor_context)
         
         assert result.success
         assert len(result.output_handlers) == 3
@@ -224,7 +210,7 @@ class TestGatewayProcessor:
         assert "special-queue" in destinations
         assert "entity-queue" in destinations
     
-    def test_operator_types(self, queue_config, sample_message, mock_context):
+    def test_operator_types(self, queue_config, sample_message, processor_context):
         """Test different operator types."""
         config = {
             "rules": [
@@ -252,7 +238,7 @@ class TestGatewayProcessor:
         }
         
         processor = GatewayProcessor(config, queue_config)
-        result = processor.process(sample_message, mock_context)
+        result = processor.process(sample_message, processor_context)
         
         assert result.success
         assert len(result.output_handlers) == 4
@@ -260,7 +246,7 @@ class TestGatewayProcessor:
         destinations = [handler.destination for handler in result.output_handlers]
         assert all(d in destinations for d in ["not-slow-queue", "ge-queue", "fast-shipping-queue", "has-item1-queue"])
     
-    def test_regex_matching(self, queue_config, sample_message, mock_context):
+    def test_regex_matching(self, queue_config, sample_message, processor_context):
         """Test regex matching operator."""
         config = {
             "rules": [
@@ -273,13 +259,13 @@ class TestGatewayProcessor:
         }
         
         processor = GatewayProcessor(config, queue_config)
-        result = processor.process(sample_message, mock_context)
+        result = processor.process(sample_message, processor_context)
         
         assert result.success
         assert len(result.output_handlers) == 1
         assert result.output_handlers[0].destination == "test-orders-queue"
     
-    def test_missing_field_no_match(self, queue_config, sample_message, mock_context):
+    def test_missing_field_no_match(self, queue_config, sample_message, processor_context):
         """Test that missing fields don't match."""
         config = {
             "rules": [
@@ -293,13 +279,13 @@ class TestGatewayProcessor:
         }
         
         processor = GatewayProcessor(config, queue_config)
-        result = processor.process(sample_message, mock_context)
+        result = processor.process(sample_message, processor_context)
         
         assert result.success
         assert len(result.output_handlers) == 1
         assert result.output_handlers[0].destination == "default-queue"
     
-    def test_no_default_no_match(self, queue_config, sample_message, mock_context):
+    def test_no_default_no_match(self, queue_config, sample_message, processor_context):
         """Test no output when no rules match and no default."""
         config = {
             "rules": [
@@ -312,12 +298,12 @@ class TestGatewayProcessor:
         }
         
         processor = GatewayProcessor(config, queue_config)
-        result = processor.process(sample_message, mock_context)
+        result = processor.process(sample_message, processor_context)
         
         assert result.success
         assert len(result.output_handlers) == 0
     
-    def test_duplicate_destination_prevention(self, queue_config, sample_message, mock_context):
+    def test_duplicate_destination_prevention(self, queue_config, sample_message, processor_context):
         """Test that duplicate destinations are prevented."""
         config = {
             "rules": [
@@ -335,13 +321,13 @@ class TestGatewayProcessor:
         }
         
         processor = GatewayProcessor(config, queue_config)
-        result = processor.process(sample_message, mock_context)
+        result = processor.process(sample_message, processor_context)
         
         assert result.success
         assert len(result.output_handlers) == 1  # Should only have one handler for same-queue
         assert result.output_handlers[0].destination == "same-queue"
     
-    def test_error_handling_in_condition(self, queue_config, sample_message, mock_context):
+    def test_error_handling_in_condition(self, queue_config, sample_message, processor_context):
         """Test error handling when condition evaluation fails."""
         config = {
             "rules": [
@@ -359,7 +345,7 @@ class TestGatewayProcessor:
         }
         
         processor = GatewayProcessor(config, queue_config)
-        result = processor.process(sample_message, mock_context)
+        result = processor.process(sample_message, processor_context)
         
         # Should continue processing despite error
         assert result.success

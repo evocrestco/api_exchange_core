@@ -43,6 +43,7 @@ class APITokenRepository(BaseRepository[APIToken]):
         api_provider: str,
         max_tokens: int = 25,
         token_validity_hours: int = 1,
+        tokens_reusable: bool = False,
     ):
         """
         Initialize repository for specific API provider.
@@ -52,12 +53,14 @@ class APITokenRepository(BaseRepository[APIToken]):
             api_provider: API provider identifier (e.g., "api_provider_a", "shopify")
             max_tokens: Maximum tokens allowed per tenant (default: 25)
             token_validity_hours: Token validity in hours (default: 1)
+            tokens_reusable: Whether tokens can be reused until expiry (default: False)
         """
         super().__init__(session, APIToken)
         self.logger = get_logger()
         self.api_provider = api_provider
         self.max_tokens = max_tokens
         self.token_validity_hours = token_validity_hours
+        self.tokens_reusable = tokens_reusable
 
     @tenant_aware
     def get_valid_token(
@@ -122,8 +125,9 @@ class APITokenRepository(BaseRepository[APIToken]):
                 )
                 return None
 
-            # Mark token as used (this row is now locked for us)
-            token.mark_used(self.session)
+            # Mark token as used only if tokens are not reusable
+            if not self.tokens_reusable:
+                token.mark_used(self.session)
 
             # Log usage
             self._log_token_usage(token=token, operation=operation, success="pending")
@@ -259,7 +263,7 @@ class APITokenRepository(BaseRepository[APIToken]):
 
             # Save to database - let database enforce uniqueness constraints
             self.session.add(api_token)
-            self.session.flush()  # Get the ID
+            self.session.flush()  # Need ID for return value
 
             self.logger.info(
                 "Token stored successfully",
@@ -683,7 +687,6 @@ class APITokenRepository(BaseRepository[APIToken]):
             )
 
             self.session.add(usage_log)
-            self.session.flush()
 
         except Exception as e:
             # Don't fail the main operation if logging fails

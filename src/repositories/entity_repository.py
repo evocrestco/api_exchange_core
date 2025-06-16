@@ -123,7 +123,6 @@ class EntityRepository(BaseRepository[Entity]):
             )
 
             session.add(entity)
-            session.flush()
 
             # Log while entity is still in session
             self.logger.info(

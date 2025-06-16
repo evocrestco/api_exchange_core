@@ -29,11 +29,11 @@ from src.services.state_tracking_service import StateTrackingService
 class TestProcessorContext:
     """Test ProcessorContext service access functionality."""
     
-    def test_persist_entity_creates_new_entity(self, processor_context, tenant_context):
-        """Test that persist_entity creates a new entity correctly."""
+    def test_create_entity_creates_new_entity(self, processor_context, tenant_context):
+        """Test that create_entity creates a new entity correctly."""
         with tenant_ctx(tenant_context["id"]):
-            # Persist entity through context
-            entity_id = processor_context.persist_entity(
+            # Create entity through context
+            entity_id = processor_context.create_entity(
                 external_id="ORDER-123",
                 canonical_type="order",
                 source="shopify",
@@ -73,11 +73,11 @@ class TestProcessorContext:
             assert "source_metadata" in entity.attributes
             assert entity.attributes["source_metadata"]["created_by"] == "test_processor"
     
-    def test_persist_entity_creates_new_version(self, processor_context, tenant_context):
-        """Test that persist_entity ALWAYS creates new version (times seen pattern)."""
+    def test_create_entity_creates_new_version(self, processor_context, tenant_context):
+        """Test that create_entity ALWAYS creates new version (times seen pattern)."""
         with tenant_ctx(tenant_context["id"]):
             # Create initial entity sighting
-            entity_id1 = processor_context.persist_entity(
+            entity_id1 = processor_context.create_entity(
                 external_id="ORDER-123",
                 canonical_type="order",
                 source="shopify",
@@ -86,7 +86,7 @@ class TestProcessorContext:
             )
             
             # Second sighting of same entity (even with different content)
-            entity_id2 = processor_context.persist_entity(
+            entity_id2 = processor_context.create_entity(
                 external_id="ORDER-123",
                 canonical_type="order",
                 source="shopify",
@@ -116,7 +116,7 @@ class TestProcessorContext:
         """Test retrieving entity by external ID."""
         with tenant_ctx(tenant_context["id"]):
             # Create entity
-            processor_context.persist_entity(
+            processor_context.create_entity(
                 external_id="PRODUCT-456",
                 canonical_type="product",
                 source="woocommerce",
@@ -146,7 +146,7 @@ class TestProcessorContext:
         """Test recording state transitions through context."""
         with tenant_ctx(tenant_context["id"]):
             # Create entity first
-            entity_id = processor_context.persist_entity(
+            entity_id = processor_context.create_entity(
                 external_id="ORDER-789",
                 canonical_type="order",
                 source="shopify",
@@ -176,7 +176,7 @@ class TestProcessorContext:
         """Test recording processing errors through context."""
         with tenant_ctx(tenant_context["id"]):
             # Create entity
-            entity_id = processor_context.persist_entity(
+            entity_id = processor_context.create_entity(
                 external_id="ORDER-999",
                 canonical_type="order",
                 source="shopify",
@@ -212,8 +212,8 @@ class TestProcessorContext:
         )
         
         with tenant_ctx(tenant_context["id"]):
-            # Should still be able to persist entities
-            entity_id = context.persist_entity(
+            # Should still be able to create entities
+            entity_id = context.create_entity(
                 external_id="MIN-123",
                 canonical_type="test",
                 source="minimal",
@@ -232,11 +232,11 @@ class TestProcessorContext:
             )
             # Should not crash but may return None or handle gracefully
     
-    def test_persist_with_duplicate_detection(self, processor_context, tenant_context):
-        """Test that persist_entity handles duplicate detection."""
+    def test_create_with_duplicate_detection(self, processor_context, tenant_context):
+        """Test that create_entity handles duplicate detection."""
         with tenant_ctx(tenant_context["id"]):
             # Create entity with specific content
-            entity_id1 = processor_context.persist_entity(
+            entity_id1 = processor_context.create_entity(
                 external_id="DUP-001",
                 canonical_type="order",
                 source="shopify",
@@ -244,7 +244,7 @@ class TestProcessorContext:
             )
             
             # Try to create duplicate with same content but different external_id
-            entity_id2 = processor_context.persist_entity(
+            entity_id2 = processor_context.create_entity(
                 external_id="DUP-002",
                 canonical_type="order",
                 source="shopify",
@@ -266,7 +266,7 @@ class TestProcessorContext:
             # Persist multiple entities
             entity_ids = []
             for i in range(5):
-                entity_id = processor_context.persist_entity(
+                entity_id = processor_context.create_entity(
                     external_id=f"BATCH-{i}",
                     canonical_type="order",
                     source="batch_test",
@@ -293,3 +293,66 @@ class TestProcessorContext:
                 assert "source_metadata" in entity.attributes
                 assert entity.attributes["source_metadata"]["batch_index"] == i
                 assert entity.content_hash is not None
+    
+    def test_create_message_with_entity_reference(self, processor_context, tenant_context):
+        """Test creating a message with an entity reference."""
+        with tenant_ctx(tenant_context["id"]):
+            # First create an entity
+            entity_id = processor_context.create_entity(
+                external_id="MSG-TEST-001",
+                canonical_type="order",
+                source="test_source",
+                data={"order_id": "12345", "status": "pending"}
+            )
+            
+            # Create a message referencing the entity
+            message = processor_context.create_message(
+                entity_id=entity_id,
+                payload={"action": "process_order", "priority": "high"},
+                metadata={"source": "test_runner"}
+            )
+            
+            # Verify message structure
+            assert message.entity_reference is not None
+            assert message.entity_reference.id == entity_id
+            assert message.entity_reference.external_id == "MSG-TEST-001"
+            assert message.entity_reference.canonical_type == "order"
+            assert message.entity_reference.source == "test_source"
+            assert message.payload["action"] == "process_order"
+            assert message.metadata["source"] == "test_runner"
+    
+    def test_create_entity_and_message_atomic(self, processor_context, tenant_context):
+        """Test creating entity and message in one atomic operation."""
+        with tenant_ctx(tenant_context["id"]):
+            # Create both entity and message
+            entity_id, message = processor_context.create_entity_and_message(
+                external_id="ATOMIC-001",
+                canonical_type="order",
+                source="webhook",
+                data={"order_id": "98765", "customer": "Jane Doe"},
+                payload={"action": "new_order", "webhook_id": "wh-123"},
+                entity_metadata={"created_from": "webhook"},
+                message_metadata={"priority": "normal"}
+            )
+            
+            # Verify entity was created
+            assert entity_id is not None
+            entity = processor_context.get_entity(entity_id)
+            assert entity.external_id == "ATOMIC-001"
+            assert entity.attributes["source_metadata"]["created_from"] == "webhook"
+            
+            # Verify message was created with entity reference
+            assert message.entity_reference is not None
+            assert message.entity_reference.id == entity_id
+            assert message.payload["action"] == "new_order"
+            assert message.metadata["priority"] == "normal"
+    
+    def test_create_message_with_nonexistent_entity(self, processor_context, tenant_context):
+        """Test that create_message fails gracefully with nonexistent entity."""
+        with tenant_ctx(tenant_context["id"]):
+            # Try to create message with fake entity ID
+            with pytest.raises(ServiceError, match="Entity not found"):
+                processor_context.create_message(
+                    entity_id="fake-entity-id-12345",
+                    payload={"test": "data"}
+                )

@@ -134,7 +134,6 @@ class APIToken(Base, BaseModel):
         """Mark token as used and increment usage counter."""
         self.last_used_at = datetime.utcnow()
         self.usage_count += 1
-        session.flush()  # Ensure database is updated immediately
 
     def set_generation_context(self, context: Dict[str, Any]) -> None:
         """Set metadata about how this token was generated."""
@@ -152,7 +151,6 @@ class APIToken(Base, BaseModel):
     def deactivate(self, session) -> None:
         """Deactivate token (soft delete for audit purposes)."""
         self.is_active = "inactive"
-        session.flush()
 
     @classmethod
     def create_token_hash(cls, token: str) -> str:

@@ -120,8 +120,8 @@ class TestQueueOutputHandlerErrorScenarios:
         assert result.success is False
         assert result.error_code == "AZURE_SERVICE_ERROR"
         assert result.can_retry is True
-        # With exponential backoff and retry_count=0, base_delay=5: expect 5 seconds
-        assert result.retry_after_seconds == 5
+        # With exponential backoff and retry_count=0, base_delay=5: expect 5-6 seconds due to jitter
+        assert 5 <= result.retry_after_seconds <= 6
         # Verify exponential backoff metadata is present
         assert "calculated_backoff_delay" in result.error_details
         assert "backoff_algorithm" in result.error_details

@@ -19,7 +19,11 @@ from src.processing.processing_service import ProcessingService
 from src.processors.v2.processor_handler import ProcessorHandler
 from src.processors.v2.processor_interface import ProcessorInterface
 from src.repositories.entity_repository import EntityRepository
+from src.repositories.state_transition_repository import StateTransitionRepository
+from src.repositories.processing_error_repository import ProcessingErrorRepository
 from src.services.entity_service import EntityService
+from src.services.state_tracking_service import StateTrackingService
+from src.services.processing_error_service import ProcessingErrorService
 from src.utils.logger import get_logger
 
 
@@ -104,12 +108,25 @@ def create_processor_handler(
 
     # Create repositories using session
     entity_repository = EntityRepository(session)
+    state_transition_repository = StateTransitionRepository(session)
+    processing_error_repository = ProcessingErrorRepository(session)
+    
+    # Create services
     entity_service = EntityService(entity_repository)
     duplicate_detection_service = DuplicateDetectionService(entity_repository)
     attribute_builder = EntityAttributeBuilder()
     processing_service = ProcessingService(
         entity_service, duplicate_detection_service, attribute_builder
     )
+    
+    # Create state tracking and error services if not provided
+    if state_tracking_service is None:
+        state_tracking_service = StateTrackingService(state_transition_repository, logger)
+        logger.info("Created StateTrackingService")
+    
+    if error_service is None:
+        error_service = ProcessingErrorService(processing_error_repository, logger)
+        logger.info("Created ProcessingErrorService")
 
     # Create and return the processor handler
     return ProcessorHandler(

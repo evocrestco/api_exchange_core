@@ -51,7 +51,7 @@ class HelloWorldProcessor(ProcessorInterface):
             }
             
             # Persist the entity using context
-            entity_id = context.persist_entity(
+            entity_id = context.create_entity(
                 external_id=message.entity_reference.external_id,
                 canonical_type="greeting",
                 source="hello_world_generator",
@@ -923,7 +923,7 @@ class TestHelloWorldIntegration:
                     }
                     
                     # Persist the entity using context
-                    entity_id = context.persist_entity(
+                    entity_id = context.create_entity(
                         external_id=message.entity_reference.external_id,
                         canonical_type="greeting",
                         source="hello_world_generator",
@@ -1084,7 +1084,7 @@ class TestHelloWorldIntegration:
             def process(self, message: Message, context: ProcessorContext) -> ProcessingResult:
                 try:
                     # Persist the entity
-                    entity_id = context.persist_entity(
+                    entity_id = context.create_entity(
                         external_id=message.entity_reference.external_id,
                         canonical_type="multi_output",
                         source="multi_output_processor",

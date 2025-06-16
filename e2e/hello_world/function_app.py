@@ -60,7 +60,7 @@ class HelloWorldProcessor(ProcessorInterface):
             }
             
             # Persist the entity using context
-            entity_id = context.persist_entity(
+            entity_id = context.create_entity(
                 external_id=message.entity_reference.external_id,
                 canonical_type="greeting",
                 source="hello_world_generator",
@@ -149,7 +149,7 @@ def hello_world_generator(timer: func.TimerRequest) -> None:
         
         # OPTIONAL: Validate entity was persisted correctly
         # NOTE: In production, you would typically remove this validation code.
-        # ProcessorContext.persist_entity() is trusted to work correctly.
+        # ProcessorContext.create_entity() is trusted to work correctly.
         # This validation is only here to demonstrate/verify the framework works.
         if result.status == ProcessingStatus.SUCCESS and result.entities_created:
             try:

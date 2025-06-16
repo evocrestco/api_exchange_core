@@ -99,7 +99,7 @@ class TestDefaultMethodImplementations:
     def sample_message(self, processor_context, tenant_context):
         with tenant_ctx(tenant_context["id"]):
             # Create a real entity first
-            entity_id = processor_context.persist_entity(
+            entity_id = processor_context.create_entity(
                 external_id="test-message-entity",
                 canonical_type="test",
                 source="test_system",
@@ -192,7 +192,7 @@ class TestProcessorContextIntegration:
     def sample_message(self, processor_context, tenant_context):
         with tenant_ctx(tenant_context["id"]):
             # Create a real entity first
-            entity_id = processor_context.persist_entity(
+            entity_id = processor_context.create_entity(
                 external_id="integration-test-entity",
                 canonical_type="order",
                 source="test_system",
@@ -234,7 +234,7 @@ class TestProcessorContextIntegration:
         """Test entity persistence through ProcessorContext."""
         with tenant_ctx(tenant_context["id"]):
             # Persist entity
-            entity_id = processor_context.persist_entity(
+            entity_id = processor_context.create_entity(
                 external_id="workflow-test-001",
                 canonical_type="order", 
                 source="test_system",
@@ -284,7 +284,7 @@ class TestMessageProcessingWorkflow:
         
         with tenant_ctx(tenant_context["id"]):
             # Create a real entity for the test
-            entity_id = processor_context.persist_entity(
+            entity_id = processor_context.create_entity(
                 external_id="validation-test-entity",
                 canonical_type="test",
                 source="test_system",
@@ -304,7 +304,7 @@ class TestMessageProcessingWorkflow:
         
         with tenant_ctx(tenant_context["id"]):
             # Create entity
-            entity_id = processor_context.persist_entity(
+            entity_id = processor_context.create_entity(
                 external_id="state-test-001",
                 canonical_type="order",
                 source="test_system", 
@@ -329,7 +329,7 @@ class TestMessageProcessingWorkflow:
         """Test error recording and retrieval."""
         with tenant_ctx(tenant_context["id"]):
             # Create entity
-            entity_id = processor_context.persist_entity(
+            entity_id = processor_context.create_entity(
                 external_id="error-test-001", 
                 canonical_type="order",
                 source="test_system",

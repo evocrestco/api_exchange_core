@@ -63,15 +63,18 @@ def calculate_exponential_backoff(
     delay = min(delay, max_delay)
 
     # Add jitter to prevent thundering herd effect
-    # Jitter adds ±25% randomization
+    # Jitter adds ±25% randomization, but don't go below the base delay for this retry count
     if jitter:
         import random
 
         jitter_range = delay * 0.25
-        delay = delay + random.uniform(-jitter_range, jitter_range)
-
-    # Ensure minimum delay and return as integer
-    # But don't go below the base_delay to maintain backoff progression
+        jittered_delay = delay + random.uniform(-jitter_range, jitter_range)
+        
+        # Ensure jitter doesn't reduce delay below the base calculation for this retry count
+        min_delay_for_retry = base_delay * (multiplier ** max(0, retry_count))
+        delay = max(jittered_delay, min_delay_for_retry)
+    
+    # Return as integer, ensuring we don't go below base_delay
     return max(int(delay), base_delay)
 
 

@@ -86,7 +86,6 @@ class StateTransitionRepository(BaseRepository[StateTransition]):
             transition = StateTransition(**data_dict)
 
             session.add(transition)
-            session.flush()
 
             # Log while transition is still in session
             self.logger.info(

@@ -113,6 +113,28 @@ class GatewayProcessor(ProcessorInterface):
         start_time = datetime.now(UTC)
         result = ProcessingResult.create_success()
 
+        # Get entity ID for state tracking
+        entity_id = message.entity_reference.id if message.entity_reference else None
+        if not entity_id:
+            return ProcessingResult.create_failure(
+                error_message="No entity reference in message - gateway requires existing entity",
+                error_code="MISSING_ENTITY_REFERENCE",
+                can_retry=False
+            )
+
+        # Record state transition: processing started
+        context.track_state(
+            entity_id=entity_id,
+            from_state="RECEIVED",
+            to_state="GATEWAY_PROCESSING",
+            metadata={
+                "processor_name": "GatewayProcessor",
+                "operation": "route_message",
+                "message_id": message.message_id,
+                "rules_count": len(self.rules)
+            }
+        )
+
         # Track routing decisions
         routing_metadata = {"evaluated_rules": [], "matched_rules": [], "destinations": []}
 
@@ -173,6 +195,34 @@ class GatewayProcessor(ProcessorInterface):
         result.add_metadata(
             "processing_time_ms", (datetime.now(UTC) - start_time).total_seconds() * 1000
         )
+
+        # Record final state transition based on routing outcome
+        if routing_metadata["destinations"]:
+            # Successfully routed to one or more destinations
+            context.track_state(
+                entity_id=entity_id,
+                from_state="GATEWAY_PROCESSING",
+                to_state="ROUTED",
+                metadata={
+                    "processor_name": "GatewayProcessor",
+                    "operation": "route_completed",
+                    "routing_summary": routing_metadata,
+                    "processing_time_ms": int((datetime.now(UTC) - start_time).total_seconds() * 1000)
+                }
+            )
+        else:
+            # No destinations found - routing failed
+            context.track_state(
+                entity_id=entity_id,
+                from_state="GATEWAY_PROCESSING", 
+                to_state="ROUTING_FAILED",
+                metadata={
+                    "processor_name": "GatewayProcessor",
+                    "operation": "route_failed",
+                    "reason": "No rules matched and no default destination",
+                    "routing_summary": routing_metadata
+                }
+            )
 
         # Log routing summary
         self.logger.info(
