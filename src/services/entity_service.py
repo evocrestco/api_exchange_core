@@ -7,43 +7,45 @@ It follows the architecture where entities are immutable and changes
 are represented by creating new versions rather than updating existing records.
 """
 
-from typing import Any, Dict, Generator, List, NoReturn, Optional, Tuple, Union
+import uuid
+from datetime import datetime
+from typing import Any, Dict, Generator, List, Optional, Tuple, Union
+
+from sqlalchemy import exists, and_, func
+from sqlalchemy.exc import IntegrityError
+from pydantic import ValidationError as PydanticValidationError
 
 from src.context.operation_context import OperationHandler, operation
-from src.context.service_decorators import handle_repository_errors, transactional
 from src.context.tenant_context import TenantContext, tenant_aware
-from src.exceptions import ErrorCode, RepositoryError, ServiceError, ValidationError
-from src.repositories.entity_repository import EntityRepository
+from src.db.db_entity_models import Entity
+from src.db.db_tenant_models import Tenant
+from src.exceptions import ErrorCode, ServiceError, ValidationError
 from src.schemas.entity_schema import EntityCreate, EntityFilter, EntityRead, EntityUpdate
-from src.services.base_service import BaseService
+from src.services.base_service import SessionManagedService
 from src.utils.hash_config import HashConfig
 from src.utils.hash_utils import calculate_entity_hash
 
 
-class EntityService(BaseService[EntityCreate, EntityRead, EntityUpdate, EntityFilter]):
+class EntityService(SessionManagedService):
     """
-    Service for working with the simplified Entity model.
+    Pythonic service for entity management with direct SQLAlchemy access.
 
-    This service provides data access operations for entities, following
-    the architectural principle that entities are immutable and changes
-    are represented as new versions rather than updates to existing records.
+    This service handles entity creation, retrieval, and versioning operations
+    following the principle that entities are immutable and changes are
+    represented by creating new versions rather than updating existing records.
+    
+    Uses SQLAlchemy directly - simple, explicit, and efficient.
     """
 
-    repository: EntityRepository  # Type annotation for mypy
-
-    def __init__(self, entity_repository: EntityRepository, logger=None):
+    def __init__(self, session=None, logger=None):
         """
-        Initialize the service with a repository.
+        Initialize the service with its own session.
 
         Args:
-            entity_repository: Entity repository for database operations
+            session: Optional existing session (for testing or coordination)
             logger: Optional logger instance
         """
-        super().__init__(
-            repository=entity_repository,
-            read_schema_class=EntityRead,
-            logger=logger,
-        )
+        super().__init__(session=session, logger=logger)
         self.handler = OperationHandler(logger=self.logger)
 
     def _calculate_content_hash(
@@ -54,76 +56,9 @@ class EntityService(BaseService[EntityCreate, EntityRead, EntityUpdate, EntityFi
             return None
         return calculate_entity_hash(data=content, config=hash_config)
 
-    def _prepare_entity_data(
-        self,
-        external_id: str,
-        canonical_type: str,
-        source: str,
-        content_hash: Optional[str],
-        attributes: Optional[Dict[str, Any]],
-        version: int,
-        tenant_id: str,
-    ) -> EntityCreate:
-        """Prepare entity data for creation."""
-        return EntityCreate(
-            tenant_id=tenant_id,
-            external_id=external_id,
-            canonical_type=canonical_type,
-            source=source,
-            content_hash=content_hash,
-            attributes=attributes or {},
-            version=version,
-        )
-
-    def _handle_repo_error(
-        self, e: RepositoryError, operation_name: str, entity_id: Optional[str] = None
-    ) -> NoReturn:
-        """
-        Convert repository errors to service errors with appropriate context.
-
-        Args:
-            e: The original repository exception
-            operation_name: Name of the operation that failed
-            entity_id: Optional entity ID involved in the operation
-
-        Raises:
-            ServiceError: With appropriate error code based on the original error
-        """
-        tenant_id = self._get_current_tenant_id()
-
-        # Check if it's a not found error by checking the error code
-        if hasattr(e, "error_code") and e.error_code == ErrorCode.NOT_FOUND:
-            raise ServiceError(
-                f"Entity not found: entity_id={entity_id}",
-                error_code=ErrorCode.NOT_FOUND,
-                operation=operation_name,
-                entity_id=entity_id,
-                tenant_id=tenant_id,
-                cause=e,
-            )
-
-        # Check if it's a duplicate error by checking the error code
-        if hasattr(e, "error_code") and e.error_code == ErrorCode.DUPLICATE:
-            raise ServiceError(
-                f"Duplicate entity: entity_id={entity_id}",
-                error_code=ErrorCode.DUPLICATE,
-                operation=operation_name,
-                entity_id=entity_id,
-                tenant_id=tenant_id,
-                cause=e,
-            )
-
-        # General repository error
-        raise ServiceError(
-            f"Error in {operation_name}: {str(e)}",
-            operation=operation_name,
-            entity_id=entity_id,
-            tenant_id=tenant_id,
-        ) from e
 
     @tenant_aware
     @operation(name="entity_service_create")
-    @transactional()
     def create_entity(
         self,
         external_id: str,
@@ -161,35 +96,93 @@ class EntityService(BaseService[EntityCreate, EntityRead, EntityUpdate, EntityFi
             # Calculate content hash
             content_hash = self._calculate_content_hash(content, hash_config)
 
-            # Prepare entity data
-            entity_data = self._prepare_entity_data(
+            # Use Pydantic schema for validation
+            entity_data = EntityCreate(
+                tenant_id=tenant_id,
                 external_id=external_id,
                 canonical_type=canonical_type,
                 source=source,
                 content_hash=content_hash,
-                attributes=attributes,
+                attributes=attributes or {},
                 version=version,
-                tenant_id=tenant_id,
             )
 
-            # Create the entity
-            entity_id = self.repository.create(entity_data)
+            # Explicit tenant validation - Pythonic approach
+            if not self.session.query(exists().where(Tenant.tenant_id == tenant_id)).scalar():
+                raise ServiceError(
+                    f"Invalid tenant: {tenant_id}",
+                    error_code=ErrorCode.CONSTRAINT_VIOLATION,
+                    operation="create_entity",
+                    tenant_id=tenant_id,
+                )
+
+            # Create entity using validated data
+            entity = Entity(
+                id=str(uuid.uuid4()),
+                tenant_id=entity_data.tenant_id,
+                external_id=entity_data.external_id,
+                canonical_type=entity_data.canonical_type,
+                source=entity_data.source,
+                content_hash=entity_data.content_hash,
+                attributes=entity_data.attributes or {},
+                processing_results=[],
+                version=entity_data.version,
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+            )
+
+            self.session.add(entity)
+            # Transaction managed by caller
 
             self.logger.info(
-                f"Created entity: id={entity_id}, tenant={tenant_id}, "
+                f"Created entity: id={entity.id}, tenant={tenant_id}, "
                 f"external_id={external_id}, source={source}, version={version}"
             )
 
-            return entity_id
+            return entity.id
 
-        except RepositoryError as e:
-            self._handle_repo_error(e, "create_entity")
+        except PydanticValidationError as e:
+            # Handle Pydantic validation errors
+            raise ValidationError(
+                f"Invalid entity data: {str(e)}",
+                details={"validation_errors": e.errors()},
+            ) from e
+        except IntegrityError as e:
+            # Transaction managed by caller
+            # Check if it's a foreign key constraint (tenant validation)
+            if "foreign key constraint" in str(e).lower():
+                raise ServiceError(
+                    f"Invalid tenant: {tenant_id}",
+                    error_code=ErrorCode.CONSTRAINT_VIOLATION,
+                    operation="create_entity",
+                    tenant_id=tenant_id,
+                    cause=e,
+                ) from e
+            # Check if it's a unique constraint (duplicate)
+            elif "unique constraint" in str(e).lower():
+                raise ServiceError(
+                    f"Entity already exists: external_id={external_id}, source={source}",
+                    error_code=ErrorCode.DUPLICATE,
+                    operation="create_entity",
+                    entity_external_id=external_id,
+                    tenant_id=tenant_id,
+                    cause=e,
+                ) from e
+            else:
+                raise ServiceError(
+                    f"Entity creation failed due to data integrity constraints",
+                    error_code=ErrorCode.INVALID_DATA,
+                    operation="create_entity",
+                    entity_external_id=external_id,
+                    tenant_id=tenant_id,
+                    cause=e,
+                ) from e
         except Exception as e:
+            # Transaction managed by caller
             self._handle_service_exception("create_entity", e)
 
     @tenant_aware
     @operation(name="entity_service_create_new_version")
-    @transactional()
     def create_new_version(
         self,
         external_id: str,
@@ -219,35 +212,77 @@ class EntityService(BaseService[EntityCreate, EntityRead, EntityUpdate, EntityFi
             ValidationError: If validation fails
             ServiceError: If trying to version a non-existent entity or another error occurs
         """
-        tenant_id = self._get_current_tenant_id()
-
         try:
+            tenant_id = self._get_current_tenant_id()
+            
+            # Get the current max version
+            current_max_version = self.get_max_version(external_id, source)
+            new_version = current_max_version + 1
+
+            # If this is the first version (max_version was 0), we need an existing entity
+            if current_max_version == 0:
+                raise ServiceError(
+                    f"Cannot create new version for non-existent entity: external_id={external_id}, source={source}",
+                    error_code=ErrorCode.NOT_FOUND,
+                    operation="create_new_version",
+                    tenant_id=tenant_id,
+                )
+
+            # Get the canonical_type from the latest entity
+            latest_entity_read = self.get_entity_by_external_id(external_id, source)
+            if not latest_entity_read:
+                raise ServiceError(
+                    f"Cannot find latest entity: external_id={external_id}, source={source}",
+                    error_code=ErrorCode.NOT_FOUND,
+                    operation="create_new_version",
+                    tenant_id=tenant_id,
+                )
+            
+            canonical_type = latest_entity_read.canonical_type
+            
             # Calculate content hash
             content_hash = self._calculate_content_hash(content, hash_config)
 
-            # Create the new version in the repository
-            entity_id, version = self.repository.create_new_version(
+            # Create the new entity version directly
+            entity = Entity(
+                id=str(uuid.uuid4()),
+                tenant_id=tenant_id,
                 external_id=external_id,
+                canonical_type=canonical_type,
                 source=source,
                 content_hash=content_hash,
-                attributes=attributes,
+                attributes=attributes or {},
+                processing_results=[],
+                version=new_version,
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
             )
+
+            self.session.add(entity)
+            # Transaction managed by caller
 
             self.logger.info(
-                f"Created new version: id={entity_id}, tenant={tenant_id}, "
-                f"external_id={external_id}, source={source}, version={version}"
+                f"Created new version: id={entity.id}, tenant={tenant_id}, "
+                f"external_id={external_id}, source={source}, version={new_version}"
             )
 
-            return entity_id, version
+            return entity.id, new_version
 
-        except RepositoryError as e:
-            self._handle_repo_error(e, "create_new_version")
         except Exception as e:
+            # Transaction managed by caller
+            if isinstance(e, ServiceError):
+                # Re-wrap ServiceError with create_new_version operation context
+                raise ServiceError(
+                    str(e),
+                    error_code=e.error_code,
+                    operation="create_new_version",
+                    tenant_id=self._get_current_tenant_id(),
+                    cause=e,
+                ) from e
             self._handle_service_exception("create_new_version", e)
 
     @tenant_aware
     @operation(name="entity_service_get_max_version")
-    @handle_repository_errors("get_max_version")
     def get_max_version(self, external_id: str, source: str) -> int:
         """
         Get the maximum version number for an entity.
@@ -262,8 +297,27 @@ class EntityService(BaseService[EntityCreate, EntityRead, EntityUpdate, EntityFi
         Raises:
             ServiceError: If an error occurs during repository access
         """
-        # Get max version from repository
-        return self.repository.get_max_version(external_id, source)
+        try:
+            tenant_id = self._get_current_tenant_id()
+            
+            # Query for the maximum version directly using SQL's MAX function
+            from sqlalchemy import func
+            
+            max_version = (
+                self.session.query(func.max(Entity.version))
+                .filter(
+                    Entity.external_id == external_id,
+                    Entity.source == source,
+                    Entity.tenant_id == tenant_id,
+                )
+                .scalar()
+            )
+
+            # If no entities found, return 0 (versions start at 1)
+            return max_version or 0
+            
+        except Exception as e:
+            self._handle_service_exception("get_max_version", e)
 
     @tenant_aware
     @operation(name="entity_service_get")
@@ -281,24 +335,33 @@ class EntityService(BaseService[EntityCreate, EntityRead, EntityUpdate, EntityFi
             ServiceError: If entity is not found or another error occurs
         """
         try:
-            # Get the entity
-            entity = self.repository.get_by_id(entity_id)
+            tenant_id = self._get_current_tenant_id()
+            
+            # Query entity directly with SQLAlchemy
+            entity = (
+                self.session.query(Entity)
+                .filter(
+                    Entity.id == entity_id,
+                    Entity.tenant_id == tenant_id,
+                )
+                .first()
+            )
 
-            # Check if entity exists
             if entity is None:
-                tenant_id = self._get_current_tenant_id()
                 raise ServiceError(
                     f"Entity not found: entity_id={entity_id}",
                     error_code=ErrorCode.NOT_FOUND,
                     entity_id=entity_id,
-                    tenant_id=tenant_id or "unknown",
+                    tenant_id=tenant_id,
                 )
 
-            # Return the EntityRead object directly from repository
-            return entity
+            # Convert to EntityRead
+            return EntityRead.model_validate(entity)
 
-        except RepositoryError as e:
-            self._handle_repo_error(e, "get_entity", entity_id)
+        except Exception as e:
+            if isinstance(e, ServiceError):
+                raise
+            self._handle_service_exception("get_entity", e, entity_id)
 
     @tenant_aware
     @operation(name="entity_service_get_by_external_id")
@@ -327,24 +390,26 @@ class EntityService(BaseService[EntityCreate, EntityRead, EntityUpdate, EntityFi
             ServiceError: If an error occurs
         """
         try:
-            # Get the entity/entities
-            result = self.repository.get_by_external_id(
-                external_id=external_id, source=source, version=version, all_versions=all_versions
+            tenant_id = self._get_current_tenant_id()
+            
+            # Base query with SQLAlchemy
+            base_query = self.session.query(Entity).filter(
+                Entity.external_id == external_id,
+                Entity.source == source,
+                Entity.tenant_id == tenant_id,
             )
 
-            if result is None:
-                return None
-
-            # Process based on what kind of result we got
+            # Handle the different retrieval cases
             if all_versions:
-                # List of EntityRead objects - return directly
-                return result
+                entities = base_query.order_by(Entity.version).all()
+                return [EntityRead.model_validate(entity) for entity in entities]
+            elif version is not None:
+                entity = base_query.filter(Entity.version == version).first()
+                return EntityRead.model_validate(entity) if entity else None
             else:
-                # Single EntityRead object - return directly
-                return result
+                entity = base_query.order_by(Entity.version.desc()).first()
+                return EntityRead.model_validate(entity) if entity else None
 
-        except RepositoryError as e:
-            self._handle_repo_error(e, "get_entity_by_external_id")
         except Exception as e:
             self._handle_service_exception("get_entity_by_external_id", e)
 
@@ -365,24 +430,25 @@ class EntityService(BaseService[EntityCreate, EntityRead, EntityUpdate, EntityFi
             ServiceError: If an error occurs
         """
         try:
-            # Get the entity
-            entity = self.repository.get_by_content_hash(content_hash, source)
+            tenant_id = self._get_current_tenant_id()
+            
+            entity = (
+                self.session.query(Entity)
+                .filter(
+                    Entity.content_hash == content_hash,
+                    Entity.source == source,
+                    Entity.tenant_id == tenant_id,
+                )
+                .first()
+            )
 
-            if not entity:
-                return None
+            return EntityRead.model_validate(entity) if entity else None
 
-            # Return EntityRead object directly from repository
-            return entity
-
-        except RepositoryError as e:
-            self._handle_repo_error(e, "get_entity_by_content_hash")
         except Exception as e:
             self._handle_service_exception("get_entity_by_content_hash", e)
 
     @tenant_aware
     @operation(name="entity_service_delete")
-    @transactional()
-    @handle_repository_errors("delete_entity")
     def delete_entity(self, entity_id: str) -> bool:
         """
         Delete an entity.
@@ -396,8 +462,31 @@ class EntityService(BaseService[EntityCreate, EntityRead, EntityUpdate, EntityFi
         Raises:
             ServiceError: If an error occurs
         """
-        # Delete the entity
-        return self.repository.delete(entity_id)
+        try:
+            tenant_id = self._get_current_tenant_id()
+            
+            # Get entity for deletion
+            entity = (
+                self.session.query(Entity)
+                .filter(
+                    Entity.id == entity_id,
+                    Entity.tenant_id == tenant_id,
+                )
+                .first()
+            )
+            
+            if not entity:
+                return False
+                
+            self.session.delete(entity)
+            # Transaction managed by caller
+            
+            self.logger.info(f"Deleted entity: id={entity_id}, tenant={tenant_id}")
+            return True
+            
+        except Exception as e:
+            # Transaction managed by caller
+            self._handle_service_exception("delete_entity", e, entity_id)
 
     @tenant_aware
     @operation(name="entity_service_list")
@@ -419,18 +508,59 @@ class EntityService(BaseService[EntityCreate, EntityRead, EntityUpdate, EntityFi
             ServiceError: If an error occurs
         """
         try:
-            # List entities
-            entities, total_count = self.repository.list(filter_data, limit, offset)
+            tenant_id = self._get_current_tenant_id()
+            query = self.session.query(Entity)
 
-            # Return EntityRead objects directly from repository
-            return entities, total_count
+            # Always filter by tenant_id for tenant isolation
+            query = query.filter(Entity.tenant_id == tenant_id)
 
-        except RepositoryError as e:
-            self._handle_repo_error(e, "list_entities")
+            # Define filter mappings - exact match filters
+            exact_filters = {
+                "external_id": Entity.external_id,
+                "canonical_type": Entity.canonical_type,
+                "source": Entity.source,
+                "content_hash": Entity.content_hash,
+            }
+
+            # Apply exact match filters
+            for field_name, entity_field in exact_filters.items():
+                value = getattr(filter_data, field_name)
+                if value is not None:
+                    query = query.filter(entity_field == value)
+
+            # Define range filters
+            range_filters = [
+                ("created_after", Entity.created_at, lambda f, v: f >= v),
+                ("created_before", Entity.created_at, lambda f, v: f <= v),
+                ("updated_after", Entity.updated_at, lambda f, v: f >= v),
+                ("updated_before", Entity.updated_at, lambda f, v: f <= v),
+            ]
+
+            # Apply range filters
+            for field_name, entity_field, compare_op in range_filters:
+                value = getattr(filter_data, field_name)
+                if value is not None:
+                    query = query.filter(compare_op(entity_field, value))
+
+            # Get total count before pagination
+            total_count = query.count()
+            
+            # Apply ordering and pagination
+            query = query.order_by(Entity.updated_at.desc())
+            query = query.offset(offset).limit(limit)
+            
+            # Execute query
+            entities = query.all()
+            
+            entity_reads = [EntityRead.model_validate(entity) for entity in entities]
+            
+            return entity_reads, total_count
+
+        except Exception as e:
+            self._handle_service_exception("list_entities", e)
 
     @tenant_aware
     @operation(name="entity_service_check_existence")
-    @handle_repository_errors("check_entity_existence")
     def check_entity_existence(self, external_id: str, source: str) -> bool:
         """
         Check if an entity exists by external ID and source.
@@ -445,13 +575,27 @@ class EntityService(BaseService[EntityCreate, EntityRead, EntityUpdate, EntityFi
         Raises:
             ServiceError: If an error occurs
         """
-        # Check if entity exists
-        entity = self.repository.get_by_external_id(external_id, source)
-        return entity is not None
+        try:
+            tenant_id = self._get_current_tenant_id()
+            
+            # Check if entity exists using exists() for efficiency
+            exists_query = self.session.query(
+                exists().where(
+                    and_(
+                        Entity.external_id == external_id,
+                        Entity.source == source,
+                        Entity.tenant_id == tenant_id,
+                    )
+                )
+            ).scalar()
+            
+            return exists_query
+            
+        except Exception as e:
+            self._handle_service_exception("check_entity_existence", e)
 
     @tenant_aware
     @operation(name="entity_service_update_attributes")
-    @transactional()
     def update_entity_attributes(self, entity_id: str, attributes: Dict[str, Any]) -> bool:
         """
         Update the attributes of an entity.
@@ -469,18 +613,48 @@ class EntityService(BaseService[EntityCreate, EntityRead, EntityUpdate, EntityFi
         Raises:
             ServiceError: If entity is not found or another error occurs
         """
-        self._get_current_tenant_id()  # Validate tenant context
-
         try:
-            # Use repository to update attributes
-            success = self.repository.update_attributes(entity_id, attributes)
+            tenant_id = self._get_current_tenant_id()
+            
+            # Get entity for update
+            entity = (
+                self.session.query(Entity)
+                .filter(
+                    Entity.id == entity_id,
+                    Entity.tenant_id == tenant_id,
+                )
+                .first()
+            )
+            
+            if not entity:
+                raise ServiceError(
+                    f"Entity not found: {entity_id}",
+                    error_code=ErrorCode.NOT_FOUND,
+                    operation="update_entity_attributes",
+                    entity_id=entity_id,
+                    tenant_id=tenant_id,
+                )
 
+            # Merge the new attributes with existing ones
+            current_attributes = entity.attributes or {}
+            updated_attributes = {**current_attributes, **attributes}
+
+            # Update attributes and mark as modified
+            entity.attributes = updated_attributes
+            entity.updated_at = datetime.utcnow()
+            
+            # Flag the JSONB column as modified for SQLAlchemy
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(entity, "attributes")
+            # Transaction managed by caller
+            
             self.logger.info(f"Updated attributes for entity {entity_id}")
-            return success
+            return True
 
-        except RepositoryError as e:
-            self._handle_repo_error(e, "update_entity_attributes", entity_id)
         except Exception as e:
+            # Transaction managed by caller
+            if isinstance(e, ServiceError):
+                raise
             self._handle_service_exception("update_entity_attributes", e, entity_id)
 
     @tenant_aware
@@ -505,13 +679,26 @@ class EntityService(BaseService[EntityCreate, EntityRead, EntityUpdate, EntityFi
         Raises:
             ServiceError: If an error occurs during iteration
         """
-        try:
-            # Delegate to repository's iterator
-            yield from self.repository.iter_entities(filter_data, batch_size)
-        except RepositoryError as e:
-            self._handle_repo_error(e, "iter_entities")
-        except Exception as e:
-            self._handle_service_exception("iter_entities", e)
+        offset = 0
+
+        while True:
+            # Fetch a batch
+            entities, total_count = self.list_entities(filter_data, limit=batch_size, offset=offset)
+
+            if not entities:
+                # No more entities
+                break
+
+            # Yield entities one at a time
+            for entity in entities:
+                yield entity
+
+            # Move to next batch
+            offset += batch_size
+
+            # Stop if we've processed all entities
+            if offset >= total_count:
+                break
 
     @tenant_aware
     @operation(name="entity_service_add_processing_result")
@@ -530,10 +717,51 @@ class EntityService(BaseService[EntityCreate, EntityRead, EntityUpdate, EntityFi
             ServiceError: If entity not found or other service error occurs
         """
         try:
-            return self.repository.add_processing_result(entity_id, processing_result)
-        except RepositoryError as e:
-            self._handle_repo_error(e, "add_processing_result", entity_id=entity_id)
+            tenant_id = self._get_current_tenant_id()
+            
+            # Get entity for update
+            entity = (
+                self.session.query(Entity)
+                .filter(
+                    Entity.id == entity_id,
+                    Entity.tenant_id == tenant_id,
+                )
+                .first()
+            )
+            
+            if not entity:
+                raise ServiceError(
+                    f"Entity not found: {entity_id}",
+                    error_code=ErrorCode.NOT_FOUND,
+                    operation="add_processing_result",
+                    entity_id=entity_id,
+                    tenant_id=tenant_id,
+                )
+
+            # Initialize processing_results if None
+            if entity.processing_results is None:
+                entity.processing_results = []
+
+            # Convert ProcessingResult to dict for JSON storage
+            result_dict = processing_result.model_dump(mode="json")
+
+            # Append to processing results array
+            entity.processing_results.append(result_dict)
+
+            # Flag the JSONB column as modified for SQLAlchemy
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(entity, "processing_results")
+
+            # Update the entity's updated_at timestamp
+            entity.updated_at = datetime.utcnow()
+            # Transaction managed by caller
+            
+            return True
+            
         except Exception as e:
+            # Transaction managed by caller
+            if isinstance(e, ServiceError):
+                raise
             self._handle_service_exception("add_processing_result", e, entity_id=entity_id)
 
     @tenant_aware
@@ -552,8 +780,72 @@ class EntityService(BaseService[EntityCreate, EntityRead, EntityUpdate, EntityFi
             ServiceError: If entity not found or other service error occurs
         """
         try:
-            return self.repository.get_processing_summary(entity_id)
-        except RepositoryError as e:
-            self._handle_repo_error(e, "get_processing_summary", entity_id=entity_id)
+            tenant_id = self._get_current_tenant_id()
+            
+            # Get entity
+            entity = (
+                self.session.query(Entity)
+                .filter(
+                    Entity.id == entity_id,
+                    Entity.tenant_id == tenant_id,
+                )
+                .first()
+            )
+            
+            if not entity:
+                raise ServiceError(
+                    f"Entity not found: {entity_id}",
+                    error_code=ErrorCode.NOT_FOUND,
+                    operation="get_processing_summary",
+                    entity_id=entity_id,
+                    tenant_id=tenant_id,
+                )
+
+            # Initialize summary
+            summary = {
+                "total_processing_attempts": 0,
+                "successful_attempts": 0,
+                "failed_attempts": 0,
+                "processors_involved": [],
+                "has_unrecoverable_failures": False,
+                "last_processed_at": None,
+            }
+
+            # Process results if they exist
+            if entity.processing_results:
+                summary["total_processing_attempts"] = len(entity.processing_results)
+
+                processor_names = set()
+
+                for result in entity.processing_results:
+                    # Count successes and failures
+                    if result.get("success", False):
+                        summary["successful_attempts"] += 1
+                    else:
+                        summary["failed_attempts"] += 1
+                        # Check if it's unrecoverable
+                        if not result.get("can_retry", True):
+                            summary["has_unrecoverable_failures"] = True
+
+                    # Track processor names
+                    processor_name = result.get("processing_metadata", {}).get("processor_name")
+                    if processor_name:
+                        processor_names.add(processor_name)
+
+                    # Track last processed time
+                    completed_at = result.get("completed_at")
+                    if completed_at:
+                        if (
+                            not summary["last_processed_at"]
+                            or completed_at > summary["last_processed_at"]
+                        ):
+                            summary["last_processed_at"] = completed_at
+
+                summary["processors_involved"] = sorted(list(processor_names))
+
+            return summary
+            
         except Exception as e:
+            if isinstance(e, ServiceError):
+                raise
             self._handle_service_exception("get_processing_summary", e, entity_id=entity_id)

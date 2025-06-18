@@ -5,6 +5,8 @@ This repository provides atomic token operations using PostgreSQL advisory locks
 to coordinate token access across multiple serverless function instances.
 """
 
+import os
+import threading
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -88,6 +90,20 @@ class APITokenRepository(BaseRepository[APIToken]):
             RepositoryError: If database operation fails
         """
         tenant_id = self._get_current_tenant_id()
+        
+        # Log entry to this method
+        self.logger.info(
+            "get_valid_token called",
+            extra={
+                "repository_instance": id(self),
+                "session_instance": id(self.session),
+                "api_provider": self.api_provider,
+                "tenant_id": tenant_id,
+                "operation": operation,
+                "thread_id": threading.get_ident(),
+                "process_id": os.getpid(),
+            },
+        )
 
         try:
             # Calculate buffer time to avoid tokens that expire too soon
@@ -675,6 +691,28 @@ class APITokenRepository(BaseRepository[APIToken]):
             success: "success", "failed", or "unknown"
             **kwargs: Additional usage metadata
         """
+        import uuid as uuid_module
+        
+        # Generate UUID here to track when and where it's created
+        usage_log_id = str(uuid_module.uuid4())
+        
+        # Log detailed information about this call
+        self.logger.info(
+            "Creating APITokenUsageLog record",
+            extra={
+                "repository_instance": id(self),
+                "repository_hash": hash(self),
+                "session_instance": id(self.session),
+                "session_hash": hash(self.session),
+                "usage_log_id": usage_log_id,
+                "api_provider": self.api_provider,
+                "token_id": token.id,
+                "operation": operation,
+                "thread_id": threading.get_ident() if "threading" in globals() else None,
+                "process_id": os.getpid() if "os" in globals() else None,
+            },
+        )
+        
         try:
             usage_log = APITokenUsageLog.create_usage_record(
                 tenant_id=token.tenant_id,
@@ -685,8 +723,22 @@ class APITokenRepository(BaseRepository[APIToken]):
                 success=success,
                 **kwargs,
             )
+            
+            # Override the auto-generated UUID with our tracked one
+            usage_log.id = usage_log_id
 
             self.session.add(usage_log)
+            
+            self.logger.info(
+                "Added APITokenUsageLog to session",
+                extra={
+                    "repository_instance": id(self),
+                    "usage_log_id": usage_log_id,
+                    "usage_log_instance": id(usage_log),
+                    "session_new": len(self.session.new),
+                    "session_dirty": len(self.session.dirty),
+                },
+            )
 
         except Exception as e:
             # Don't fail the main operation if logging fails
@@ -697,6 +749,8 @@ class APITokenRepository(BaseRepository[APIToken]):
                     "token_id": token.id,
                     "operation": operation,
                     "error": str(e),
+                    "repository_instance": id(self),
+                    "usage_log_id": usage_log_id,
                 },
             )
 

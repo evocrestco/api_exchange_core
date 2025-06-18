@@ -134,7 +134,7 @@ class TestOutputHandlerErrorRetryDelay:
         
         # Test progression
         for retry_count in range(5):
-            delay = error.calculate_retry_delay(retry_count)
+            delay = error.calculate_retry_delay(retry_count, jitter=False)
             assert delay >= 3, f"Delay should be at least base delay (3s), got {delay}"
             assert delay <= 300, f"Delay should not exceed max (300s), got {delay}"
     
@@ -147,14 +147,13 @@ class TestOutputHandlerErrorRetryDelay:
             retry_after_seconds=5
         )
         
-        # Override base delay - but remember jitter is enabled by default
-        delay = error.calculate_retry_delay(retry_count=0, base_delay=10)
-        # With jitter, should be within ±25% of 10, but not below 10
-        assert 10 <= delay <= 12.5, f"Should use override base_delay ±25%, got {delay}"
+        # Override base delay - disable jitter for deterministic test
+        delay = error.calculate_retry_delay(retry_count=0, base_delay=10, jitter=False)
+        assert delay == 10, f"Expected 10s with base_delay override, got {delay}s"
         
-        delay = error.calculate_retry_delay(retry_count=1, base_delay=10)
-        # With jitter, should be within ±25% of 20, but not below 10
-        assert 15 <= delay <= 25, f"Should double override base_delay ±25%, got {delay}"
+        # Test retry_count=1, should be 10 * 2 = 20s
+        delay = error.calculate_retry_delay(retry_count=1, base_delay=10, jitter=False)
+        assert delay == 20, f"Expected 20s with doubled base_delay, got {delay}s"
     
     def test_calculate_retry_delay_no_retry_after_seconds(self):
         """Test calculate_retry_delay when retry_after_seconds is None."""
@@ -166,10 +165,10 @@ class TestOutputHandlerErrorRetryDelay:
         )
         
         # Should default to 1 second
-        delay = error.calculate_retry_delay(retry_count=0)
+        delay = error.calculate_retry_delay(retry_count=0, jitter=False)
         assert delay == 1, f"Should default to 1 second, got {delay}"
         
-        delay = error.calculate_retry_delay(retry_count=1)
+        delay = error.calculate_retry_delay(retry_count=1, jitter=False)
         assert delay == 2, f"Should double to 2 seconds, got {delay}"
 
 

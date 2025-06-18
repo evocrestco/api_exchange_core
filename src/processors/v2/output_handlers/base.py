@@ -113,13 +113,14 @@ class OutputHandlerError(Exception):
         self.error_details = error_details or {}
         self.original_exception = original_exception
 
-    def calculate_retry_delay(self, retry_count: int, base_delay: Optional[int] = None) -> int:
+    def calculate_retry_delay(self, retry_count: int, base_delay: Optional[int] = None, jitter: bool = True) -> int:
         """
         Calculate retry delay using exponential backoff.
 
         Args:
             retry_count: Current retry attempt (0-based)
             base_delay: Override base delay, otherwise uses retry_after_seconds or default
+            jitter: Whether to add jitter to prevent thundering herd (default: True)
 
         Returns:
             Delay in seconds before next retry
@@ -132,7 +133,7 @@ class OutputHandlerError(Exception):
             base_delay=effective_base_delay,
             max_delay=300,  # 5 minutes max
             multiplier=2.0,
-            jitter=True,
+            jitter=jitter,
         )
 
 
@@ -412,7 +413,7 @@ class OutputHandler(ABC):
             base_delay=base_delay or 1,
             max_delay=300,  # 5 minutes max
             multiplier=2.0,
-            jitter=True,
+            jitter=not self.config.get("disable_jitter", False),
         )
 
         # Create enhanced error details with backoff info

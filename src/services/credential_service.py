@@ -8,7 +8,7 @@ proper tenant isolation, security validation, and comprehensive audit trails.
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from src.context.service_decorators import handle_repository_errors
+from src.context.operation_context import operation
 from src.context.tenant_context import TenantContext, tenant_aware
 from src.db.db_credential_models import ExternalCredential
 from src.exceptions import (
@@ -21,8 +21,8 @@ from src.exceptions import (
     TokenNotAvailableError,
     ValidationError,
 )
-from src.repositories.api_token_repository import APITokenRepository
-from src.repositories.credential_repository import CredentialRepository
+from sqlalchemy import and_
+from sqlalchemy.orm import Session
 from src.schemas.credential_schema import (
     CredentialCreate,
     CredentialFilter,
@@ -30,13 +30,10 @@ from src.schemas.credential_schema import (
     CredentialUpdate,
 )
 from src.services.api_token_service import APITokenService
-from src.services.base_service import BaseService
 from src.utils.logger import get_logger
 
 
-class CredentialService(
-    BaseService[CredentialCreate, CredentialRead, CredentialUpdate, CredentialFilter]
-):
+class CredentialService:
     """
     Service for managing external system credentials.
 
@@ -50,15 +47,27 @@ class CredentialService(
 
     def __init__(
         self,
-        credential_repository: CredentialRepository,
+        session: Session,
         api_token_service: Optional[APITokenService] = None,
     ):
-        super().__init__(credential_repository, CredentialRead)
-        self.credential_repository = credential_repository
+        """Initialize with SQLAlchemy session and optional API token service."""
+        self.session = session
         self.api_token_service = api_token_service
+        self.logger = get_logger()
+    
+    def _get_current_tenant_id(self) -> str:
+        """Get the current tenant ID from context."""
+        tenant_id = TenantContext.get_current_tenant_id()
+        if not tenant_id:
+            raise ServiceError(
+                "No tenant ID available in context",
+                error_code=ErrorCode.TENANT_NOT_FOUND,
+                operation="credential_service",
+            )
+        return tenant_id
 
     @tenant_aware
-    @handle_repository_errors("get_credentials")
+    @operation()
     def get_credentials(self, system_name: str) -> Dict[str, Any]:
         """
         Get decrypted credentials for a specific external system.
@@ -85,8 +94,17 @@ class CredentialService(
             },
         )
 
-        # Get credential from repository
-        credential = self.credential_repository.get_by_system_name(system_name)
+        # Get credential using SQLAlchemy directly
+        credential = (
+            self.session.query(ExternalCredential)
+            .filter(
+                and_(
+                    ExternalCredential.tenant_id == tenant_id,
+                    ExternalCredential.system_name == system_name,
+                )
+            )
+            .first()
+        )
         if not credential:
             self.logger.warning(
                 "Credential not found", extra={"tenant_id": tenant_id, "system_name": system_name}
@@ -133,7 +151,7 @@ class CredentialService(
         )
 
         # Get decrypted credentials
-        credentials = credential.get_credentials(self.credential_repository.session)
+        credentials = credential.get_credentials(self.session)
         if not credentials:
             self.logger.error(
                 "Failed to decrypt credential data",
@@ -148,7 +166,7 @@ class CredentialService(
         return credentials
 
     @tenant_aware
-    @handle_repository_errors("store_credentials")
+    @operation()
     def store_credentials(
         self,
         system_name: str,
@@ -197,7 +215,16 @@ class CredentialService(
             )
 
         # Check if credential already exists
-        existing = self.credential_repository.get_by_system_name(system_name)
+        existing = (
+            self.session.query(ExternalCredential)
+            .filter(
+                and_(
+                    ExternalCredential.tenant_id == tenant_id,
+                    ExternalCredential.system_name == system_name,
+                )
+            )
+            .first()
+        )
         if existing:
             self.logger.warning(
                 "Attempted to store credential for existing system",
@@ -215,12 +242,21 @@ class CredentialService(
 
         # Create new credential
         try:
-            credential = self.credential_repository.create_credential(
+            # Create credential object
+            credential = ExternalCredential(
+                tenant_id=tenant_id,
                 system_name=system_name,
                 auth_type=auth_type,
-                credentials=credentials,
                 expires_at=expires_at,
+                is_active="active",
             )
+            
+            # Set credentials (triggers encryption)
+            credential.set_credentials(credentials, self.session)
+            
+            # Save to database
+            self.session.add(credential)
+            self.session.flush()  # Get the ID
 
             self.logger.info(
                 "Credentials stored successfully",
@@ -248,7 +284,7 @@ class CredentialService(
             raise
 
     @tenant_aware
-    @handle_repository_errors("update_credentials")
+    @operation()
     def update_credentials(
         self, system_name: str, credentials: Dict[str, Any], expires_at: Optional[datetime] = None
     ) -> None:
@@ -276,10 +312,31 @@ class CredentialService(
             },
         )
 
-        # Update credential
-        credential = self.credential_repository.update_credentials(
-            system_name=system_name, credentials=credentials, expires_at=expires_at
+        # Get existing credential
+        credential = (
+            self.session.query(ExternalCredential)
+            .filter(
+                and_(
+                    ExternalCredential.tenant_id == tenant_id,
+                    ExternalCredential.system_name == system_name,
+                )
+            )
+            .first()
         )
+        
+        if not credential:
+            raise CredentialNotFoundError(
+                f"No credential found for system '{system_name}' in tenant '{tenant_id}'"
+            )
+            
+        # Update credentials (triggers re-encryption)
+        credential.set_credentials(credentials, self.session)
+        
+        # Update expiration if provided
+        if expires_at is not None:
+            credential.expires_at = expires_at
+            
+        self.session.flush()
 
         self.logger.info(
             "Credentials updated successfully",
@@ -291,7 +348,7 @@ class CredentialService(
         )
 
     @tenant_aware
-    @handle_repository_errors("delete_credentials")
+    @operation()
     def delete_credentials(self, system_name: str) -> bool:
         """
         Delete credentials for an external system.
@@ -311,7 +368,23 @@ class CredentialService(
             "Deleting credentials", extra={"tenant_id": tenant_id, "system_name": system_name}
         )
 
-        deleted = self.credential_repository.delete_credential(system_name)
+        # Find and delete credential
+        credential = (
+            self.session.query(ExternalCredential)
+            .filter(
+                and_(
+                    ExternalCredential.tenant_id == tenant_id,
+                    ExternalCredential.system_name == system_name,
+                )
+            )
+            .first()
+        )
+        
+        deleted = False
+        if credential:
+            self.session.delete(credential)
+            self.session.flush()
+            deleted = True
 
         if deleted:
             self.logger.info(

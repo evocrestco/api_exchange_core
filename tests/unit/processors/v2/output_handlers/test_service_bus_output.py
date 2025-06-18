@@ -56,6 +56,7 @@ class TestServiceBusOutputHandler:
             destination="test-processing-queue",
             config={
                 "connection_string": "Endpoint=sb://test.servicebus.windows.net/;SharedAccessKeyName=test;SharedAccessKey=testkey=",
+                "disable_jitter": True,  # Make tests deterministic
                 "destination_type": "queue",
                 "time_to_live_seconds": 3600,  # 1 hour
                 "session_id": "test-session",

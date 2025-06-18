@@ -160,9 +160,15 @@ class TestDuplicateDetectionService:
     """Test DuplicateDetectionService with real database operations."""
     
     @pytest.fixture
-    def detection_service(self, entity_repository):
-        """Create a duplicate detection service."""
-        return DuplicateDetectionService(entity_repository)
+    def detection_service(self, db_session):
+        """Create a duplicate detection service with test session."""
+        from src.services.entity_service import EntityService
+        
+        # Create the EntityService with the test session
+        test_entity_service = EntityService(session=db_session)
+        
+        # Create DuplicateDetectionService with the test EntityService
+        return DuplicateDetectionService(entity_service=test_entity_service)
     
     @pytest.fixture
     def sample_order_data(self):

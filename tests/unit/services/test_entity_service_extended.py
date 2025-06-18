@@ -20,7 +20,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "sr
 
 from src.context.tenant_context import TenantContext
 from src.exceptions import ErrorCode, RepositoryError, ServiceError, ValidationError
-from src.repositories.entity_repository import EntityRepository
 from src.schemas.entity_schema import EntityFilter, EntityRead
 from src.services.entity_service import EntityService
 from src.utils.hash_config import HashConfig
@@ -108,14 +107,14 @@ class TestEntityServiceList:
         assert len(entities) == 3
         assert total_count == 10  # Total count should reflect all matching entities
 
-    def test_list_entities_repository_error(self, entity_service, tenant_context):
-        """Test list entities handles repository errors."""
+    def test_list_entities_database_error(self, entity_service, tenant_context):
+        """Test list entities handles database errors."""
         # Arrange
         filter_data = EntityFilter()
 
-        # Mock repository to raise error
-        with patch.object(entity_service.repository, "list") as mock_list:
-            mock_list.side_effect = RepositoryError("Database error")
+        # Mock session.query to raise error (Pythonic approach)
+        with patch.object(entity_service.session, "query") as mock_query:
+            mock_query.side_effect = Exception("Database connection error")
 
             # Act & Assert
             with pytest.raises(ServiceError) as excinfo:
@@ -134,12 +133,12 @@ class TestEntityServiceVersioningEdgeCases:
     def test_create_new_version_nonexistent_entity(self, entity_service, tenant_context):
         """Test creating new version of non-existent entity."""
         # Act & Assert
-        # When entity doesn't exist, repository raises ValueError about canonical_type
+        # Cannot create new version of entity that doesn't exist - proper business logic
         with pytest.raises(ServiceError) as excinfo:
             entity_service.create_new_version(
                 external_id="nonexistent_order", source="test_system", content={"status": "updated"}
             )
-        assert "canonical_type is required" in str(excinfo.value)
+        assert "Cannot create new version for non-existent entity" in str(excinfo.value)
 
     def test_create_new_version_with_hash_config(self, entity_service, tenant_context):
         """Test creating new version with custom hash config."""
@@ -169,15 +168,15 @@ class TestEntityServiceVersioningEdgeCases:
 
     def test_create_new_version_unexpected_error(self, entity_service, tenant_context):
         """Test create new version handles unexpected errors."""
-        # Mock repository to raise unexpected error
-        with patch.object(entity_service.repository, "create_new_version") as mock_create:
-            mock_create.side_effect = Exception("Unexpected error")
+        # Mock session.query to raise unexpected error during entity lookup
+        with patch.object(entity_service.session, "query") as mock_query:
+            mock_query.side_effect = Exception("Database connection lost")
 
             # Act & Assert
             with pytest.raises(ServiceError) as excinfo:
                 entity_service.create_new_version(external_id="error_order", source="test_system")
 
-            assert "Unexpected error" in str(excinfo.value)
+            assert "Database connection lost" in str(excinfo.value)
             assert excinfo.value.context.get("operation") == "create_new_version"
 
 
@@ -264,9 +263,9 @@ class TestEntityServiceGetByExternalId:
 
     def test_get_by_external_id_unexpected_error(self, entity_service, tenant_context):
         """Test get by external ID handles unexpected errors."""
-        # Mock repository to raise unexpected error
-        with patch.object(entity_service.repository, "get_by_external_id") as mock_get:
-            mock_get.side_effect = Exception("Database connection lost")
+        # Mock session.query to raise unexpected error
+        with patch.object(entity_service.session, "query") as mock_query:
+            mock_query.side_effect = Exception("Database connection lost")
 
             # Act & Assert
             with pytest.raises(ServiceError) as excinfo:
@@ -293,9 +292,9 @@ class TestEntityServiceGetByContentHash:
 
     def test_get_by_content_hash_unexpected_error(self, entity_service, tenant_context):
         """Test get by content hash handles unexpected errors."""
-        # Mock repository to raise unexpected error
-        with patch.object(entity_service.repository, "get_by_content_hash") as mock_get:
-            mock_get.side_effect = Exception("Index corrupted")
+        # Mock session.query to raise unexpected error
+        with patch.object(entity_service.session, "query") as mock_query:
+            mock_query.side_effect = Exception("Index corrupted")
 
             # Act & Assert
             with pytest.raises(ServiceError) as excinfo:
@@ -310,86 +309,73 @@ class TestEntityServiceGetByContentHash:
 class TestEntityServiceDeleteError:
     """Test entity delete error handling."""
 
-    def test_delete_entity_repository_error(self, entity_service, tenant_context):
-        """Test delete entity handles repository errors."""
-        # Mock repository to raise error
-        with patch.object(entity_service.repository, "delete") as mock_delete:
-            mock_delete.side_effect = RepositoryError("Cannot delete")
+    def test_delete_entity_database_error(self, entity_service, tenant_context):
+        """Test delete entity handles database errors."""
+        # Mock session.query to raise error during entity lookup
+        with patch.object(entity_service.session, "query") as mock_query:
+            mock_query.side_effect = Exception("Database connection failed")
 
             # Act & Assert
             with pytest.raises(ServiceError) as excinfo:
                 entity_service.delete_entity("some_id")
 
-            assert "Error in delete_entity" in str(excinfo.value)
-            assert excinfo.value.context.get("entity_id") == "some_id"
+            assert "Database connection failed" in str(excinfo.value)
+            assert excinfo.value.context.get("operation") == "delete_entity"
 
 
-class TestEntityServiceErrorConversion:
-    """Test repository error conversion in _handle_repo_error."""
-
-    def test_handle_repo_error_duplicate(self, entity_service, tenant_context):
-        """Test that duplicate errors are converted to ServiceError."""
-        # Mock repository to raise RepositoryError for duplicate
-        with patch.object(entity_service.repository, "create") as mock_create:
-            mock_create.side_effect = RepositoryError(
-                "Duplicate entity", error_code=ErrorCode.DUPLICATE
-            )
-
-            # Act & Assert
-            with pytest.raises(ServiceError) as excinfo:
-                entity_service.create_entity(
-                    external_id="dup_order", canonical_type="order", source="test_system"
-                )
-
-            assert "Duplicate entity" in str(excinfo.value)
-            assert excinfo.value.context.get("operation") == "create_entity"
+# Note: Duplicate entity detection test was removed because with the new
+# session-per-service pattern, EntityService no longer manages transactions.
+# Duplicate constraint violations are now handled at the transaction manager
+# level (e.g., in ProcessingService) rather than in individual services.
 
 
 class TestEntityServiceErrorHandlingExtended:
     """Test extended error handling scenarios."""
 
-    def test_get_max_version_repository_error(self, entity_service, tenant_context):
-        """Test get max version handles repository errors."""
-        # Mock repository to raise error
-        with patch.object(entity_service.repository, "get_max_version") as mock_get:
-            mock_get.side_effect = RepositoryError("Query failed")
+    def test_get_max_version_database_error(self, entity_service, tenant_context):
+        """Test get max version handles database errors."""
+        # Mock session.query to raise error
+        with patch.object(entity_service.session, "query") as mock_query:
+            mock_query.side_effect = Exception("Query failed")
 
             # Act & Assert
             with pytest.raises(ServiceError) as excinfo:
                 entity_service.get_max_version("order_001", "test_system")
 
-            assert "Error in get_max_version" in str(excinfo.value)
+            assert "Query failed" in str(excinfo.value)
+            assert excinfo.value.context.get("operation") == "get_max_version"
 
     def test_get_max_version_unexpected_error(self, entity_service, tenant_context):
         """Test get max version handles unexpected errors."""
-        # Mock repository to raise unexpected error
-        with patch.object(entity_service.repository, "get_max_version") as mock_get:
-            mock_get.side_effect = Exception("Unexpected error")
+        # Mock session.query to raise unexpected error
+        with patch.object(entity_service.session, "query") as mock_query:
+            mock_query.side_effect = Exception("Unexpected database error")
 
             # Act & Assert
             with pytest.raises(ServiceError) as excinfo:
                 entity_service.get_max_version("order_001", "test_system")
 
-            assert "Unexpected error" in str(excinfo.value)
+            assert "Unexpected database error" in str(excinfo.value)
             assert excinfo.value.context.get("operation") == "get_max_version"
 
-    def test_check_existence_repository_error(self, entity_service, tenant_context):
-        """Test check existence handles repository errors."""
-        # Mock repository to raise error
-        with patch.object(entity_service.repository, "get_by_external_id") as mock_get:
-            mock_get.side_effect = RepositoryError("Database locked")
+    def test_check_existence_database_error(self, entity_service, tenant_context):
+        """Test check existence handles database errors."""
+        # Mock session.query to raise error
+        with patch.object(entity_service.session, "query") as mock_query:
+            mock_query.side_effect = Exception("Database locked")
 
             # Act & Assert
             with pytest.raises(ServiceError) as excinfo:
                 entity_service.check_entity_existence("order_001", "test_system")
 
-            assert "Error in check_entity_existence" in str(excinfo.value)
+            assert "Database locked" in str(excinfo.value)
+            assert excinfo.value.context.get("operation") == "check_entity_existence"
 
     def test_create_entity_unexpected_error(self, entity_service, tenant_context):
-        """Test create entity handles unexpected non-repository errors."""
-        # Mock the repository create to raise unexpected error
-        with patch.object(entity_service.repository, "create") as mock_create:
-            mock_create.side_effect = Exception("Disk full")
+        """Test create entity handles unexpected database errors."""
+        # Mock session.add to raise unexpected error
+        with patch.object(entity_service.session, "add") as mock_add:
+            mock_add.side_effect = Exception("Disk full")
 
             # Act & Assert
             with pytest.raises(ServiceError) as excinfo:
@@ -400,15 +386,15 @@ class TestEntityServiceErrorHandlingExtended:
             assert "Disk full" in str(excinfo.value)
             assert excinfo.value.context.get("operation") == "create_entity"
 
-    def test_get_entity_repository_error(self, entity_service, tenant_context):
-        """Test get entity converts repository errors properly."""
-        # Mock repository to raise EntityNotFoundError
-        with patch.object(entity_service.repository, "get_by_id") as mock_get:
-            mock_get.side_effect = RepositoryError("Generic repository error")
+    def test_get_entity_database_error(self, entity_service, tenant_context):
+        """Test get entity handles database errors properly."""
+        # Mock session.query to raise database error
+        with patch.object(entity_service.session, "query") as mock_query:
+            mock_query.side_effect = Exception("Database connection error")
 
             # Act & Assert
             with pytest.raises(ServiceError) as excinfo:
                 entity_service.get_entity("some_id")
 
-            assert "Error in get_entity" in str(excinfo.value)
-            assert excinfo.value.context.get("entity_id") == "some_id"
+            assert "Database connection error" in str(excinfo.value)
+            assert excinfo.value.context.get("operation") == "get_entity"

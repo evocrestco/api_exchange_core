@@ -7,7 +7,7 @@ with a focus on tenant isolation and clean architecture.
 
 import enum
 
-from sqlalchemy import Column, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import BigInteger, Column, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.types import Enum
 
@@ -62,7 +62,7 @@ class StateTransition(Base, BaseModel):
         Integer, nullable=True, comment="Time (in ms) spent in the previous state"
     )
     sequence_number = Column(
-        Integer, nullable=True, comment="Sequence number for ordering transitions"
+        BigInteger, nullable=True, comment="Sequence number for ordering transitions"
     )
 
     # Explicit tenant association with cascading delete

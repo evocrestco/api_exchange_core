@@ -18,9 +18,6 @@ from src.processing.entity_attributes import EntityAttributeBuilder
 from src.processing.processing_service import ProcessingService
 from src.processors.v2.processor_handler import ProcessorHandler
 from src.processors.v2.processor_interface import ProcessorInterface
-from src.repositories.entity_repository import EntityRepository
-from src.repositories.state_transition_repository import StateTransitionRepository
-from src.repositories.processing_error_repository import ProcessingErrorRepository
 from src.services.entity_service import EntityService
 from src.services.state_tracking_service import StateTrackingService
 from src.services.processing_error_service import ProcessingErrorService
@@ -103,30 +100,27 @@ def create_processor_handler(
     init_db(db_manager)
     logger.info("Database initialized with all models imported")
 
-    # Create session from db_manager
-    session = db_manager.get_session()
-
-    # Create repositories using session
-    entity_repository = EntityRepository(session)
-    state_transition_repository = StateTransitionRepository(session)
-    processing_error_repository = ProcessingErrorRepository(session)
+    # Store db_manager for services to create their own sessions
+    # Note: Each service now creates its own session to eliminate session conflicts
     
-    # Create services
-    entity_service = EntityService(entity_repository)
-    duplicate_detection_service = DuplicateDetectionService(entity_repository)
+    # Create services that don't need sessions
+    duplicate_detection_service = DuplicateDetectionService()
     attribute_builder = EntityAttributeBuilder()
-    processing_service = ProcessingService(
-        entity_service, duplicate_detection_service, attribute_builder
-    )
+    
+    # Create ProcessingService with the database manager
+    processing_service = ProcessingService(db_manager=db_manager)
     
     # Create state tracking and error services if not provided
+    # These will use their own sessions from the session-per-service pattern
     if state_tracking_service is None:
-        state_tracking_service = StateTrackingService(state_transition_repository, logger)
-        logger.info("Created StateTrackingService")
+        from src.services.state_tracking_service import StateTrackingService
+        state_tracking_service = StateTrackingService()
+        logger.info("Created StateTrackingService with session-per-service pattern")
     
     if error_service is None:
-        error_service = ProcessingErrorService(processing_error_repository, logger)
-        logger.info("Created ProcessingErrorService")
+        from src.services.processing_error_service import ProcessingErrorService
+        error_service = ProcessingErrorService()
+        logger.info("Created ProcessingErrorService with session-per-service pattern")
 
     # Create and return the processor handler
     return ProcessorHandler(

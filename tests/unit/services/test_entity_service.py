@@ -20,7 +20,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "sr
 
 from schemas.entity_schema import EntityCreate
 from src.exceptions import ErrorCode, RepositoryError, ServiceError, ValidationError
-from src.repositories.entity_repository import EntityRepository
 from src.schemas.entity_schema import EntityRead
 from src.services.entity_service import EntityService
 from src.utils.hash_config import HashConfig

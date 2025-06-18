@@ -141,6 +141,13 @@ class ProcessorHandler:
             # Execute processor - let it control everything
             result = self.processor.process(message, context)
 
+            # Commit ProcessingService transaction if processor succeeded
+            # ProcessingService uses shared session pattern and doesn't commit its own transactions
+            if result.success:
+                self.processing_service.session.commit()
+            else:
+                self.processing_service.session.rollback()
+
             # Add timing and metadata
             duration_ms = (time.time() - start_time) * 1000
             result.processing_duration_ms = duration_ms

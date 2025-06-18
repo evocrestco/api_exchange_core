@@ -178,11 +178,9 @@ class BaseRepository(Generic[T]):
         """
         try:
             yield self.session
-            # NOTE: We don't commit here - that's handled by the service layer
-            # Only flush for write operations to catch constraint violations early
-            # Read operations don't need flush and it can cause transaction conflicts
-            if not is_read_only:
-                self.session.flush()
+            # NOTE: No automatic flushing in session-per-service pattern
+            # Services own their sessions and control when to flush/commit
+            # This eliminates the "Session is already flushing" conflicts
         except Exception as e:
             # NOTE: We don't rollback here - that's handled by the service layer
             self._handle_db_error(e, operation_name, entity_id)

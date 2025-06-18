@@ -59,36 +59,76 @@ class ProcessingService:
     management according to processor configuration.
     """
 
-    def __init__(
-        self,
-        entity_service: EntityService,
-        duplicate_detection_service: DuplicateDetectionService,
-        attribute_builder: EntityAttributeBuilder,
-    ):
+    def __init__(self, db_manager=None):
         """
-        Initialize the processing service.
-
+        Initialize the processing service with shared session for all services.
+        
+        All services share the same session to ensure transaction coordination.
+        
         Args:
-            entity_service: Service for entity operations
-            duplicate_detection_service: Service for duplicate detection
-            attribute_builder: Service for building entity attributes
+            db_manager: Optional database manager. If provided, uses it to create session.
+                       If None, creates from environment variables (for backward compatibility).
         """
-        self.entity_service = entity_service
-        self.duplicate_detection_service = duplicate_detection_service
-        self.attribute_builder = attribute_builder
+        # Import here to avoid circular dependencies
+        from src.services.entity_service import EntityService
+        from src.services.state_tracking_service import StateTrackingService  
+        from src.services.processing_error_service import ProcessingErrorService
+        
+        # Create shared session for all services
+        if db_manager is not None:
+            # Use provided database manager
+            self.session = db_manager.get_session()
+        else:
+            # Backward compatibility: create from environment
+            self.session = self._create_session()
+        
+        # Create services with shared session
+        self.entity_service = EntityService(session=self.session)
+        self.state_tracking_service = StateTrackingService(session=self.session)
+        self.error_service = ProcessingErrorService(session=self.session)
+        
+        # Keep existing services that don't need sessions
+        self.duplicate_detection_service = DuplicateDetectionService()
+        self.attribute_builder = EntityAttributeBuilder()
         self.logger = get_logger()
 
-        # Initialize state tracking and error services (will be injected)
-        self.state_tracking_service: Optional["StateTrackingService"] = None
-        self.processing_error_service: Optional["ProcessingErrorService"] = None
+    def _create_session(self):
+        """Create a new database session using same pattern as SessionManagedService."""
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+        from src.db.db_config import get_production_config
+        
+        db_config = get_production_config()
+        engine = create_engine(db_config.get_connection_string())
+        Session = sessionmaker(bind=engine)
+        return Session()
 
-    def set_state_tracking_service(self, service: "StateTrackingService") -> None:
-        """Set the state tracking service for this processing service."""
-        self.state_tracking_service = service
+    def close_services(self):
+        """Close the shared session and clean up resources."""
+        try:
+            if hasattr(self, 'session') and self.session:
+                self.session.close()
+        except Exception as e:
+            self.logger.warning(f"Error closing session: {e}")
+        
+        # Close individual services if they have cleanup methods
+        if hasattr(self.entity_service, 'close'):
+            self.entity_service.close()
+        if hasattr(self.state_tracking_service, 'close'):
+            self.state_tracking_service.close()
+        if hasattr(self.error_service, 'close'):
+            self.error_service.close()
+        if hasattr(self.duplicate_detection_service, 'close'):
+            self.duplicate_detection_service.close()
 
-    def set_processing_error_service(self, service: "ProcessingErrorService") -> None:
-        """Set the processing error service for this processing service."""
-        self.processing_error_service = service
+    def __enter__(self):
+        """Support for 'with' statement."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Auto-close services on exit."""
+        self.close_services()
+
 
     def _get_current_tenant_id(self) -> Optional[str]:
         """Get current tenant ID from context."""
@@ -112,7 +152,7 @@ class ProcessingService:
             version: Entity version number
             duplicate_result: Duplicate detection result, if any
         """
-        if not (self.state_tracking_service and config.enable_state_tracking):
+        if not config.enable_state_tracking:
             return
 
         try:
@@ -148,6 +188,7 @@ class ProcessingService:
                 processor_data=processor_data,
                 notes=notes,
             )
+            # Note: No commit here - ProcessorHandler manages the shared session transaction
         except Exception as e:
             entity_type = "new entity" if is_new_entity else "version update"
             self.logger.warning(f"Failed to record state transition for {entity_type}: {e}")
@@ -480,177 +521,3 @@ class ProcessingService:
             processing_metadata={"processor": config.processor_name},
         )
 
-    @tenant_aware
-    @operation(name="processing_service_process_message")
-    def process_message(
-        self,
-        message: "MessageV2",
-        processor: "ProcessorInterface",
-        config: ProcessorConfig,
-    ) -> "ProcessorResult":
-        """
-        Process a message through a processor with output handler support.
-
-        This method integrates the processing service with the v2 processor framework,
-        handling entity persistence and returning results compatible with output handlers.
-
-        Args:
-            message: Message v2 containing entity and payload
-            processor: Processor implementation to execute
-            config: Processor configuration
-
-        Returns:
-            ProcessingResult with output handlers support
-
-        Raises:
-            ValidationError: If validation fails
-            ServiceError: If processing fails
-        """
-        try:
-            start_time = time.time()
-
-            self.logger.info(
-                "Processing message through processor",
-                extra={
-                    "message_id": message.message_id,
-                    "correlation_id": message.correlation_id,
-                    "processor": config.processor_name,
-                    "entity_external_id": message.entity_reference.external_id,
-                    "entity_type": message.entity_reference.canonical_type,
-                },
-            )
-
-            # Execute the processor
-            from src.processors.processing_result import ProcessingResult as ProcessorResult
-
-            processor_result = processor.process(message)
-
-            # Ensure we have a valid result
-            if not isinstance(processor_result, ProcessorResult):
-                raise ServiceError(
-                    f"Processor returned invalid result type: {type(processor_result)}",
-                    error_code=ErrorCode.INTERNAL_ERROR,
-                    operation="process_message",
-                )
-
-            # If processor succeeded, persist entity changes
-            if processor_result.success:
-                # Extract entity information from the message
-                entity_ref = message.entity_reference
-
-                # Perform duplicate detection if enabled
-                duplicate_result = None
-                if config.enable_duplicate_detection:
-                    duplicate_result = self._perform_duplicate_detection(
-                        content=message.payload,
-                        canonical_type=entity_ref.canonical_type,
-                        source=entity_ref.source,
-                        external_id=entity_ref.external_id,
-                        config=config,
-                    )
-
-                # Process entity persistence
-                persistence_result = self.process_entity(
-                    external_id=entity_ref.external_id,
-                    canonical_type=entity_ref.canonical_type,
-                    source=entity_ref.source,
-                    content=message.payload,
-                    config=config,
-                    custom_attributes=processor_result.processing_metadata,
-                )
-
-                # Update processor result with persistence information
-                processor_result.entities_created = (
-                    [persistence_result.entity_id] if persistence_result.is_new_entity else []
-                )
-                processor_result.entities_updated = (
-                    [persistence_result.entity_id] if not persistence_result.is_new_entity else []
-                )
-
-                # Add entity persistence metadata
-                processor_result.processing_metadata.update(
-                    {
-                        "entity_id": persistence_result.entity_id,
-                        "entity_version": persistence_result.entity_version,
-                        "is_new_entity": persistence_result.is_new_entity,
-                        "content_changed": persistence_result.content_changed,
-                    }
-                )
-
-                if persistence_result.duplicate_detection_result:
-                    processor_result.processing_metadata["duplicate_detection"] = (
-                        persistence_result.duplicate_detection_result.model_dump(mode="json")
-                    )
-
-            # Calculate processing duration
-            processing_duration = (time.time() - start_time) * 1000
-            processor_result.processing_duration_ms = processing_duration
-
-            # Set processor info
-            processor_result.processor_info.update(
-                {
-                    "name": config.processor_name,
-                    "version": config.processor_version,
-                    "is_source_processor": config.is_source_processor,
-                }
-            )
-
-            # Set completion timestamp if successful
-            if processor_result.success:
-                from datetime import UTC, datetime
-
-                processor_result.completed_at = datetime.now(UTC)
-
-            self.logger.info(
-                "Message processing completed",
-                extra={
-                    "message_id": message.message_id,
-                    "processor": config.processor_name,
-                    "success": processor_result.success,
-                    "duration_ms": processing_duration,
-                    "output_handlers": len(processor_result.output_handlers),
-                    "entities_created": len(processor_result.entities_created),
-                    "entities_updated": len(processor_result.entities_updated),
-                },
-            )
-
-            return processor_result
-
-        except Exception as e:
-            self.logger.error(
-                "Message processing failed",
-                extra={
-                    "message_id": message.message_id,
-                    "processor": config.processor_name,
-                    "error": str(e),
-                },
-                exc_info=True,
-            )
-
-            # Create failure result
-            from datetime import UTC, datetime
-
-            from src.processors.processing_result import ProcessingResult as ProcessorResult
-            from src.processors.processing_result import ProcessingStatus
-
-            processor_result = ProcessorResult(
-                status=ProcessingStatus.FAILED,
-                success=False,
-                error_message=str(e),
-                error_code="PROCESSING_SERVICE_ERROR",
-                error_details={
-                    "operation": "process_message",
-                    "processor": config.processor_name,
-                    "message_id": message.message_id,
-                    "error_type": type(e).__name__,
-                },
-                processing_duration_ms=(time.time() - start_time) * 1000,
-                completed_at=datetime.now(UTC),
-                processor_info={
-                    "name": config.processor_name,
-                    "version": config.processor_version,
-                    "is_source_processor": config.is_source_processor,
-                },
-            )
-
-            return processor_result

@@ -123,9 +123,10 @@ class TestTenantServiceCreate:
         # Attempt to create duplicate
         duplicate_data = TenantCreate(tenant_id=tenant_id, customer_name="Duplicate Customer")
 
-        with pytest.raises(ValidationError) as exc_info:
+        with pytest.raises(ServiceError) as exc_info:
             service.create_tenant(duplicate_data)
         assert "already exists" in str(exc_info.value)
+        assert exc_info.value.error_code == ErrorCode.DUPLICATE
 
 
 
@@ -156,7 +157,7 @@ class TestTenantServiceRead:
         # Test fails when no tenant context is set
         with pytest.raises(ValueError) as exc_info:
             service.get_current_tenant()
-        assert "No tenant ID provided for tenant-aware function" in str(exc_info.value)
+        assert "No tenant context set" in str(exc_info.value)
 
 
 
@@ -244,7 +245,7 @@ class TestTenantServiceUpdate:
 
         update_data = TenantUpdate(customer_name="Should Fail")
 
-        with pytest.raises(RepositoryError) as exc_info:
+        with pytest.raises(ServiceError) as exc_info:
             service.update_tenant(update_data)
         assert exc_info.value.error_code == ErrorCode.NOT_FOUND
 
@@ -409,11 +410,11 @@ class TestTenantServiceErrorHandling:
         # First creation should succeed
         service.create_tenant(tenant_data)
 
-        # Second creation with same ID should raise ValidationError
-        with pytest.raises(ValidationError) as exc_info:
+        # Second creation with same ID should raise ServiceError
+        with pytest.raises(ServiceError) as exc_info:
             service.create_tenant(tenant_data)
         assert "already exists" in str(exc_info.value)
-        assert exc_info.value.error_code == ErrorCode.VALIDATION_FAILED
+        assert exc_info.value.error_code == ErrorCode.DUPLICATE
 
     def test_invalid_tenant_update(self, tenant_service):
         """Test updating non-existent tenant raises appropriate error."""
@@ -425,7 +426,7 @@ class TestTenantServiceErrorHandling:
         update_data = TenantUpdate(customer_name="Updated Name")
 
         # Should raise RepositoryError when tenant doesn't exist
-        with pytest.raises(RepositoryError) as exc_info:
+        with pytest.raises(ServiceError) as exc_info:
             service.update_tenant(update_data)
         assert exc_info.value.error_code == ErrorCode.NOT_FOUND
 

@@ -11,89 +11,68 @@ from unittest.mock import Mock
 
 import pytest
 
-from src.repositories.entity_repository import EntityRepository
-from src.repositories.processing_error_repository import ProcessingErrorRepository
-from src.repositories.state_transition_repository import StateTransitionRepository
-from src.repositories.tenant_repository import TenantRepository
 from src.schemas.entity_schema import EntityCreate
 from src.services.entity_service import EntityService
 from src.services.processing_error_service import ProcessingErrorService
 from src.services.state_tracking_service import StateTrackingService
 from src.services.tenant_service import TenantService
 
-# ==================== REPOSITORY FIXTURES ====================
-
-
-@pytest.fixture(scope="function")
-def entity_repository(db_session):
-    """Entity repository with test database session."""
-    return EntityRepository(db_session)
-
-
-@pytest.fixture(scope="function")
-def tenant_repository(db_session):
-    """Tenant repository with test database manager."""
-    return TenantRepository(db_session)
-
-
-@pytest.fixture(scope="function")
-def state_transition_repository(db_session):
-    """State transition repository with test database session."""
-    return StateTransitionRepository(db_session)
-
-
-@pytest.fixture(scope="function")
-def processing_error_repository(db_session):
-    """Processing error repository with test database session."""
-    return ProcessingErrorRepository(db_session)
+# ==================== LEGACY REPOSITORY FIXTURES ====================
+# These are kept for backward compatibility with existing tests
 
 
 # ==================== SERVICE FIXTURES ====================
 
 
 @pytest.fixture(scope="function")
-def entity_service(entity_repository):
-    """Entity service with test repository."""
-    return EntityService(entity_repository)
+def entity_service(db_session):
+    """Entity service with test session."""
+    return EntityService(session=db_session)
 
 
 @pytest.fixture(scope="function")
-def tenant_service(tenant_repository):
-    """Tenant service with test repository."""
-    return TenantService(tenant_repository)
+def tenant_service(db_session):
+    """Tenant service with test session."""
+    return TenantService(session=db_session)
 
 
 @pytest.fixture(scope="function")
-def state_tracking_service(state_transition_repository):
-    """State tracking service with test repository."""
-    return StateTrackingService(state_transition_repository)
+def state_tracking_service(db_session):
+    """State tracking service with test session."""
+    return StateTrackingService(session=db_session)
 
 
 @pytest.fixture(scope="function")
-def processing_error_service(processing_error_repository):
-    """Processing error service with test repository."""
-    return ProcessingErrorService(processing_error_repository)
+def processing_error_service(db_session):
+    """Processing error service with test session."""
+    return ProcessingErrorService(session=db_session)
 
 
 @pytest.fixture(scope="function")
 def processing_service(db_session):
-    """Processing service with real dependencies."""
-    from src.processing.duplicate_detection import DuplicateDetectionService
-    from src.processing.entity_attributes import EntityAttributeBuilder
+    """Processing service with session-per-service pattern."""
     from src.processing.processing_service import ProcessingService
-    from src.repositories.entity_repository import EntityRepository
+    from src.processing.entity_attributes import EntityAttributeBuilder
+    from src.processing.duplicate_detection import DuplicateDetectionService
     from src.services.entity_service import EntityService
+    from src.utils.logger import get_logger
     
-    entity_repository = EntityRepository(db_session)
-    entity_service = EntityService(entity_repository)
-    duplicate_detection = DuplicateDetectionService(entity_repository)
-    attribute_builder = EntityAttributeBuilder()
+    # Create ProcessingService manually without using constructor
+    processing_service = object.__new__(ProcessingService)
     
-    return ProcessingService(
-        entity_service=entity_service,
-        duplicate_detection_service=duplicate_detection,
-        attribute_builder=attribute_builder
+    # Set up services with test session
+    processing_service.entity_service = EntityService(session=db_session)
+    processing_service.duplicate_detection_service = DuplicateDetectionService(
+        entity_service=EntityService(session=db_session)
     )
+    processing_service.attribute_builder = EntityAttributeBuilder()
+    processing_service.logger = get_logger()
+    
+    # Optional services (not initialized by default)
+    processing_service.state_tracking_service = None
+    processing_service.error_service = None
+    
+    return processing_service
 
 
 @pytest.fixture(scope="function")
@@ -146,7 +125,7 @@ def mock_http_client():
 
 
 @pytest.fixture(scope="function")
-def test_entities(entity_repository, tenant_context):
+def test_entities(entity_service, tenant_context):
     """
     Create test entities for all test modules.
     
@@ -205,16 +184,12 @@ def test_entities(entity_repository, tenant_context):
     ]
 
     for entity_id_suffix, external_id, canonical_type in entity_configs:
-        entity_data = EntityCreate(
+        created_entity_id = entity_service.create_entity(
             external_id=external_id,
-            tenant_id=tenant_context["id"],
             canonical_type=canonical_type,
             source="test_system",
-            version=1,
-            content_hash=f"hash_{external_id}",
             attributes={"status": "NEW", "test": True},
         )
-        created_entity_id = entity_repository.create(entity_data)
         entities[entity_id_suffix] = created_entity_id
 
     return entities

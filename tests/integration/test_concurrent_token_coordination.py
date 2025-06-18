@@ -137,9 +137,7 @@ class TestConcurrentTokenCoordination:
                 
                 try:
                     with tenant_context("test_tenant"):  # Same tenant for all functions
-                        credential_repo = CredentialRepository(thread_session)
-                        
-                            # Create API token repository and service (consistent pattern)
+                        # Create API token repository and service (consistent pattern)
                         # Use the shared unique provider for this test run
                         api_token_repo = APITokenRepository(
                             session=thread_session,
@@ -149,7 +147,7 @@ class TestConcurrentTokenCoordination:
                         )
                         api_token_service = APITokenService(token_repository=api_token_repo)
                         credential_service = CredentialService(
-                            credential_repository=credential_repo,
+                            session=thread_session,
                             api_token_service=api_token_service
                         )
                         

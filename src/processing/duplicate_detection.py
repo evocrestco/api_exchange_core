@@ -13,7 +13,6 @@ from pydantic import BaseModel, Field
 from src.context.operation_context import operation
 from src.context.tenant_context import tenant_aware
 from src.exceptions import ErrorCode, ServiceError
-from src.repositories.entity_repository import EntityRepository
 from src.schemas.entity_schema import EntityRead
 from src.utils.hash_config import HashConfig
 from src.utils.hash_utils import calculate_entity_hash
@@ -114,17 +113,30 @@ class DuplicateDetectionService:
 
     Provides configurable duplicate detection with confidence scoring and
     sophisticated matching logic for different scenarios.
+    
+    Uses session-per-service pattern - creates its own EntityService.
     """
 
-    def __init__(self, entity_repository: EntityRepository):
+    def __init__(self, entity_service=None):
         """
         Initialize the duplicate detection service.
-
+        
         Args:
-            entity_repository: Repository for entity data access
+            entity_service: Optional EntityService instance (for testing)
         """
-        self.entity_repository = entity_repository
+        if entity_service:
+            self.entity_service = entity_service
+        else:
+            # Import here to avoid circular dependencies
+            from src.services.entity_service import EntityService
+            self.entity_service = EntityService()
+            
         self.logger = get_logger()
+
+    def close(self):
+        """Close the entity service session."""
+        if hasattr(self.entity_service, 'close'):
+            self.entity_service.close()
 
     @tenant_aware
     @operation(name="duplicate_detection_detect")
@@ -215,7 +227,7 @@ class DuplicateDetectionService:
         matching_entities = []
 
         # Get entities with same content hash from same source
-        same_source_entity = self.entity_repository.get_by_content_hash(content_hash, source)
+        same_source_entity = self.entity_service.get_entity_by_content_hash(content_hash, source)
         if same_source_entity:
             # Only exclude by entity ID, not by external ID (we want to detect new versions)
             if exclude_entity_id and same_source_entity.id == exclude_entity_id:
@@ -314,7 +326,7 @@ class DuplicateDetectionService:
             ServiceError: If retrieval fails
         """
         try:
-            entity = self.entity_repository.get_by_id(entity_id)
+            entity = self.entity_service.get_entity(entity_id)
             if not entity or not entity.attributes:
                 return None
 
@@ -324,6 +336,11 @@ class DuplicateDetectionService:
 
             return DuplicateDetectionResult.from_dict(duplicate_data)
 
+        except ServiceError as e:
+            # If entity is not found, return None
+            if "not found" in str(e).lower():
+                return None
+            raise
         except Exception as e:
             self.logger.error(
                 f"Failed to get previous detection result for entity {entity_id}",

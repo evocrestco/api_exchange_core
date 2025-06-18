@@ -73,15 +73,8 @@ class TestGatewayProcessorIntegration:
     @pytest.fixture
     def processing_service(self, integration_db_session):
         """Create real processing service with database session."""
-        entity_service = EntityService(integration_db_session)
-        duplicate_detection_service = DuplicateDetectionService(integration_db_session)
-        attribute_builder = EntityAttributeBuilder()
-        
-        return ProcessingService(
-            entity_service=entity_service,
-            duplicate_detection_service=duplicate_detection_service,
-            attribute_builder=attribute_builder
-        )
+        # Use session-per-service pattern: ProcessingService creates its own services
+        return ProcessingService()
     
     @pytest.fixture
     def processor_context(self, processing_service):

@@ -17,9 +17,6 @@ from src.processing.entity_attributes import EntityAttributeBuilder
 from src.processing.processing_service import ProcessingService
 from src.processing.processor_config import ProcessorConfig
 from src.processors.v2.processor_interface import ProcessorContext
-from src.repositories.entity_repository import EntityRepository
-from src.repositories.processing_error_repository import ProcessingErrorRepository
-from src.repositories.state_transition_repository import StateTransitionRepository
 from src.schemas.entity_schema import EntityRead
 from src.services.entity_service import EntityService
 from src.services.processing_error_service import ProcessingErrorService

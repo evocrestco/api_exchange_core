@@ -35,7 +35,7 @@ from src.context.tenant_context import (
     tenant_context,
 )
 from src.exceptions import ErrorCode, RepositoryError
-from src.repositories.tenant_repository import TenantRepository
+from src.services.tenant_service import TenantService
 from src.schemas.tenant_schema import TenantConfigValue, TenantCreate, TenantRead
 
 
@@ -424,10 +424,10 @@ class TestErrorHandling:
 class TestIntegrationScenarios:
     """Test realistic integration scenarios."""
 
-    def test_multi_tenant_workflow(self, db_session, tenant_repository):
+    def test_multi_tenant_workflow(self, db_session, tenant_service):
         """Test complete multi-tenant workflow."""
         # Create multiple tenants
-        repo = tenant_repository
+        service = tenant_service
 
         tenant1_data = TenantCreate(
             tenant_id=f"workflow-tenant-1-{uuid.uuid4()}", customer_name="Customer One"
@@ -436,8 +436,8 @@ class TestIntegrationScenarios:
             tenant_id=f"workflow-tenant-2-{uuid.uuid4()}", customer_name="Customer Two"
         )
 
-        tenant1_id = repo.create(tenant1_data)
-        tenant2_id = repo.create(tenant2_data)
+        tenant1 = service.create_tenant(tenant1_data)
+        tenant2 = service.create_tenant(tenant2_data)
 
         # Clear context and cache
         TenantContext.clear_current_tenant()

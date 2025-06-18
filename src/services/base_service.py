@@ -7,12 +7,15 @@ reduce duplication across service implementations.
 
 import logging
 from typing import Any, Dict, Generic, List, NoReturn, Optional, Type, TypeVar
+from contextlib import contextmanager
 
 from pydantic import BaseModel
+from sqlalchemy.orm import Session, sessionmaker
 
 from src.context.operation_context import operation
 from src.exceptions import ErrorCode, RepositoryError, ServiceError
 from src.utils.logger import get_logger
+from src.db.db_config import get_production_config
 
 # Type variables for schema models
 TCreate = TypeVar("TCreate", bound=BaseModel)
@@ -157,3 +160,106 @@ class BaseService(Generic[TCreate, TRead, TUpdate, TFilter]):
                 "has_next": page < total_pages,
             },
         }
+
+
+class SessionManagedService(BaseService[TCreate, TRead, TUpdate, TFilter]):
+    """
+    Service that owns and manages its own database session.
+    
+    This is the new pattern where each service has its own session,
+    eliminating the session conflicts we had with shared sessions.
+    """
+    
+    def __init__(
+        self,
+        repository_class: Optional[Type] = None,
+        read_schema_class: Optional[Type[TRead]] = None,
+        logger: Optional[logging.Logger] = None,
+        session: Optional[Session] = None,
+    ):
+        """
+        Initialize service with its own session.
+        
+        Args:
+            repository_class: DEPRECATED - Repository class (for backward compatibility)
+            read_schema_class: DEPRECATED - Pydantic schema class (for backward compatibility)
+            logger: Optional logger instance
+            session: Optional existing session (for testing or coordination)
+        """
+        # Create or use provided session
+        if session:
+            self.session = session
+            self._owns_session = False
+        else:
+            self.session = self._create_session()
+            self._owns_session = True
+            
+        # Legacy repository support (DEPRECATED - use SQLAlchemy directly)
+        if repository_class:
+            repository = repository_class(self.session)
+        else:
+            repository = None
+        
+        # Initialize base service if repository exists (for backward compatibility)
+        if repository:
+            super().__init__(repository, read_schema_class, logger)
+        else:
+            # For Pythonic services, initialize manually
+            self.read_schema_class = read_schema_class
+            self.logger = logger or get_logger()
+        
+    def _create_session(self) -> Session:
+        """Create a new database session."""
+        from sqlalchemy import create_engine
+        
+        db_config = get_production_config()
+        engine = create_engine(db_config.get_connection_string())
+        Session = sessionmaker(bind=engine)
+        return Session()
+    
+    @contextmanager
+    def transaction(self):
+        """
+        Context manager for transactional operations.
+        
+        Usage:
+            with service.transaction():
+                service.create_something()
+                service.update_something()
+                # Auto-commits on success, rollback on exception
+        """
+        try:
+            yield self.session
+            if self._owns_session:
+                self.session.commit()
+        except Exception:
+            if self._owns_session:
+                self.session.rollback()
+            raise
+    
+    def commit(self):
+        """Manually commit the current transaction."""
+        if self._owns_session:
+            self.session.commit()
+    
+    def rollback(self):
+        """Manually rollback the current transaction.""" 
+        if self._owns_session:
+            self.session.rollback()
+    
+    def close(self):
+        """Close the session if we own it."""
+        if self._owns_session and self.session:
+            self.session.close()
+    
+    def __enter__(self):
+        """Support for 'with' statement."""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Auto-close session on exit."""
+        if exc_type:
+            self.rollback()
+        else:
+            self.commit()
+        self.close()

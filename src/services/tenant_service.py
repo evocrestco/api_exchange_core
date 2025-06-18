@@ -1,185 +1,294 @@
 """
-Tenant service for the Entity Integration System.
+Pythonic tenant service with direct SQLAlchemy access.
+
+This module provides business logic for managing tenants
+using SQLAlchemy directly - simple, explicit, and efficient.
 """
 
+import uuid
 import logging
+from datetime import datetime
 from typing import Any, List, Optional
 
+from sqlalchemy import exists
+from sqlalchemy.exc import IntegrityError
+from pydantic import ValidationError as PydanticValidationError
+
 from src.context.operation_context import operation
-from src.context.service_decorators import handle_repository_errors, transactional
-from src.context.tenant_context import TenantContext, tenant_aware
-from src.exceptions import ErrorCode, RepositoryError, ValidationError
-from src.repositories.tenant_repository import TenantRepository
+from src.db.db_tenant_models import Tenant
+from src.exceptions import ErrorCode, ServiceError, ValidationError
 from src.schemas.tenant_schema import (
     TenantConfigUpdate,
+    TenantConfigValue,
     TenantCreate,
     TenantFilter,
     TenantRead,
     TenantUpdate,
 )
-from src.services.base_service import BaseService
+from src.services.base_service import SessionManagedService
 
 
-class TenantService(BaseService[TenantCreate, TenantRead, TenantUpdate, TenantFilter]):
+class TenantService(SessionManagedService):
     """
-    Service for managing tenants in the multi-tenant system.
+    Pythonic service for managing tenants with direct SQLAlchemy access.
+    
+    Uses SQLAlchemy directly - simple, explicit, and efficient.
     """
 
-    def __init__(
-        self, tenant_repository: TenantRepository, logger: Optional[logging.Logger] = None
-    ):
+    def __init__(self, session=None, logger: Optional[logging.Logger] = None):
         """
-        Initialize the tenant service.
+        Initialize the tenant service with its own session.
 
         Args:
-            tenant_repository: Tenant repository for database operations
+            session: Optional existing session (for testing or coordination)
             logger: Optional logger instance
         """
-        super().__init__(
-            repository=tenant_repository,
-            read_schema_class=TenantRead,
-            logger=logger,
-        )
-
-    def _handle_tenant_service_exception(
-        self, operation: str, exception: Exception, tenant_id: Optional[str] = None
-    ) -> None:
-        """
-        Handle tenant-specific service exceptions.
-
-        Args:
-            operation: Operation being performed
-            exception: Exception that occurred
-            tenant_id: Optional ID of the tenant involved
-
-        Raises:
-            The original exception after logging
-        """
-        if isinstance(exception, RepositoryError) and exception.error_code == ErrorCode.NOT_FOUND:
-            # Re-raise tenant not found errors as-is
-            raise
-        # Delegate to base class for standard handling
-        super()._handle_service_exception(operation, exception, tenant_id)
+        super().__init__(session=session, logger=logger)
 
     @operation()
-    @transactional()
-    def create_tenant(self, tenant_data: TenantCreate) -> TenantCreate:
+    def create_tenant(self, tenant_data: TenantCreate) -> TenantRead:
         """
-        Create a new tenant with comprehensive validation and logging.
+        Create a new tenant.
 
         Args:
             tenant_data: Validated tenant data
 
         Returns:
-            Created tenant as Pydantic model
+            Created tenant data
 
         Raises:
-            ValueError: If tenant already exists
             ServiceError: If there's an error during creation
         """
         try:
-            # Check if tenant already exists
-            try:
-                self.repository.get_by_id(tenant_data.tenant_id)
-                self.logger.warning(
-                    f"Tenant already exists with ID: {tenant_data.tenant_id}",
-                    extra={"tenant_id": tenant_data.tenant_id},
+            # Check if tenant_id already exists
+            if self.session.query(exists().where(
+                Tenant.tenant_id == tenant_data.tenant_id
+            )).scalar():
+                raise ServiceError(
+                    f"Tenant already exists: {tenant_data.tenant_id}",
+                    error_code=ErrorCode.DUPLICATE,
+                    operation="create_tenant",
+                    tenant_id=tenant_data.tenant_id,
                 )
-                raise ValidationError(
-                    f"Tenant with ID {tenant_data.tenant_id} already exists",
-                    error_code=ErrorCode.VALIDATION_FAILED,
-                    field="tenant_id",
-                    value=tenant_data.tenant_id,
-                )
-            except RepositoryError as e:
-                if e.error_code != ErrorCode.NOT_FOUND:
-                    raise
-                # Expected when tenant doesn't exist
-                pass
-
-            # Save to database via repository (repository expects TenantCreate schema)
-            created_tenant = self.repository.create(tenant_data)
-
-            # Clear context cache
-            TenantContext.clear_cache()
-
-            self.logger.info(
-                f"Created new tenant: {tenant_data.tenant_id}",
-                extra={"tenant_id": tenant_data.tenant_id},
+            
+            # Create tenant using validated schema data
+            tenant = Tenant(
+                id=str(uuid.uuid4()),
+                tenant_id=tenant_data.tenant_id,
+                customer_name=tenant_data.customer_name,
+                primary_contact_name=tenant_data.primary_contact_name,
+                primary_contact_email=tenant_data.primary_contact_email,
+                primary_contact_phone=tenant_data.primary_contact_phone,
+                address_line1=tenant_data.address_line1,
+                address_line2=tenant_data.address_line2,
+                city=tenant_data.city,
+                state=tenant_data.state,
+                postal_code=tenant_data.postal_code,
+                country=tenant_data.country,
+                tenant_config=tenant_data.tenant_config or {},
+                notes=tenant_data.notes,
+                is_active=tenant_data.is_active,
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
             )
 
-            # Convert to Pydantic model
-            return TenantCreate.model_validate(created_tenant)
-        except ValidationError:
-            # Re-raise validation errors
-            raise
+            self.session.add(tenant)
+            # Transaction managed by caller
+            
+            self.logger.info(
+                f"Created tenant: id={tenant.id}, tenant_id={tenant_data.tenant_id}"
+            )
+            
+            # Return the created tenant as TenantRead
+            return TenantRead.model_validate(tenant)
+            
+        except PydanticValidationError as e:
+            # Handle Pydantic validation errors
+            raise ValidationError(
+                f"Invalid tenant data: {str(e)}",
+                details={"validation_errors": e.errors()},
+            ) from e
+        except IntegrityError as e:
+            # Transaction managed by caller
+            # Check if it's a unique constraint (duplicate tenant_id)
+            if "unique constraint" in str(e).lower():
+                raise ServiceError(
+                    f"Tenant already exists: {tenant_data.tenant_id}",
+                    error_code=ErrorCode.DUPLICATE,
+                    operation="create_tenant",
+                    tenant_id=tenant_data.tenant_id,
+                    cause=e,
+                ) from e
+            else:
+                raise ServiceError(
+                    f"Tenant creation failed due to data integrity constraints",
+                    error_code=ErrorCode.INVALID_DATA,
+                    operation="create_tenant",
+                    tenant_id=tenant_data.tenant_id,
+                    cause=e,
+                ) from e
         except Exception as e:
-            self._handle_tenant_service_exception("create_tenant", e, tenant_data.tenant_id)
+            # Transaction managed by caller
+            if isinstance(e, ServiceError):
+                raise
+            self._handle_service_exception("create_tenant", e)
 
-    @tenant_aware
     @operation()
-    @transactional()
+    def get_current_tenant(self) -> TenantRead:
+        """
+        Get the current tenant from context.
+
+        Returns:
+            Current tenant data
+
+        Raises:
+            ServiceError: If the tenant doesn't exist or there's an error during retrieval
+        """
+        tenant_id = self._get_current_tenant_id()
+        return self.get_tenant(tenant_id)
+
+    @operation()
+    def get_tenant(self, tenant_id: str) -> TenantRead:
+        """
+        Get a tenant by tenant_id.
+
+        Args:
+            tenant_id: Tenant identifier
+
+        Returns:
+            Tenant data
+
+        Raises:
+            ServiceError: If the tenant doesn't exist or there's an error during retrieval
+        """
+        try:
+            # Query tenant directly with SQLAlchemy
+            tenant = (
+                self.session.query(Tenant)
+                .filter(Tenant.tenant_id == tenant_id)
+                .first()
+            )
+
+            if tenant is None:
+                raise ServiceError(
+                    f"Tenant not found: tenant_id={tenant_id}",
+                    error_code=ErrorCode.NOT_FOUND,
+                    tenant_id=tenant_id,
+                )
+
+            # Convert to TenantRead
+            return TenantRead.model_validate(tenant)
+
+        except Exception as e:
+            if isinstance(e, ServiceError):
+                raise
+            self._handle_service_exception("get_tenant", e)
+
+    @operation()
+    def list_tenants(self, limit: int = 100, offset: int = 0) -> List[TenantRead]:
+        """
+        List all tenants.
+
+        Args:
+            limit: Maximum number of tenants to return
+            offset: Number of tenants to skip
+
+        Returns:
+            List of tenants
+
+        Raises:
+            ServiceError: If there's an error during retrieval
+        """
+        try:
+            # Query tenants directly with SQLAlchemy
+            tenants = (
+                self.session.query(Tenant)
+                .order_by(Tenant.created_at.desc())
+                .offset(offset)
+                .limit(limit)
+                .all()
+            )
+
+            # Convert to TenantRead objects
+            return [TenantRead.model_validate(tenant) for tenant in tenants]
+            
+        except Exception as e:
+            self._handle_service_exception("list_tenants", e)
+
+    @operation()
     def update_tenant(self, update_data: TenantUpdate) -> TenantRead:
         """
-        Update an existing tenant.
+        Update the current tenant from context.
 
         Args:
-            update_data: Validated update data
+            update_data: Updated tenant data
 
         Returns:
-            Updated tenant as Pydantic model
+            Updated tenant data
 
         Raises:
-            ServiceError: If tenant not found or there's an error during update
+            ServiceError: If the tenant doesn't exist or there's an error during update
         """
-        tenant_id = self._get_current_tenant_id()
         try:
-            # Update tenant via repository (repository handles the update logic)
-            updated_tenant = self.repository.update(tenant_id, update_data)
-
-            # Clear cache
-            TenantContext.clear_cache()
-
-            self.logger.info(
-                f"Updated tenant: {tenant_id}",
-                extra={
-                    "tenant_id": tenant_id,
-                    "updated_fields": list(update_data.model_dump(exclude_unset=True).keys()),
-                },
+            # Get current tenant ID from context
+            tenant_id = self._get_current_tenant_id()
+            
+            # Get tenant for update
+            tenant = (
+                self.session.query(Tenant)
+                .filter(Tenant.tenant_id == tenant_id)
+                .first()
             )
-            return updated_tenant
+            
+            if not tenant:
+                raise ServiceError(
+                    f"Tenant not found: {tenant_id}",
+                    error_code=ErrorCode.NOT_FOUND,
+                    tenant_id=tenant_id,
+                )
+
+            # Update tenant fields using TenantUpdate schema
+            if update_data.customer_name is not None:
+                tenant.customer_name = update_data.customer_name
+            if update_data.primary_contact_name is not None:
+                tenant.primary_contact_name = update_data.primary_contact_name
+            if update_data.primary_contact_email is not None:
+                tenant.primary_contact_email = update_data.primary_contact_email
+            if update_data.primary_contact_phone is not None:
+                tenant.primary_contact_phone = update_data.primary_contact_phone
+            if update_data.address_line1 is not None:
+                tenant.address_line1 = update_data.address_line1
+            if update_data.address_line2 is not None:
+                tenant.address_line2 = update_data.address_line2
+            if update_data.city is not None:
+                tenant.city = update_data.city
+            if update_data.state is not None:
+                tenant.state = update_data.state
+            if update_data.postal_code is not None:
+                tenant.postal_code = update_data.postal_code
+            if update_data.country is not None:
+                tenant.country = update_data.country
+            if update_data.is_active is not None:
+                tenant.is_active = update_data.is_active
+                
+            tenant.updated_at = datetime.utcnow()
+            # Transaction managed by caller
+            
+            self.logger.info(f"Updated tenant: tenant_id={tenant_id}")
+            
+            # Return updated tenant
+            return TenantRead.model_validate(tenant)
+
         except Exception as e:
-            self._handle_tenant_service_exception("update_tenant", e, tenant_id)
+            # Transaction managed by caller
+            if isinstance(e, ServiceError):
+                raise
+            self._handle_service_exception("update_tenant", e)
 
-    @tenant_aware
     @operation()
-    def update_tenant_from_dict(self, **kwargs) -> TenantCreate:
-        """
-        Update an existing tenant from dictionary data.
-
-        Args:
-            **kwargs: Updated field values including tenant_id (injected by tenant_aware)
-
-        Returns:
-            Updated tenant as Pydantic model
-
-        Raises:
-            ServiceError: If tenant not found or there's an error during update
-        """
-        tenant_id = self._get_current_tenant_id()
-        try:
-            # Create and validate with Pydantic first
-            update_data = TenantUpdate(**kwargs)
-            return self.update_tenant(update_data)
-        except Exception as e:
-            self._handle_tenant_service_exception("update_tenant_from_dict", e, tenant_id)
-
-    @tenant_aware
-    @operation()
-    @transactional()
     def update_tenant_config(self, key: str, value: Any) -> bool:
         """
-        Update the current tenant's configuration.
+        Update a tenant configuration value.
 
         Args:
             key: Configuration key
@@ -191,122 +300,212 @@ class TenantService(BaseService[TenantCreate, TenantRead, TenantUpdate, TenantFi
         Raises:
             ServiceError: If there's an error during update
         """
-        tenant_id = self._get_current_tenant_id()
         try:
-            # Validate with Pydantic
-            config_update = TenantConfigUpdate(key=key, value=value)
-
-            # Update via repository
-            self.repository.update_config(tenant_id, config_update)
-
-            # Clear cache
-            TenantContext.clear_cache()
-
-            self.logger.info(
-                f"Updated config for tenant {tenant_id}: {key}",
-                extra={"tenant_id": tenant_id, "config_key": key},
+            tenant_id = self._get_current_tenant_id()
+            
+            # Get current tenant
+            tenant = (
+                self.session.query(Tenant)
+                .filter(Tenant.tenant_id == tenant_id)
+                .first()
             )
-            return True
-        except RepositoryError as e:
-            if e.error_code == ErrorCode.NOT_FOUND:
-                self.logger.warning(
-                    f"Cannot update config - tenant not found: {tenant_id}",
-                    extra={"tenant_id": tenant_id, "config_key": key},
-                )
+            
+            if not tenant:
                 return False
-            raise
+
+            # Update tenant config
+            if not tenant.tenant_config:
+                tenant.tenant_config = {}
+            
+            tenant.tenant_config[key] = TenantConfigValue(value=value)
+            tenant.updated_at = datetime.utcnow()
+            
+            # Transaction managed by caller
+            
+            self.logger.info(f"Updated tenant config: tenant_id={tenant_id}, key={key}")
+            
+            return True
+            
         except Exception as e:
-            self._handle_tenant_service_exception("update_tenant_config", e, tenant_id)
+            # Transaction managed by caller
+            if isinstance(e, ServiceError):
+                raise
+            self._handle_service_exception("update_tenant_config", e)
 
-    @tenant_aware
     @operation()
-    @handle_repository_errors("get_current_tenant")
-    def get_current_tenant(self) -> TenantCreate:
-        """
-        Get the current tenant from context.
-
-        Returns:
-            Current tenant as Pydantic model
-
-        Raises:
-            ServiceError: If tenant not found or there's an error during retrieval
-        """
-        tenant_id = self._get_current_tenant_id()
-        tenant = self.repository.get_by_id(tenant_id)
-        return TenantCreate.model_validate(tenant)
-
-    @tenant_aware
-    @operation()
-    @transactional()
-    def activate_current_tenant(self) -> bool:
+    def activate_tenant(self) -> TenantRead:
         """
         Activate the current tenant.
 
         Returns:
-            True if successful, False if tenant not found
+            Updated tenant data
 
         Raises:
-            ServiceError: If there's an error during activation
+            ServiceError: If the tenant doesn't exist or there's an error during update
         """
-        tenant_id = self._get_current_tenant_id()
         try:
-            # Use repository update with proper schema
-            update_data = TenantUpdate(is_active=True)
-            self.repository.update(tenant_id, update_data)
-
-            # Clear cache
-            TenantContext.clear_cache()
-
-            self.logger.info(
-                f"Activated tenant: {tenant_id}",
-                extra={"tenant_id": tenant_id, "action": "activate"},
+            tenant_id = self._get_current_tenant_id()
+            
+            tenant = (
+                self.session.query(Tenant)
+                .filter(Tenant.tenant_id == tenant_id)
+                .first()
             )
-            return True
-        except RepositoryError as e:
-            if e.error_code == ErrorCode.NOT_FOUND:
-                self.logger.warning(
-                    f"Cannot activate tenant - not found: {tenant_id}",
-                    extra={"tenant_id": tenant_id, "action": "activate"},
+            
+            if not tenant:
+                raise ServiceError(
+                    f"Tenant not found: {tenant_id}",
+                    error_code=ErrorCode.NOT_FOUND,
+                    tenant_id=tenant_id,
                 )
-                return False
-            raise
-        except Exception as e:
-            self._handle_tenant_service_exception("activate_tenant", e, tenant_id)
 
-    @tenant_aware
+            tenant.is_active = True
+            tenant.updated_at = datetime.utcnow()
+            
+            # Transaction managed by caller
+            
+            self.logger.info(f"Activated tenant: tenant_id={tenant_id}")
+            
+            return TenantRead.model_validate(tenant)
+            
+        except Exception as e:
+            # Transaction managed by caller
+            if isinstance(e, ServiceError):
+                raise
+            self._handle_service_exception("activate_tenant", e)
+
     @operation()
-    @transactional()
-    def deactivate_current_tenant(self) -> bool:
+    def activate_current_tenant(self) -> bool:
+        """
+        Activate the current tenant from context.
+
+        Returns:
+            True if successful, False if tenant not found
+        """
+        try:
+            tenant_id = self._get_current_tenant_id()
+            
+            tenant = (
+                self.session.query(Tenant)
+                .filter(Tenant.tenant_id == tenant_id)
+                .first()
+            )
+            
+            if not tenant:
+                return False
+
+            tenant.is_active = True
+            tenant.updated_at = datetime.utcnow()
+            
+            # Transaction managed by caller
+            
+            self.logger.info(f"Activated tenant: tenant_id={tenant_id}")
+            
+            return True
+            
+        except Exception as e:
+            # Transaction managed by caller
+            if isinstance(e, ServiceError):
+                raise
+            self._handle_service_exception("activate_current_tenant", e)
+
+    @operation()
+    def deactivate_tenant(self) -> TenantRead:
         """
         Deactivate the current tenant.
 
         Returns:
-            True if successful, False if tenant not found
+            Updated tenant data
 
         Raises:
-            ServiceError: If there's an error during deactivation
+            ServiceError: If the tenant doesn't exist or there's an error during update
         """
-        tenant_id = self._get_current_tenant_id()
         try:
-            # Use repository update with proper schema
-            update_data = TenantUpdate(is_active=False)
-            self.repository.update(tenant_id, update_data)
-
-            # Clear cache
-            TenantContext.clear_cache()
-
-            self.logger.info(
-                f"Deactivated tenant: {tenant_id}",
-                extra={"tenant_id": tenant_id, "action": "deactivate"},
+            tenant_id = self._get_current_tenant_id()
+            
+            tenant = (
+                self.session.query(Tenant)
+                .filter(Tenant.tenant_id == tenant_id)
+                .first()
             )
-            return True
-        except RepositoryError as e:
-            if e.error_code == ErrorCode.NOT_FOUND:
-                self.logger.warning(
-                    f"Cannot deactivate tenant - not found: {tenant_id}",
-                    extra={"tenant_id": tenant_id, "action": "deactivate"},
+            
+            if not tenant:
+                raise ServiceError(
+                    f"Tenant not found: {tenant_id}",
+                    error_code=ErrorCode.NOT_FOUND,
+                    tenant_id=tenant_id,
                 )
-                return False
-            raise
+
+            tenant.is_active = False
+            tenant.updated_at = datetime.utcnow()
+            
+            # Transaction managed by caller
+            
+            self.logger.info(f"Deactivated tenant: tenant_id={tenant_id}")
+            
+            return TenantRead.model_validate(tenant)
+            
         except Exception as e:
-            self._handle_tenant_service_exception("deactivate_tenant", e, tenant_id)
+            # Transaction managed by caller
+            if isinstance(e, ServiceError):
+                raise
+            self._handle_service_exception("deactivate_tenant", e)
+
+    @operation()
+    def deactivate_current_tenant(self) -> bool:
+        """
+        Deactivate the current tenant from context.
+
+        Returns:
+            True if successful, False if tenant not found
+        """
+        try:
+            tenant_id = self._get_current_tenant_id()
+            
+            tenant = (
+                self.session.query(Tenant)
+                .filter(Tenant.tenant_id == tenant_id)
+                .first()
+            )
+            
+            if not tenant:
+                return False
+
+            tenant.is_active = False
+            tenant.updated_at = datetime.utcnow()
+            
+            # Transaction managed by caller
+            
+            self.logger.info(f"Deactivated tenant: tenant_id={tenant_id}")
+            
+            return True
+            
+        except Exception as e:
+            # Transaction managed by caller
+            if isinstance(e, ServiceError):
+                raise
+            self._handle_service_exception("deactivate_current_tenant", e)
+
+    @operation()
+    def update_tenant_from_dict(self, **kwargs) -> TenantRead:
+        """
+        Update the current tenant from dictionary data.
+
+        Args:
+            **kwargs: Fields to update as keyword arguments
+
+        Returns:
+            Updated tenant data
+
+        Raises:
+            ServiceError: If the tenant doesn't exist or there's an error during update
+        """
+        try:
+            # Convert kwargs to TenantUpdate schema
+            update_data = TenantUpdate(**kwargs)
+            return self.update_tenant(update_data)
+            
+        except Exception as e:
+            if isinstance(e, ServiceError):
+                raise
+            self._handle_service_exception("update_tenant_from_dict", e)

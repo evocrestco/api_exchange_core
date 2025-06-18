@@ -109,8 +109,8 @@ class TenantContext:
         Returns:
             TenantRead schema object or None if not found
         """
-        from src.db.db_tenant_models import TenantNotFoundError
-        from src.repositories.tenant_repository import TenantRepository
+        from src.services.tenant_service import TenantService
+        from src.exceptions import ServiceError
 
         if not TYPE_CHECKING:
             from src.schemas.tenant_schema import TenantRead  # noqa: F401
@@ -131,10 +131,10 @@ class TenantContext:
         if effective_tenant_id in cls._thread_local.tenant_cache:
             return cls._thread_local.tenant_cache[effective_tenant_id]
 
-        # Get tenant via repository
+        # Get tenant via service
         try:
-            repository = TenantRepository(session)
-            tenant = repository.get_by_id(effective_tenant_id)
+            service = TenantService(session)
+            tenant = service.get_tenant(effective_tenant_id)
 
             # Cache for future use (limit cache size to prevent memory issues)
             if len(cls._thread_local.tenant_cache) >= 100:  # Max 100 cached tenants
@@ -144,7 +144,7 @@ class TenantContext:
 
             cls._thread_local.tenant_cache[effective_tenant_id] = tenant
             return tenant
-        except TenantNotFoundError:
+        except ServiceError:
             cls._logger.warning(f"Tenant not found: {effective_tenant_id}")
             return None
         except Exception as e:

@@ -27,14 +27,9 @@ class TestCredentialService:
     """Test CredentialService  encryption."""
 
     @pytest.fixture(scope="function")
-    def credential_repo(self, db_session):
-        """Create credential repository with database session."""
-        return CredentialRepository(db_session)
-
-    @pytest.fixture(scope="function")
-    def credential_service(self, credential_repo):
-        """Create credential service with repository."""
-        return CredentialService(credential_repo)
+    def credential_service(self, db_session):
+        """Create credential service with database session."""
+        return CredentialService(session=db_session)
 
     @pytest.fixture(scope="function")
     def test_credentials(self):
@@ -75,12 +70,12 @@ class TestCredentialService:
         
         try:
             # Test empty system_name
-            with pytest.raises(ServiceError) as exc_info:
+            with pytest.raises(ValidationError) as exc_info:
                 credential_service.store_credentials("", "api_token", {"key": "value"})
             assert "system_name must be a non-empty string" in str(exc_info.value)
             
             # Test None system_name
-            with pytest.raises(ServiceError) as exc_info:
+            with pytest.raises(ValidationError) as exc_info:
                 credential_service.store_credentials(None, "api_token", {"key": "value"})
             assert "system_name must be a non-empty string" in str(exc_info.value)
             
@@ -101,7 +96,7 @@ class TestCredentialService:
             db_session.commit()
             
             # Attempt to store another credential for same system
-            with pytest.raises(ServiceError) as exc_info:
+            with pytest.raises(ValidationError) as exc_info:
                 credential_service.store_credentials(
                     system_name="duplicate_system",
                     auth_type="oauth",
@@ -142,7 +137,7 @@ class TestCredentialService:
         TenantContext.set_current_tenant(test_tenant["id"])
         
         try:
-            with pytest.raises(ServiceError) as exc_info:
+            with pytest.raises(CredentialNotFoundError) as exc_info:
                 credential_service.get_credentials("nonexistent_system")
             assert "No credentials found for system 'nonexistent_system'" in str(exc_info.value)
         finally:
@@ -164,7 +159,7 @@ class TestCredentialService:
             db_session.commit()
             
             # Attempt to get expired credentials
-            with pytest.raises(ServiceError) as exc_info:
+            with pytest.raises(CredentialExpiredError) as exc_info:
                 credential_service.get_credentials("expired_system")
             assert "have expired" in str(exc_info.value)
             
@@ -212,7 +207,7 @@ class TestCredentialService:
         TenantContext.set_current_tenant(test_tenant["id"])
         
         try:
-            with pytest.raises(ServiceError):
+            with pytest.raises(CredentialNotFoundError):
                 credential_service.update_credentials(
                     system_name="nonexistent_system",
                     credentials={"key": "value"}
@@ -245,7 +240,7 @@ class TestCredentialService:
             assert result is True
             
             # Verify credential no longer exists
-            with pytest.raises(ServiceError):
+            with pytest.raises(CredentialNotFoundError):
                 credential_service.get_credentials("delete_test_system")
             
         finally:
@@ -296,12 +291,12 @@ class TestCredentialService:
         
         # Verify tenant3 sees no credentials
         TenantContext.set_current_tenant(tenant3["id"])
-        with pytest.raises(ServiceError):
+        with pytest.raises(CredentialNotFoundError):
             credential_service.get_credentials("shared_system")
         
         TenantContext.clear_current_tenant()
 
-    def test_inactive_credentials_access(self, credential_service, credential_repo, db_session, test_tenant, test_credentials):
+    def test_inactive_credentials_access(self, credential_service, db_session, test_tenant, test_credentials):
         """Test accessing inactive credentials."""
         TenantContext.set_current_tenant(test_tenant["id"])
         
@@ -315,12 +310,19 @@ class TestCredentialService:
             db_session.commit()
             
             # Manually deactivate credential
-            credential = credential_repo.get_by_system_name("inactive_test_system")
+            from sqlalchemy import and_
+            tenant_id = TenantContext.get_current_tenant_id()
+            credential = db_session.query(ExternalCredential).filter(
+                and_(
+                    ExternalCredential.tenant_id == tenant_id,
+                    ExternalCredential.system_name == "inactive_test_system"
+                )
+            ).first()
             credential.is_active = "inactive"
             db_session.commit()
             
             # Attempt to get inactive credentials
-            with pytest.raises(ServiceError) as exc_info:
+            with pytest.raises(CredentialExpiredError) as exc_info:
                 credential_service.get_credentials("inactive_test_system")
             assert "are not active" in str(exc_info.value)
             assert "status: inactive" in str(exc_info.value)
@@ -377,13 +379,13 @@ class TestCredentialService:
             assert deleted is True
             
             # Verify deletion
-            with pytest.raises(ServiceError):
+            with pytest.raises(CredentialNotFoundError):
                 credential_service.get_credentials(system_name)
             
         finally:
             TenantContext.clear_current_tenant()
 
-    def test_credential_service_with_token_management(self, credential_repo, db_session, test_tenant):
+    def test_credential_service_with_token_management(self, db_session, test_tenant):
         """Test creating CredentialService with token management using consistent pattern."""
         TenantContext.set_current_tenant(test_tenant["id"])
         
@@ -393,14 +395,14 @@ class TestCredentialService:
             from src.services.api_token_service import APITokenService
             
             api_token_repo = APITokenRepository(
-                session=credential_repo.session,
+                session=db_session,
                 api_provider="test_api",
                 max_tokens=5,
                 token_validity_hours=2
             )
             api_token_service = APITokenService(token_repository=api_token_repo)
             credential_service = CredentialService(
-                credential_repository=credential_repo,
+                session=db_session,
                 api_token_service=api_token_service
             )
             
@@ -413,7 +415,7 @@ class TestCredentialService:
         finally:
             TenantContext.clear_current_tenant()
 
-    def test_store_access_token_success(self, credential_repo, db_session, test_tenant):
+    def test_store_access_token_success(self, db_session, test_tenant):
         """Test storing access token via API token service."""
         TenantContext.set_current_tenant(test_tenant["id"])
         
@@ -423,12 +425,12 @@ class TestCredentialService:
             from src.services.api_token_service import APITokenService
             
             api_token_repo = APITokenRepository(
-                session=credential_repo.session,
+                session=db_session,
                 api_provider="test_api_provider"
             )
             api_token_service = APITokenService(token_repository=api_token_repo)
             credential_service = CredentialService(
-                credential_repository=credential_repo,
+                session=db_session,
                 api_token_service=api_token_service
             )
             
@@ -453,7 +455,7 @@ class TestCredentialService:
         finally:
             TenantContext.clear_current_tenant()
 
-    def test_get_valid_access_token_not_found(self, credential_repo, db_session, test_tenant):
+    def test_get_valid_access_token_not_found(self, db_session, test_tenant):
         """Test getting access token when none exists."""
         TenantContext.set_current_tenant(test_tenant["id"])
         
@@ -463,12 +465,12 @@ class TestCredentialService:
             from src.services.api_token_service import APITokenService
             
             api_token_repo = APITokenRepository(
-                session=credential_repo.session,
+                session=db_session,
                 api_provider="test_api_provider"
             )
             api_token_service = APITokenService(token_repository=api_token_repo)
             credential_service = CredentialService(
-                credential_repository=credential_repo,
+                session=db_session,
                 api_token_service=api_token_service
             )
             
@@ -504,7 +506,7 @@ class TestCredentialService:
         finally:
             TenantContext.clear_current_tenant()
 
-    def test_token_multi_tenant_isolation(self, credential_repo, db_session, multi_tenant_context):
+    def test_token_multi_tenant_isolation(self, db_session, multi_tenant_context):
         """Test that tokens are isolated between tenants."""
         tenant1 = multi_tenant_context[0]
         tenant2 = multi_tenant_context[1]
@@ -514,12 +516,12 @@ class TestCredentialService:
         from src.services.api_token_service import APITokenService
         
         api_token_repo = APITokenRepository(
-            session=credential_repo.session,
+            session=db_session,
             api_provider="test_api_provider"
         )
         api_token_service = APITokenService(token_repository=api_token_repo)
         credential_service = CredentialService(
-            credential_repository=credential_repo,
+            session=db_session,
             api_token_service=api_token_service
         )
         

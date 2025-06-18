@@ -29,8 +29,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "sr
 
 from src.context.tenant_context import TenantContext
 from src.exceptions import ErrorCode, ServiceError
-from src.repositories.entity_repository import EntityRepository
-from src.repositories.processing_error_repository import ProcessingErrorRepository
 from src.schemas.entity_schema import EntityCreate
 from src.schemas.processing_error_schema import (
     ProcessingErrorCreate,
@@ -197,7 +195,7 @@ class TestProcessingErrorServiceRead:
         assert exc_info.value.error_code == ErrorCode.NOT_FOUND
 
     def test_get_error_tenant_isolation(
-        self, processing_error_service, multi_tenant_context, entity_repository
+        self, processing_error_service, multi_tenant_context, entity_service
     ):
         """Test that get_error respects tenant isolation."""
         # Arrange - Create errors in different tenants
@@ -217,7 +215,14 @@ class TestProcessingErrorServiceRead:
                 content_hash=f"hash_{tenant['id']}",
                 attributes={"test": True},
             )
-            entity_id = entity_repository.create(entity_data)
+            entity_id = entity_service.create_entity(
+                external_id=entity_data.external_id,
+                canonical_type=entity_data.canonical_type,
+                source=entity_data.source,
+                content={"hash_placeholder": entity_data.content_hash},  # Use content instead of content_hash
+                attributes=entity_data.attributes,
+                version=entity_data.version,
+            )
             entity_ids[tenant["id"]] = entity_id
 
             error_data = ProcessingErrorCreate(
@@ -299,7 +304,7 @@ class TestProcessingErrorServiceEntityErrors:
         assert errors == []
 
     def test_get_entity_errors_tenant_isolation(
-        self, processing_error_service, multi_tenant_context, entity_repository
+        self, processing_error_service, multi_tenant_context, entity_service
     ):
         """Test that get_entity_errors respects tenant isolation."""
         entity_ids = {}
@@ -318,7 +323,14 @@ class TestProcessingErrorServiceEntityErrors:
                 content_hash=f"hash_{tenant['id']}",
                 attributes={"test": True},
             )
-            entity_id = entity_repository.create(entity_data)
+            entity_id = entity_service.create_entity(
+                external_id=entity_data.external_id,
+                canonical_type=entity_data.canonical_type,
+                source=entity_data.source,
+                content={"hash_placeholder": entity_data.content_hash},  # Use content instead of content_hash
+                attributes=entity_data.attributes,
+                version=entity_data.version,
+            )
             entity_ids[tenant["id"]] = entity_id
 
             # Create error for this tenant
@@ -345,7 +357,7 @@ class TestProcessingErrorServiceFilter:
     """Test processing error filtering operations."""
 
     def test_find_errors_by_error_type(
-        self, processing_error_service, tenant_context, entity_repository
+        self, processing_error_service, tenant_context, entity_service
     ):
         """Test filtering errors by error type."""
         # Arrange - Create errors with different types
@@ -366,7 +378,14 @@ class TestProcessingErrorServiceFilter:
                 content_hash=f"hash_{entity_name}",
                 attributes={"test": True},
             )
-            entity_id = entity_repository.create(entity_data)
+            entity_id = entity_service.create_entity(
+                external_id=entity_data.external_id,
+                canonical_type=entity_data.canonical_type,
+                source=entity_data.source,
+                content={"hash_placeholder": entity_data.content_hash},  # Use content instead of content_hash
+                attributes=entity_data.attributes,
+                version=entity_data.version,
+            )
 
             # Create error
             error_data = ProcessingErrorCreate(
@@ -420,7 +439,7 @@ class TestProcessingErrorServiceFilter:
         assert all(error.entity_id == entity_id for error in entity_errors)
 
     def test_find_errors_pagination(
-        self, processing_error_service, tenant_context, entity_repository
+        self, processing_error_service, tenant_context, entity_service
     ):
         """Test pagination in error filtering."""
         # Arrange - Create multiple errors
@@ -433,7 +452,14 @@ class TestProcessingErrorServiceFilter:
             content_hash="hash_pagination_service",
             attributes={"test": True},
         )
-        entity_id = entity_repository.create(entity_data)
+        entity_id = entity_service.create_entity(
+            external_id=entity_data.external_id,
+            canonical_type=entity_data.canonical_type,
+            source=entity_data.source,
+            content={"hash_placeholder": entity_data.content_hash},  # Use content instead of content_hash
+            attributes=entity_data.attributes,
+            version=entity_data.version,
+        )
 
         for i in range(10):
             error_data = ProcessingErrorCreate(
@@ -541,7 +567,7 @@ class TestProcessingErrorServiceDelete:
         assert result is False
 
     def test_delete_error_tenant_isolation(
-        self, processing_error_service, multi_tenant_context, entity_repository
+        self, processing_error_service, multi_tenant_context, entity_service
     ):
         """Test that delete respects tenant isolation."""
         error_ids = {}
@@ -560,7 +586,14 @@ class TestProcessingErrorServiceDelete:
                 content_hash=f"hash_{tenant['id']}",
                 attributes={"test": True},
             )
-            entity_id = entity_repository.create(entity_data)
+            entity_id = entity_service.create_entity(
+                external_id=entity_data.external_id,
+                canonical_type=entity_data.canonical_type,
+                source=entity_data.source,
+                content={"hash_placeholder": entity_data.content_hash},  # Use content instead of content_hash
+                attributes=entity_data.attributes,
+                version=entity_data.version,
+            )
 
             error_data = ProcessingErrorCreate(
                 entity_id=entity_id,
@@ -805,7 +838,7 @@ class TestProcessingErrorServiceErrorHandling:
         assert convenience_error.processing_step == core_error.processing_step
 
     def test_service_tenant_isolation_comprehensive(
-        self, processing_error_service, multi_tenant_context, entity_repository
+        self, processing_error_service, multi_tenant_context, entity_service
     ):
         """Comprehensive test of tenant isolation across all service methods."""
         entity_ids = {}
@@ -824,7 +857,14 @@ class TestProcessingErrorServiceErrorHandling:
                 content_hash=f"hash_{tenant['id']}",
                 attributes={"test": True},
             )
-            entity_id = entity_repository.create(entity_data)
+            entity_id = entity_service.create_entity(
+                external_id=entity_data.external_id,
+                canonical_type=entity_data.canonical_type,
+                source=entity_data.source,
+                content={"hash_placeholder": entity_data.content_hash},  # Use content instead of content_hash
+                attributes=entity_data.attributes,
+                version=entity_data.version,
+            )
             entity_ids[tenant["id"]] = entity_id
 
             # Create multiple errors for this tenant
