@@ -46,6 +46,7 @@ class ProcessorHandler:
         error_service=None,
         dead_letter_queue_client=None,
         output_queue_client=None,
+        db_manager=None,
     ):
         self.processor = processor
         self.processing_service = processing_service
@@ -54,6 +55,7 @@ class ProcessorHandler:
         self.error_service = error_service
         self.dead_letter_queue_client = dead_letter_queue_client
         self.output_queue_client = output_queue_client
+        self.db_manager = db_manager  # Store db_manager for creating new sessions
         self.logger = get_logger()
 
     @operation(name="processor_v2_execute")
@@ -97,6 +99,47 @@ class ProcessorHandler:
     def _execute_with_tenant_context(self, message: Message) -> ProcessingResult:
         """Execute processor within tenant context."""
         start_time = time.time()
+        
+        # Create new services with their own sessions for thread safety
+        # This ensures each concurrent execution has its own isolated database session
+        if self.db_manager:
+            # Create a new session for this execution
+            execution_session = self.db_manager.get_session()
+            
+            # Create new ProcessingService with the execution session
+            from src.processing.processing_service import ProcessingService
+            processing_service = ProcessingService(db_manager=self.db_manager)
+            
+            # Create new EntityService, StateTrackingService, and ProcessingErrorService
+            # with the same session for transaction consistency
+            from src.services.entity_service import EntityService
+            from src.services.state_tracking_service import StateTrackingService
+            from src.services.processing_error_service import ProcessingErrorService
+            
+            entity_service = EntityService(session=execution_session)
+            state_tracking_service = StateTrackingService(session=execution_session)
+            error_service = ProcessingErrorService(session=execution_session)
+            
+            self.logger.debug(
+                "Created thread-safe services for execution",
+                extra={
+                    "processor_class": self.processor.__class__.__name__,
+                    "execution_session_id": id(execution_session),
+                    "processing_service_session_id": id(processing_service.session),
+                }
+            )
+        else:
+            # Fallback to the shared services (old behavior)
+            # This path is for backward compatibility but isn't thread-safe
+            self.logger.warning(
+                "Using shared services - not thread-safe. "
+                "Consider providing db_manager to ProcessorHandler for thread safety."
+            )
+            processing_service = self.processing_service
+            entity_service = None  # Will use self.* in context creation
+            state_tracking_service = None
+            error_service = None
+            execution_session = None
 
         try:
             # Check if entity exists in message
@@ -130,7 +173,12 @@ class ProcessorHandler:
                 )
 
             # Create enhanced context with services and output capabilities
-            context = self._create_enhanced_context()
+            # Pass the new services to the context
+            context = self._create_enhanced_context(
+                processing_service=processing_service,
+                state_tracking_service=state_tracking_service,
+                error_service=error_service
+            )
 
             # Note: We don't create stub entities here anymore since processors
             # may handle their own entity creation. The entity_id will be obtained
@@ -144,9 +192,9 @@ class ProcessorHandler:
             # Commit ProcessingService transaction if processor succeeded
             # ProcessingService uses shared session pattern and doesn't commit its own transactions
             if result.success:
-                self.processing_service.session.commit()
+                processing_service.session.commit()
             else:
-                self.processing_service.session.rollback()
+                processing_service.session.rollback()
 
             # Add timing and metadata
             duration_ms = (time.time() - start_time) * 1000
@@ -175,12 +223,12 @@ class ProcessorHandler:
                 )
 
                 # Record successful state transition if entity exists and state service available
-                if entity_id and self.state_tracking_service:
-                    self._record_state_transition(entity_id, "processing", "completed", result)
+                if entity_id and state_tracking_service:
+                    self._record_state_transition(entity_id, "processing", "completed", result, state_tracking_service)
 
                 # Record processing result to entity if entity exists
                 if entity_id:
-                    self._record_processing_result(entity_id, result)
+                    self._record_processing_result(entity_id, result, entity_service)
 
                 # Process output handlers if any are configured
                 if result.output_handlers:
@@ -192,16 +240,16 @@ class ProcessorHandler:
                     result.status = ProcessingStatus.DEAD_LETTERED
 
                 # Record failed state transition if entity exists and state service available
-                if entity_id and self.state_tracking_service:
-                    self._record_state_transition(entity_id, "processing", "failed", result)
+                if entity_id and state_tracking_service:
+                    self._record_state_transition(entity_id, "processing", "failed", result, state_tracking_service)
 
                 # Record processing error if entity exists and error service available
-                if entity_id and self.error_service:
-                    self._record_processing_error(entity_id, result)
+                if entity_id and error_service:
+                    self._record_processing_error(entity_id, result, error_service)
 
                 # Record processing result to entity even on failure if entity exists
                 if entity_id:
-                    self._record_processing_result(entity_id, result)
+                    self._record_processing_result(entity_id, result, entity_service)
 
                 self.logger.error(
                     "Processor v2 execution failed",
@@ -244,14 +292,26 @@ class ProcessorHandler:
             entity_id = getattr(message.entity_reference, "id", None) if message.entity_reference else None
             if entity_id:
                 # Record failed state transition for unexpected errors
-                if self.state_tracking_service:
-                    self._record_state_transition(entity_id, "processing", "error", result)
+                if state_tracking_service:
+                    self._record_state_transition(entity_id, "processing", "error", result, state_tracking_service)
 
                 # Record processing error for unexpected errors
-                if self.error_service:
-                    self._record_processing_error(entity_id, result)
+                if error_service:
+                    self._record_processing_error(entity_id, result, error_service)
 
-                self._record_processing_result(entity_id, result)
+                # Create a minimal context for _record_processing_result
+                try:
+                    minimal_context = self._create_enhanced_context(
+                        processing_service=processing_service,
+                        state_tracking_service=state_tracking_service,
+                        error_service=error_service
+                    )
+                    self._record_processing_result(entity_id, result, entity_service)
+                except Exception as context_error:
+                    self.logger.warning(
+                        "Failed to create context for processing result recording",
+                        extra={"error": str(context_error)}
+                    )
 
             # Send to DLQ if not retryable
             if not can_retry and self.dead_letter_queue_client:
@@ -259,6 +319,27 @@ class ProcessorHandler:
                 result.status = ProcessingStatus.DEAD_LETTERED
 
             return result
+        
+        finally:
+            # Clean up the session if we created a new one
+            if self.db_manager and processing_service != self.processing_service:
+                try:
+                    processing_service.session.close()
+                    self.logger.debug(
+                        "Closed thread-local ProcessingService session",
+                        extra={
+                            "processor_class": self.processor.__class__.__name__,
+                            "session_id": id(processing_service.session),
+                        }
+                    )
+                except Exception as e:
+                    self.logger.warning(
+                        "Failed to close ProcessingService session",
+                        extra={
+                            "error": str(e),
+                            "processor_class": self.processor.__class__.__name__,
+                        }
+                    )
 
     def _create_failure_result(
         self, error_message: str, error_code: str, can_retry: bool, duration_ms: float
@@ -451,7 +532,7 @@ class ProcessorHandler:
         ]
 
     def _record_processing_result(
-        self, entity_id: str, processing_result: ProcessingResult
+        self, entity_id: str, processing_result: ProcessingResult, entity_service=None
     ) -> None:
         """
         Record processing result to entity's processing history.
@@ -459,12 +540,16 @@ class ProcessorHandler:
         Args:
             entity_id: ID of the entity to record result for
             processing_result: ProcessingResult to record
+            entity_service: EntityService to use. If None, uses self.processing_service.entity_service
         """
         try:
-            # Get EntityService from processing_service
-            if hasattr(self.processing_service, "entity_service"):
-                entity_service = self.processing_service.entity_service
-                entity_service.add_processing_result(entity_id, processing_result)
+            # Use provided entity_service or fall back to shared one
+            service = entity_service
+            if not service and hasattr(self.processing_service, "entity_service"):
+                service = self.processing_service.entity_service
+            
+            if service:
+                service.add_processing_result(entity_id, processing_result)
 
                 self.logger.debug(
                     f"Recorded processing result for entity {entity_id}",
@@ -554,13 +639,23 @@ class ProcessorHandler:
 
         return None
 
-    def _create_enhanced_context(self) -> ProcessorContext:
+    def _create_enhanced_context(self, processing_service=None, state_tracking_service=None, error_service=None) -> ProcessorContext:
         """
         Create an enhanced ProcessorContext that includes send_output functionality.
+        
+        Args:
+            processing_service: Optional ProcessingService to use. If None, uses self.processing_service
+            state_tracking_service: Optional StateTrackingService to use. If None, uses self.state_tracking_service
+            error_service: Optional ProcessingErrorService to use. If None, uses self.error_service
         
         Returns:
             ProcessorContext with send_output capability
         """
+        # Use provided services or fall back to the shared ones
+        processing_service = processing_service or self.processing_service
+        state_tracking_service = state_tracking_service or self.state_tracking_service
+        error_service = error_service or self.error_service
+        
         # Create a custom ProcessorContext class that has access to this handler
         handler = self
         
@@ -674,9 +769,9 @@ class ProcessorHandler:
         
         # Create and return enhanced context
         return EnhancedProcessorContext(
-            processing_service=self.processing_service,
-            state_tracking_service=self.state_tracking_service,
-            error_service=self.error_service,
+            processing_service=processing_service,
+            state_tracking_service=state_tracking_service,
+            error_service=error_service,
         )
 
     def _update_entity_with_result_data(
@@ -735,7 +830,7 @@ class ProcessorHandler:
             )
 
     def _record_state_transition(
-        self, entity_id: str, from_state: str, to_state: str, processing_result: "ProcessingResult"
+        self, entity_id: str, from_state: str, to_state: str, processing_result: "ProcessingResult", state_tracking_service=None
     ) -> None:
         """
         Record state transition for entity processing.
@@ -745,7 +840,11 @@ class ProcessorHandler:
             from_state: Previous state
             to_state: New state
             processing_result: ProcessingResult with context
+            state_tracking_service: StateTrackingService to use. If None, uses self.state_tracking_service
         """
+        # Use provided service or fall back to shared one
+        service = state_tracking_service or self.state_tracking_service
+        
         try:
             processor_data = {
                 "processor_name": self.processor.__class__.__name__,
@@ -793,7 +892,7 @@ class ProcessorHandler:
             )
 
     def _record_processing_error(
-        self, entity_id: str, processing_result: "ProcessingResult"
+        self, entity_id: str, processing_result: "ProcessingResult", error_service=None
     ) -> None:
         """
         Record processing error for failed entity processing.
@@ -801,7 +900,11 @@ class ProcessorHandler:
         Args:
             entity_id: ID of the entity
             processing_result: ProcessingResult with error information
+            error_service: ProcessingErrorService to use. If None, uses self.error_service
         """
+        # Use provided service or fall back to shared one
+        service = error_service or self.error_service
+        
         try:
             from src.schemas.processing_error_schema import ProcessingErrorCreate
 
@@ -813,7 +916,7 @@ class ProcessorHandler:
                 stack_trace=None,  # Could add stack trace from exception if available
             )
 
-            error_id = self.error_service.create_error(error_data)
+            error_id = service.create_error(error_data)
 
             self.logger.debug(
                 f"Recorded processing error for entity {entity_id}",

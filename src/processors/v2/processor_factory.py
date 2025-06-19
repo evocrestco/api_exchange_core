@@ -130,6 +130,7 @@ def create_processor_handler(
         state_tracking_service=state_tracking_service,
         error_service=error_service,
         dead_letter_queue_client=dead_letter_queue_client,
+        db_manager=db_manager,  # Pass db_manager for thread-safe session creation
     )
 
 
