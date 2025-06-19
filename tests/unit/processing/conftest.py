@@ -10,8 +10,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from src.processors.v2.message import Message, MessageType
-from src.utils.hash_config import HashConfig
+from api_exchange_core.processors import Message, MessageType
+from api_exchange_core.utils.hash_config import HashConfig
 
 
 @pytest.fixture(scope="function")

@@ -7,16 +7,14 @@ focusing on error handling and processing flow.
 
 import pytest
 
-from src.db.db_base import EntityStateEnum
-from src.exceptions import ErrorCode, ServiceError, ValidationError
-from src.processing.duplicate_detection import DuplicateDetectionResult, DuplicateDetectionService
-from src.processing.entity_attributes import EntityAttributeBuilder
-from src.processing.processing_service import ProcessingResult, ProcessingService
-from src.processing.processor_config import ProcessorConfig
-from src.services.entity_service import EntityService
-from src.services.processing_error_service import ProcessingErrorService
-from src.services.state_tracking_service import StateTrackingService
-from src.utils.hash_config import HashConfig
+from api_exchange_core.db import EntityStateEnum
+from api_exchange_core.exceptions import ServiceError
+from api_exchange_core.processing.duplicate_detection import DuplicateDetectionService
+from api_exchange_core.processing import ProcessingService
+from api_exchange_core.processing.processor_config import ProcessorConfig
+from api_exchange_core.services.entity_service import EntityService
+from api_exchange_core.services.processing_error_service import ProcessingErrorService
+from api_exchange_core.services.state_tracking_service import StateTrackingService
 
 
 class TestProcessingServiceErrorPaths:
@@ -25,8 +23,8 @@ class TestProcessingServiceErrorPaths:
     @pytest.fixture
     def processing_service(self, db_session, tenant_context):
         """Create ProcessingService instance."""
-        from src.processing.entity_attributes import EntityAttributeBuilder
-        from src.utils.logger import get_logger
+        from api_exchange_core.processing.entity_attributes import EntityAttributeBuilder
+        from api_exchange_core.utils.logger import get_logger
         
         # Create ProcessingService manually without using constructor
         processing_service = object.__new__(ProcessingService)
@@ -182,8 +180,8 @@ class TestProcessingServiceWithStateAndErrorTracking:
     @pytest.fixture
     def services(self, db_session, tenant_context):
         """Create all services needed for testing."""
-        from src.processing.entity_attributes import EntityAttributeBuilder
-        from src.utils.logger import get_logger
+        from api_exchange_core.processing.entity_attributes import EntityAttributeBuilder
+        from api_exchange_core.utils.logger import get_logger
         
         # Create processing service manually without using constructor
         processing_service = object.__new__(ProcessingService)
@@ -335,8 +333,8 @@ class TestProcessingServiceWithStateAndErrorTracking:
 
     def test_processing_without_injected_services(self, db_session, tenant_context):
         """Test that processing works without state/error services."""
-        from src.processing.entity_attributes import EntityAttributeBuilder
-        from src.utils.logger import get_logger
+        from api_exchange_core.processing.entity_attributes import EntityAttributeBuilder
+        from api_exchange_core.utils.logger import get_logger
         
         # Create processing service without injecting state/error services
         processing_service = object.__new__(ProcessingService)

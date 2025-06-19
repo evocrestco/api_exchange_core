@@ -9,10 +9,8 @@ from datetime import datetime
 
 import pytest
 
-from src.processing.duplicate_detection import DuplicateDetectionResult, DuplicateDetectionService
-from src.schemas.entity_schema import EntityCreate
-from src.services.entity_service import EntityService
-from src.utils.hash_config import HashConfig
+from api_exchange_core.processing.duplicate_detection import DuplicateDetectionResult, DuplicateDetectionService
+from api_exchange_core.utils.hash_config import HashConfig
 
 
 class TestDuplicateDetectionResult:
@@ -162,7 +160,7 @@ class TestDuplicateDetectionService:
     @pytest.fixture
     def detection_service(self, db_session):
         """Create a duplicate detection service with test session."""
-        from src.services.entity_service import EntityService
+        from api_exchange_core.services.entity_service import EntityService
         
         # Create the EntityService with the test session
         test_entity_service = EntityService(session=db_session)

@@ -19,15 +19,15 @@ from decimal import Decimal
 
 from sqlalchemy import JSON, create_engine, event
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.orm import scoped_session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 # Replace PostgreSQL's JSONB with standard JSON type for SQLite compatibility
 postgresql.JSONB = JSON
 
-from src.context.tenant_context import TenantContext
-from src.db.db_config import Base, DatabaseManager
-from src.db.db_tenant_models import Tenant
+from api_exchange_core.context.tenant_context import TenantContext
+from api_exchange_core.db import Base, DatabaseManager
+from api_exchange_core.db import Tenant
 
 # ==================== DATABASE FIXTURES ====================
 
@@ -249,8 +249,6 @@ def tenant_with_config(db_session):
     Returns tuple of (tenant_id, config_key, config_value).
     """
     import uuid
-
-    from src.schemas.tenant_schema import TenantConfigValue
 
     tenant_id = f"config-tenant-{uuid.uuid4()}"
     config_key = "test_setting"

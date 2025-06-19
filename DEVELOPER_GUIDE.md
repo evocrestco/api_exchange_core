@@ -133,7 +133,7 @@ entity = Entity(
 Every operation is tenant-scoped:
 
 ```python
-from src.context.tenant_context import tenant_context
+from context.tenant_context import tenant_context
 
 with tenant_context("customer-1"):
     # All operations here are scoped to customer-1
@@ -171,14 +171,14 @@ entity_id = entity_service.create_entity(
 All data is validated using Pydantic:
 
 ```python
-from src.schemas.entity_schema import EntityCreate
+from schemas import EntityCreate
 
 # This will validate the data
 entity_data = EntityCreate(
-    tenant_id="customer-1",
-    external_id="CRM-12345",
-    canonical_type="customer",
-    source="salesforce"
+   tenant_id="customer-1",
+   external_id="CRM-12345",
+   canonical_type="customer",
+   source="salesforce"
 )
 ```
 
@@ -332,25 +332,25 @@ def process_entity(entity_id: str, validate: bool = True) -> EntityRead:
 Use the centralized exception system:
 
 ```python
-from src.exceptions import ValidationError, ServiceError, ErrorCode
+from exceptions import ValidationError, ServiceError, ErrorCode
 
 # Validation errors
 if not entity_data.is_valid():
-    raise ValidationError(
-        "Invalid entity data",
-        error_code=ErrorCode.VALIDATION_FAILED,
-        details={"field": "email", "error": "Invalid format"}
-    )
+   raise ValidationError(
+      "Invalid entity data",
+      error_code=ErrorCode.VALIDATION_FAILED,
+      details={"field": "email", "error": "Invalid format"}
+   )
 
 # Service errors
 try:
-    result = external_api.call()
+   result = external_api.call()
 except Exception as e:
-    raise ServiceError(
-        "External API call failed",
-        error_code=ErrorCode.EXTERNAL_API_ERROR,
-        cause=e
-    )
+   raise ServiceError(
+      "External API call failed",
+      error_code=ErrorCode.EXTERNAL_API_ERROR,
+      cause=e
+   )
 ```
 
 ### Logging
@@ -423,7 +423,8 @@ LOG_LEVEL=DEBUG
 ### 2. Use Operation Context
 
 ```python
-from src.context.operation_context import operation
+from context.operation_context import operation
+
 
 @operation(name="debug_operation")
 def my_function():
@@ -443,7 +444,8 @@ logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
 
 ```python
 # Check current tenant
-from src.context.tenant_context import TenantContext
+from context.tenant_context import TenantContext
+
 current_tenant = TenantContext.get_current_tenant_id()
 print(f"Current tenant: {current_tenant}")
 ```

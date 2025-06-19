@@ -9,20 +9,15 @@ import os
 
 # Import models and schemas using our established path pattern
 import sys
-import uuid
-from datetime import datetime
-from typing import Any, Dict
 from unittest.mock import patch
 
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "src"))
 
-from src.context.tenant_context import TenantContext
-from src.exceptions import ErrorCode, RepositoryError, ServiceError, ValidationError
-from src.schemas.entity_schema import EntityFilter, EntityRead
-from src.services.entity_service import EntityService
-from src.utils.hash_config import HashConfig
+from api_exchange_core.exceptions import ServiceError
+from api_exchange_core.schemas import EntityFilter, EntityRead
+from api_exchange_core.utils.hash_config import HashConfig
 
 
 class TestEntityServiceList:

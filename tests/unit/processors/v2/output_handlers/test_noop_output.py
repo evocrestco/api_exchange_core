@@ -5,13 +5,13 @@ Tests the no-operation output handler that's used when processors
 don't need to route output to any downstream systems.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-from src.processors.processing_result import ProcessingResult
-from src.processors.v2.message import Message
-from src.processors.v2.output_handlers import NoOpOutputHandler, OutputHandlerStatus
+from api_exchange_core.processors.processing_result import ProcessingResult
+from api_exchange_core.processors import Message
+from api_exchange_core.processors import NoOpOutputHandler, OutputHandlerStatus
 
 
 class TestNoOpOutputHandler:

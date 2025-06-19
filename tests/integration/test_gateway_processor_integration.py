@@ -6,17 +6,13 @@ Tests real queue output, database interactions, and full message processing work
 
 import json
 import pytest
-from datetime import datetime, UTC
 from uuid import uuid4
 
-from src.processors.infrastructure.gateway_processor import GatewayProcessor
-from src.processors.v2.message import Message, MessageType
-from src.processors.v2.processor_interface import ProcessorContext
-from src.processing.processing_service import ProcessingService
-from src.processing.duplicate_detection import DuplicateDetectionService
-from src.processing.entity_attributes import EntityAttributeBuilder
-from src.services.entity_service import EntityService
-from src.db.db_entity_models import Entity
+from api_exchange_core.processors.infrastructure.gateway_processor import GatewayProcessor
+from api_exchange_core.processors import Message
+from api_exchange_core.processors.v2.processor_interface import ProcessorContext
+from api_exchange_core.processing import ProcessingService
+from api_exchange_core.db import Entity
 
 
 class TestGatewayProcessorIntegration:

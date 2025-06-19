@@ -43,7 +43,7 @@ can't be controlled with real Azurite infrastructure.
 
 import os
 import tempfile
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -59,10 +59,9 @@ except ImportError:
     ServiceBusConnectionError = Exception
     ServiceBusError = Exception
 
-from src.processors.v2.output_handlers.base import OutputHandlerError
-from src.processors.v2.output_handlers.file_output import FileOutputHandler
-from src.processors.v2.output_handlers.queue_output import QueueOutputHandler
-from src.processors.v2.output_handlers.service_bus_output import ServiceBusOutputHandler
+from api_exchange_core.processors import FileOutputHandler
+from api_exchange_core.processors.v2.output_handlers.queue_output import QueueOutputHandler
+from api_exchange_core.processors.v2.output_handlers.service_bus_output import ServiceBusOutputHandler
 
 
 class TestQueueOutputHandlerErrorScenarios:
@@ -173,7 +172,7 @@ class TestServiceBusOutputHandlerErrorScenarios:
     def test_service_bus_sdk_not_available(self, test_message, test_processing_result):
         """Test ImportError when Service Bus SDK not available."""
         # Test the case where ServiceBusOutputHandler.__init__ raises ImportError
-        with patch('src.processors.v2.output_handlers.service_bus_output.SERVICEBUS_AVAILABLE', False):
+        with patch('api_exchange_core.processors.v2.output_handlers.service_bus_output.SERVICEBUS_AVAILABLE', False):
             with pytest.raises(ImportError, match="Azure Service Bus SDK is not installed"):
                 ServiceBusOutputHandler(destination="test-topic")
     
@@ -447,7 +446,7 @@ class TestOutputHandlerErrorPropagation:
             handler = FileOutputHandler(destination=temp_dir)
             
             # Mock an unexpected error during file operations
-            with patch('src.processors.v2.output_handlers.file_output.Path.stat') as mock_stat:
+            with patch('api_exchange_core.processors.v2.output_handlers.file_output.Path.stat') as mock_stat:
                 mock_stat.side_effect = RuntimeError("Unexpected system error")
                 
                 result = handler.handle(test_message, test_processing_result)

@@ -12,17 +12,14 @@ import os
 import sys
 import uuid
 from datetime import datetime
-from typing import Any, Dict
 
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "src"))
 
-from schemas.entity_schema import EntityCreate
-from src.exceptions import ErrorCode, RepositoryError, ServiceError, ValidationError
-from src.schemas.entity_schema import EntityRead
-from src.services.entity_service import EntityService
-from src.utils.hash_config import HashConfig
+from api_exchange_core.exceptions import ErrorCode, ServiceError, ValidationError
+from api_exchange_core.schemas import EntityRead
+from api_exchange_core.utils.hash_config import HashConfig
 
 # ==================== ENTITY SERVICE TESTS ====================
 
@@ -402,7 +399,7 @@ class TestEntityServiceTenantIsolation:
         tenant_entities = {}
         for i, tenant_data in enumerate(multi_tenant_context):
             # Set tenant context for this operation
-            from src.context.tenant_context import TenantContext
+            from api_exchange_core.context.tenant_context import TenantContext
 
             TenantContext.set_current_tenant(tenant_data["id"])
 
@@ -439,7 +436,7 @@ class TestEntityServiceUpdate:
 
     def test_create_entity_invalid_tenant(self, entity_service, tenant_context):
         """Test creating entity with invalid tenant context."""
-        from src.context.tenant_context import TenantContext
+        from api_exchange_core.context.tenant_context import TenantContext
 
         # Store original tenant
         original_tenant = TenantContext.get_current_tenant_id()
@@ -586,7 +583,7 @@ class TestEntityServiceProcessingResults:
 
     def test_add_processing_result_to_entity(self, entity_service, tenant_context):
         """Test adding a processing result to an entity via service."""
-        from src.processors.processing_result import ProcessingResult, ProcessingStatus
+        from api_exchange_core.processors.processing_result import ProcessingResult, ProcessingStatus
         
         # Arrange - Create entity first
         entity_id = entity_service.create_entity(
@@ -625,7 +622,7 @@ class TestEntityServiceProcessingResults:
 
     def test_add_processing_result_nonexistent_entity(self, entity_service, tenant_context):
         """Test adding processing result to non-existent entity."""
-        from src.processors.processing_result import ProcessingResult
+        from api_exchange_core.processors.processing_result import ProcessingResult
         
         # Arrange
         nonexistent_id = str(uuid.uuid4())
@@ -641,7 +638,7 @@ class TestEntityServiceProcessingResults:
 
     def test_get_processing_summary(self, entity_service, tenant_context):
         """Test getting processing summary via service."""
-        from src.processors.processing_result import ProcessingResult
+        from api_exchange_core.processors.processing_result import ProcessingResult
         
         # Arrange - Create entity with processing history
         entity_id = entity_service.create_entity(
@@ -706,7 +703,7 @@ class TestEntityServiceProcessingResults:
 
     def test_processing_result_with_entity_data(self, entity_service, tenant_context):
         """Test processing result with entity data fields."""
-        from src.processors.processing_result import ProcessingResult
+        from api_exchange_core.processors.processing_result import ProcessingResult
         
         # Arrange - Create entity
         entity_id = entity_service.create_entity(

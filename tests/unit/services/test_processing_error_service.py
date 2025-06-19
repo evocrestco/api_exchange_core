@@ -18,24 +18,22 @@ import os
 
 # Import models and schemas using our established path pattern
 import sys
-import uuid
 from datetime import datetime, timedelta
-from typing import Any, Dict
 
 import pytest
 from pydantic import ValidationError
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "src"))
 
-from src.context.tenant_context import TenantContext
-from src.exceptions import ErrorCode, ServiceError
-from src.schemas.entity_schema import EntityCreate
-from src.schemas.processing_error_schema import (
+from api_exchange_core.context.tenant_context import TenantContext
+from api_exchange_core.exceptions import ErrorCode, ServiceError
+from api_exchange_core.schemas import EntityCreate
+from api_exchange_core.schemas import (
     ProcessingErrorCreate,
     ProcessingErrorFilter,
     ProcessingErrorRead,
 )
-from src.services.processing_error_service import ProcessingErrorService
+
 
 # ==================== PROCESSING ERROR SERVICE TESTS ====================
 

@@ -10,22 +10,21 @@ This test demonstrates the full processor pipeline flow:
 This is converted from e2e/hello_world but adapted for pytest.
 """
 
-import json
 import uuid
 from datetime import UTC, datetime
 from typing import Any, Dict
 
 import pytest
 
-from src.context.tenant_context import tenant_context
-from src.db.db_entity_models import Entity
-from src.processors.processing_result import ProcessingResult, ProcessingStatus
-from src.processors.v2.message import Message
-from src.processors.v2.output_handlers import NoOpOutputHandler
-from src.processors.v2.processor_factory import create_db_manager, create_processor_handler
-from src.processors.v2.processor_interface import ProcessorContext, ProcessorInterface
-from src.services.entity_service import EntityService
-from src.utils.hash_utils import calculate_entity_hash
+from api_exchange_core.context.tenant_context import tenant_context
+from api_exchange_core.db import Entity
+from api_exchange_core.processors.processing_result import ProcessingResult, ProcessingStatus
+from api_exchange_core.processors import Message
+from api_exchange_core.processors import NoOpOutputHandler
+from api_exchange_core.processors.v2.processor_factory import create_processor_handler
+from api_exchange_core.processors.v2.processor_interface import ProcessorContext, ProcessorInterface
+from api_exchange_core.services.entity_service import EntityService
+from api_exchange_core.utils.hash_utils import calculate_entity_hash
 
 
 class HelloWorldProcessor(ProcessorInterface):
@@ -136,7 +135,7 @@ def entity_service_for_validation():
     This fixture uses the same create_db_manager() that processors use,
     ensuring we're testing with the real production code paths.
     """
-    from src.processors.v2.processor_factory import create_db_manager
+    from api_exchange_core.processors.v2.processor_factory import create_db_manager
 
     # Use same database configuration as processor
     db_manager = create_db_manager()
@@ -182,7 +181,7 @@ class TestHelloWorldIntegration:
         
         # Create a fresh EntityService for validation after processing is complete
         # This ensures we get a new session that can see the committed changes
-        from src.processors.v2.processor_factory import create_db_manager
+        from api_exchange_core.processors.v2.processor_factory import create_db_manager
         db_manager = create_db_manager()
         fresh_session = db_manager.get_session()
         entity_service_for_validation = EntityService(session=fresh_session)
@@ -399,8 +398,8 @@ class TestHelloWorldIntegration:
         """Test that different tenants cannot see each other's entities."""
         import os
 
-        from src.db.db_tenant_models import Tenant
-        from src.processors.v2.processor_factory import create_db_manager
+        from api_exchange_core.db import Tenant
+        from api_exchange_core.processors.v2.processor_factory import create_db_manager
 
         # Store original tenant
         original_tenant = os.getenv("TENANT_ID", "e2e_test_tenant")
@@ -516,10 +515,9 @@ class TestHelloWorldIntegration:
         """Test that state transitions are tracked during processing."""
         import os
 
-        from src.db.db_base import EntityStateEnum
-        from src.db.db_tenant_models import Tenant
-        from src.processors.v2.processor_factory import create_db_manager, create_processor_handler
-        from src.services.state_tracking_service import StateTrackingService
+        from api_exchange_core.db import Tenant
+        from api_exchange_core.processors.v2.processor_factory import create_db_manager, create_processor_handler
+        from api_exchange_core.services.state_tracking_service import StateTrackingService
 
         # Ensure test tenant exists
         tenant_id = os.getenv("TENANT_ID", "e2e_test_tenant")
@@ -611,8 +609,8 @@ class TestHelloWorldIntegration:
         """Test duplicate detection during processing."""
         import os
 
-        from src.db.db_tenant_models import Tenant
-        from src.processors.v2.processor_factory import create_db_manager
+        from api_exchange_core.db import Tenant
+        from api_exchange_core.processors.v2.processor_factory import create_db_manager
 
         # Ensure test tenant exists
         tenant_id = os.getenv("TENANT_ID", "e2e_test_tenant")
@@ -719,7 +717,7 @@ class TestHelloWorldIntegration:
         """Test error handling and dead letter queue routing with real Azure Storage."""
         import os
 
-        from src.processors.v2.processor_factory import create_processor_handler
+        from api_exchange_core.processors.v2.processor_factory import create_processor_handler
 
         # Create a failing processor for testing
         class FailingProcessor(ProcessorInterface):
@@ -794,7 +792,7 @@ class TestHelloWorldIntegration:
         """Test retryable errors do not go to DLQ immediately with real Azure Storage."""
         import os
 
-        from src.processors.v2.processor_factory import create_processor_handler
+        from api_exchange_core.processors.v2.processor_factory import create_processor_handler
 
         # Create a processor that fails with retryable error
         class RetryableFailingProcessor(ProcessorInterface):
@@ -857,7 +855,7 @@ class TestHelloWorldIntegration:
         """Test message validation failures."""
         import os
 
-        from src.processors.v2.processor_factory import create_processor_handler
+        from api_exchange_core.processors.v2.processor_factory import create_processor_handler
 
         # Create a processor with strict validation
         class StrictValidationProcessor(ProcessorInterface):
@@ -919,8 +917,8 @@ class TestHelloWorldIntegration:
         """Test that QueueOutputHandler actually sends messages to output queue."""
         import os
 
-        from src.processors.v2.output_handlers import QueueOutputHandler
-        from src.processors.v2.processor_factory import create_processor_handler
+        from api_exchange_core.processors import QueueOutputHandler
+        from api_exchange_core.processors.v2.processor_factory import create_processor_handler
 
         # Create a processor that uses QueueOutputHandler
         class HelloWorldWithQueueOutput(ProcessorInterface):
@@ -1089,8 +1087,8 @@ class TestHelloWorldIntegration:
         """Test processor with multiple output handlers (queue + noop)."""
         import os
 
-        from src.processors.v2.output_handlers import NoOpOutputHandler, QueueOutputHandler
-        from src.processors.v2.processor_factory import create_processor_handler
+        from api_exchange_core.processors import NoOpOutputHandler, QueueOutputHandler
+        from api_exchange_core.processors.v2.processor_factory import create_processor_handler
 
         # Create a processor that uses multiple output handlers
         class MultiOutputProcessor(ProcessorInterface):

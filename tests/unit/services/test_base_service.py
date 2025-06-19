@@ -4,12 +4,12 @@ Tests for base_service module covering utility methods.
 This module tests the BaseService utility methods that need coverage.
 """
 
-from typing import Dict, List, Optional
+from typing import Optional
 
 import pytest
 from pydantic import BaseModel
 
-from src.services.base_service import BaseService
+from api_exchange_core.services.base_service import BaseService
 
 
 class SampleReadSchema(BaseModel):

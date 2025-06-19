@@ -10,26 +10,21 @@ import os
 
 # Import models and schemas using our established path pattern
 import sys
-import uuid
 from datetime import datetime, timedelta
-from typing import Any, Dict
 
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "src"))
 
-from src.context.tenant_context import TenantContext
-from src.db.db_base import EntityStateEnum
-from src.db.db_state_transition_models import TransitionTypeEnum
-from src.exceptions import ServiceError
-from src.schemas.entity_schema import EntityCreate
-from src.schemas.state_transition_schema import (
+from api_exchange_core.context.tenant_context import TenantContext
+from api_exchange_core.db import EntityStateEnum
+from api_exchange_core.db import TransitionTypeEnum
+from api_exchange_core.schemas import EntityCreate
+from api_exchange_core.schemas import (
     EntityStateHistory,
-    StateTransitionCreate,
-    StateTransitionRead,
     StateTransitionStats,
 )
-from src.services.state_tracking_service import StateTrackingService
+
 
 # ==================== STATE TRACKING SERVICE TESTS ====================
 

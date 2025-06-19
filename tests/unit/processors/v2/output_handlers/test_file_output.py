@@ -23,23 +23,17 @@ File Pattern Variables: message_id, correlation_id, timestamp, date, time,
 """
 
 import json
-import os
 import tempfile
-import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict
-from unittest.mock import patch
 
 import pytest
 
-from src.processors.processing_result import ProcessingResult, ProcessingStatus
-from src.processors.v2.message import Message, MessageType
-from src.processors.v2.output_handlers.base import (
-    OutputHandlerResult,
+from api_exchange_core.processors.processing_result import ProcessingResult, ProcessingStatus
+from api_exchange_core.processors.v2.output_handlers.base import (
     OutputHandlerStatus,
 )
-from src.processors.v2.output_handlers.file_output import FileOutputHandler
+from api_exchange_core.processors import FileOutputHandler
 
 
 class TestFileOutputHandler:
@@ -201,7 +195,7 @@ class TestFileOutputHandler:
         
         handler.file_pattern = "{invalid_variable}.json"
         
-        from src.processors.v2.output_handlers.base import OutputHandlerError
+        from api_exchange_core.processors.v2.output_handlers.base import OutputHandlerError
         with pytest.raises(OutputHandlerError) as exc_info:
             handler._generate_file_path(message, result)
         
@@ -330,7 +324,7 @@ class TestFileOutputHandler:
             completed_at=datetime.now(UTC)
         )
         
-        from src.processors.v2.output_handlers.base import OutputHandlerError
+        from api_exchange_core.processors.v2.output_handlers.base import OutputHandlerError
         with pytest.raises(OutputHandlerError) as exc_info:
             handler._prepare_file_content(message, result)
         

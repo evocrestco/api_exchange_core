@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.processors.v2.output_handlers.config import (
+from api_exchange_core.processors.v2.output_handlers.config import (
     FileOutputHandlerConfig,
     NoOpOutputHandlerConfig,
     OutputHandlerConfigBase,

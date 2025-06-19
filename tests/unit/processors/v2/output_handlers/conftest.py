@@ -7,12 +7,11 @@ Uses simple data classes instead of SQLAlchemy models to avoid database dependen
 
 import uuid
 from datetime import UTC, datetime
-from typing import Any, Dict
 
 import pytest
 
-from src.processors.processing_result import ProcessingResult, ProcessingStatus
-from src.processors.v2.message import Message, MessageType
+from api_exchange_core.processors.processing_result import ProcessingResult, ProcessingStatus
+from api_exchange_core.processors import Message
 
 
 class SimpleEntity:

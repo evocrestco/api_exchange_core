@@ -5,14 +5,8 @@ Tests routing logic, condition evaluation, and output handler configuration.
 """
 
 import pytest
-from datetime import datetime, UTC
-from uuid import uuid4
 
-from src.processors.infrastructure.gateway_processor import GatewayProcessor
-from src.processors.v2.message import Message, MessageType
-from src.processors.processing_result import ProcessingResult, ProcessingStatus
-from src.processors.v2.processor_interface import ProcessorContext
-from src.db.db_entity_models import Entity
+from api_exchange_core.processors.infrastructure.gateway_processor import GatewayProcessor
 
 
 class TestGatewayProcessor:
@@ -56,7 +50,7 @@ class TestGatewayProcessor:
     @pytest.fixture
     def sample_message(self, processor_context, tenant_context):
         """Create a sample message for testing."""
-        from src.context.tenant_context import tenant_context as tenant_ctx
+        from api_exchange_core.context.tenant_context import tenant_context as tenant_ctx
         
         with tenant_ctx(tenant_context["id"]):
             # Gateway processes existing entities, so create entity and message
@@ -163,7 +157,7 @@ class TestGatewayProcessor:
     
     def test_field_path_navigation(self, queue_config, processor_context, tenant_context):
         """Test different field path navigation scenarios."""
-        from src.context.tenant_context import tenant_context as tenant_ctx
+        from api_exchange_core.context.tenant_context import tenant_context as tenant_ctx
         
         config = {
             "rules": [

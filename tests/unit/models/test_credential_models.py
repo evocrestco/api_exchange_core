@@ -3,7 +3,7 @@
 import pytest
 from datetime import datetime, timedelta
 
-from src.db.db_credential_models import ExternalCredential
+from api_exchange_core.db import ExternalCredential
 
 
 class TestExternalCredential:

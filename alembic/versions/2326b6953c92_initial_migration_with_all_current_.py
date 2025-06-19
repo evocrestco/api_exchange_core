@@ -10,7 +10,7 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
-from src.db.db_base import EncryptedBinary, JSON
+from db import EncryptedBinary, JSON
 
 # revision identifiers, used by Alembic.
 revision: str = '2326b6953c92'

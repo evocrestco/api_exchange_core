@@ -5,8 +5,8 @@ Tests for generic API token models.
 import pytest
 from datetime import datetime, timedelta
 
-from src.db.db_api_token_models import APIToken, APITokenUsageLog
-from src.context.tenant_context import tenant_context
+from api_exchange_core.db import APIToken, APITokenUsageLog
+from api_exchange_core.context.tenant_context import tenant_context
 
 
 class TestAPIToken:

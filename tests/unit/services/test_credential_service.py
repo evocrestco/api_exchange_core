@@ -7,12 +7,11 @@ Following NO MOCKS policy - tests use real implementations and PostgreSQL.
 import pytest
 from datetime import datetime, timedelta
 
-from src.db.db_config import import_all_models
-from src.db.db_credential_models import ExternalCredential
-from src.repositories.credential_repository import CredentialRepository
-from src.services.credential_service import CredentialService
-from src.context.tenant_context import TenantContext
-from src.exceptions import (
+from api_exchange_core.db import import_all_models
+from api_exchange_core.db import ExternalCredential
+from api_exchange_core.services.credential_service import CredentialService
+from api_exchange_core.context.tenant_context import TenantContext
+from api_exchange_core.exceptions import (
     ValidationError, 
     CredentialNotFoundError, 
     CredentialExpiredError,
@@ -391,8 +390,8 @@ class TestCredentialService:
         
         try:
             # Create API token repository and service (consistent pattern)
-            from src.repositories.api_token_repository import APITokenRepository
-            from src.services.api_token_service import APITokenService
+            from api_exchange_core.repositories.api_token_repository import APITokenRepository
+            from api_exchange_core.services.api_token_service import APITokenService
             
             api_token_repo = APITokenRepository(
                 session=db_session,
@@ -421,8 +420,8 @@ class TestCredentialService:
         
         try:
             # Create API token repository and service (consistent pattern)
-            from src.repositories.api_token_repository import APITokenRepository
-            from src.services.api_token_service import APITokenService
+            from api_exchange_core.repositories.api_token_repository import APITokenRepository
+            from api_exchange_core.services.api_token_service import APITokenService
             
             api_token_repo = APITokenRepository(
                 session=db_session,
@@ -461,8 +460,8 @@ class TestCredentialService:
         
         try:
             # Create API token repository and service (consistent pattern)
-            from src.repositories.api_token_repository import APITokenRepository
-            from src.services.api_token_service import APITokenService
+            from api_exchange_core.repositories.api_token_repository import APITokenRepository
+            from api_exchange_core.services.api_token_service import APITokenService
             
             api_token_repo = APITokenRepository(
                 session=db_session,
@@ -512,8 +511,8 @@ class TestCredentialService:
         tenant2 = multi_tenant_context[1]
         
         # Create API token repository and service (consistent pattern)
-        from src.repositories.api_token_repository import APITokenRepository
-        from src.services.api_token_service import APITokenService
+        from api_exchange_core.repositories.api_token_repository import APITokenRepository
+        from api_exchange_core.services.api_token_service import APITokenService
         
         api_token_repo = APITokenRepository(
             session=db_session,

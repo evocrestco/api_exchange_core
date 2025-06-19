@@ -7,11 +7,10 @@ Following NO MOCKS policy - tests use real database.
 import pytest
 from datetime import datetime, timedelta
 
-from src.db.db_config import import_all_models
-from src.db.db_credential_models import ExternalCredential
-from src.repositories.credential_repository import CredentialRepository
-from src.context.tenant_context import TenantContext
-from src.exceptions import ValidationError, CredentialNotFoundError
+from api_exchange_core.db import import_all_models
+from api_exchange_core.repositories.credential_repository import CredentialRepository
+from api_exchange_core.context.tenant_context import TenantContext
+from api_exchange_core.exceptions import ValidationError, CredentialNotFoundError
 
 # Initialize models properly
 import_all_models()

@@ -21,8 +21,8 @@ from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from src.db.db_config import Base, import_all_models
-from src.db.db_tenant_models import Tenant
+from api_exchange_core.db import Base, import_all_models
+from api_exchange_core.db import Tenant
 
 
 def get_db_config():

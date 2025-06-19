@@ -6,11 +6,11 @@ import pytest
 from unittest.mock import Mock
 from datetime import datetime, timedelta
 
-from src.services.api_token_service import APITokenService
-from src.repositories.api_token_repository import APITokenRepository
-from src.context.tenant_context import tenant_context
-from src.exceptions import ValidationError, TokenNotAvailableError, ServiceError, ErrorCode
-from src.db.db_api_token_models import APIToken
+from api_exchange_core.services.api_token_service import APITokenService
+from api_exchange_core.repositories.api_token_repository import APITokenRepository
+from api_exchange_core.context.tenant_context import tenant_context
+from api_exchange_core.exceptions import ValidationError, TokenNotAvailableError, ServiceError
+from api_exchange_core.db import APIToken
 
 
 class TestAPITokenService:

@@ -21,22 +21,18 @@ import sys
 import threading
 import time
 import uuid
-from typing import Any, Dict
-from unittest.mock import patch
 
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "src"))
 
-from src.context.tenant_context import (
+from api_exchange_core.context.tenant_context import (
     TenantContext,
     get_tenant_config,
     tenant_aware,
     tenant_context,
 )
-from src.exceptions import ErrorCode, RepositoryError
-from src.services.tenant_service import TenantService
-from src.schemas.tenant_schema import TenantConfigValue, TenantCreate, TenantRead
+from api_exchange_core.schemas.tenant_schema import TenantCreate
 
 
 class TestTenantContextBasics:
@@ -392,7 +388,7 @@ class TestErrorHandling:
         # This tests the module import validation at the top of the file
         # We can't easily test this without importing the module differently,
         # but we can verify the validation code exists
-        import src.context.tenant_context as tenant_module
+        import api_exchange_core.context.tenant_context as tenant_module
 
         # The import validation is in the module code
         assert hasattr(tenant_module, "TenantContext")

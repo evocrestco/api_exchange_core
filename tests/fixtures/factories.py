@@ -6,24 +6,15 @@ ensuring consistency across all tests while allowing customization
 for specific test scenarios.
 """
 
-from typing import Any, Dict
-
 import factory
 import factory.fuzzy
 
-from src.db.db_base import EntityStateEnum, EntityTypeEnum, ErrorTypeEnum
-from src.db.db_entity_models import Entity
-from src.db.db_error_models import ProcessingError
-from src.db.db_state_transition_models import StateTransition
-from src.db.db_tenant_models import Tenant
+from api_exchange_core.db import EntityStateEnum, EntityTypeEnum, ErrorTypeEnum
+from api_exchange_core.db import Entity
+from api_exchange_core.db.db_error_models import ProcessingError
+from api_exchange_core.db import StateTransition
+from api_exchange_core.db import Tenant
 from tests.fixtures.example_models import (
-    CustomerType,
-    ExampleCustomer,
-    ExampleInventoryItem,
-    ExampleOrder,
-    InventoryStatus,
-    OrderStatus,
-    PaymentStatus,
     create_example_customer_data,
     create_example_inventory_data,
     create_example_order_data,

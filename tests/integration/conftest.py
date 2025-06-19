@@ -6,7 +6,6 @@ It builds on the base conftest.py but adds integration-specific setup.
 """
 
 import json
-import os
 import time
 from pathlib import Path
 
@@ -16,7 +15,7 @@ import pytest
 from azure.storage.queue import QueueClient, QueueMessage
 
 # Integration tests need to import all models for proper database setup
-from src.db.db_config import import_all_models
+from api_exchange_core.db import import_all_models
 
 # Import base fixtures from root conftest
 from tests.conftest import *  # noqa: F403, F401
@@ -115,7 +114,7 @@ def postgres_engine():
         raise ValueError("PostgreSQL environment variables not set. Check integration .env file.")
     
     from sqlalchemy import create_engine
-    from src.db.db_config import Base
+    from api_exchange_core.db import Base
     
     engine = create_engine(db_url, echo=False)
     
@@ -172,7 +171,7 @@ def postgres_test_tenant(postgres_db_session):
 
     Returns tenant data as dictionary to prevent accidental modification.
     """
-    from src.db.db_tenant_models import Tenant
+    from api_exchange_core.db import Tenant
     
     tenant_id = "test_tenant"
     
@@ -220,8 +219,8 @@ def postgres_multi_tenant_context(postgres_db_session):
 
     Returns list of tenant dictionaries for parameterized testing.
     """
-    from src.db.db_tenant_models import Tenant
-    from src.context.tenant_context import TenantContext
+    from api_exchange_core.db import Tenant
+    from api_exchange_core.context.tenant_context import TenantContext
     
     tenant_data = []
 

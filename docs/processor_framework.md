@@ -74,15 +74,16 @@ class ProcessorContext:
 New in v2: Automatic operation tracking, logging, and metrics:
 
 ```python
-from src.context.operation_context import operation
+from context.operation_context import operation
+
 
 class MyProcessor(ProcessorInterface):
     @operation("my_processor.process")
     def process(self, message: Message, context: ProcessorContext) -> ProcessingResult:
         # Business logic here - logging/metrics handled automatically
         pass
-    
-    @operation("my_processor.validate")  
+
+    @operation("my_processor.validate")
     def validate_message(self, message: Message) -> bool:
         # Validation logic with automatic tracking
         pass
@@ -165,24 +166,25 @@ Create your processor using the enhanced v2 interface with `@operation` decorato
 ```python
 from datetime import datetime, UTC
 from typing import Dict, Any
-from src.context.operation_context import operation
-from src.processors.v2.processor_interface import ProcessorInterface, ProcessorContext
-from src.processors.processing_result import ProcessingResult, ProcessingStatus
-from src.processors.v2.message import Message
-from src.processors.v2.output_handlers import QueueOutputHandler
+from context.operation_context import operation
+from processors.v2.processor_interface import ProcessorInterface, ProcessorContext
+from processors.processing_result import ProcessingResult, ProcessingStatus
+from processors import Message
+from processors import QueueOutputHandler
+
 
 class MyBusinessProcessor(ProcessorInterface):
-    
+
     def __init__(self, config: MyProcessorConfig):
         """Initialize processor with customer-specific configuration."""
         self.config = config
-        
+
     @operation("my_processor.process")
     def process(self, message: Message, context: ProcessorContext) -> ProcessingResult:
         """Process message with automatic operation tracking."""
         # Extract operation type from message metadata
         operation_type = message.metadata.get("operation", "default")
-        
+
         if operation_type == "create_entity":
             return self._handle_entity_creation(message, context)
         elif operation_type == "transform_data":
@@ -193,7 +195,7 @@ class MyBusinessProcessor(ProcessorInterface):
                 error_code="INVALID_OPERATION",
                 can_retry=False
             )
-    
+
     @operation("my_processor.create_entity")
     def _handle_entity_creation(self, message: Message, context: ProcessorContext) -> ProcessingResult:
         """Create new entity from external data."""
@@ -209,7 +211,7 @@ class MyBusinessProcessor(ProcessorInterface):
                     "processor_version": "2.0.0"
                 }
             )
-            
+
             # Create success result with output handler
             result = ProcessingResult.create_success(
                 entities_created=[entity_id],
@@ -218,37 +220,37 @@ class MyBusinessProcessor(ProcessorInterface):
                     "external_id": message.payload["id"]
                 }
             )
-            
+
             # Add type-safe output handler for next stage
             queue_handler = QueueOutputHandler(
                 destination=self.config.next_stage_queue,
                 config={"retry_count": 3}
             )
             result.add_output_handler(queue_handler)
-            
+
             return result
-            
+
         except Exception as e:
             return ProcessingResult.create_failure(
                 error_message=f"Entity creation failed: {str(e)}",
-                error_code="ENTITY_CREATION_ERROR", 
+                error_code="ENTITY_CREATION_ERROR",
                 can_retry=self.can_retry(e)
             )
-    
+
     @operation("my_processor.validate")
     def validate_message(self, message: Message) -> bool:
         """Validate message with automatic tracking."""
         if not message or not message.payload:
             return False
-        
+
         operation = message.metadata.get("operation")
         if operation == "create_entity":
             return "id" in message.payload
         elif operation == "transform_data":
             return "data" in message.payload
-        
+
         return True
-    
+
     def can_retry(self, error: Exception) -> bool:
         """Determine retry behavior based on error type."""
         # Network errors are retryable
@@ -259,7 +261,7 @@ class MyBusinessProcessor(ProcessorInterface):
             return False
         # Default to retryable
         return True
-        
+
     def get_processor_info(self) -> Dict[str, Any]:
         """Return processor metadata for monitoring."""
         return {
@@ -277,11 +279,11 @@ Use the framework's v2 `ProcessorHandler` with simplified setup:
 ```python
 import os
 import azure.functions as func
-from src.processors.v2.processor_factory import create_processor_handler
-from src.context.tenant_context import tenant_context
-from src.db.db_config import import_all_models
-from processors.my_business_processor import MyBusinessProcessor
-from processors.my_processor_config import MyProcessorConfig
+from processors.v2.processor_factory import create_processor_handler
+from context.tenant_context import tenant_context
+from db import import_all_models
+from processors import MyBusinessProcessor
+from processors import MyProcessorConfig
 
 # Create the Azure Functions app
 app = func.FunctionApp()
@@ -302,6 +304,7 @@ my_processor = MyBusinessProcessor(config=processor_config)
 # Create processor handler using factory - handles ALL infrastructure concerns
 my_processor_handler = create_processor_handler(processor=my_processor)
 
+
 # Azure Function entry point - ultra-thin wrapper
 @app.function_name(name="ProcessMyBusinessData")
 @app.queue_trigger(arg_name="msg", queue_name="input-queue")
@@ -314,14 +317,15 @@ def process_business_data(msg: func.QueueMessage) -> None:
     """
     # Convert Azure Functions message to framework Message
     message_data = msg.get_json()
-    
+
     # Create Message object (framework v2 pattern)
-    from src.processors.v2.message import Message
+    from processors import Message
     message = Message.create_from_queue_data(message_data)
-    
+
     # Execute with framework - handles everything automatically
     with tenant_context(processor_config.tenant_id):
         my_processor_handler.execute(message)
+
 
 # Timer-triggered function example
 @app.function_name(name="ProcessTimerTrigger")
@@ -330,9 +334,10 @@ def process_timer_trigger(timer: func.TimerRequest) -> None:
     """Timer trigger example with v2 framework."""
     # Create timer message using processor helper methods
     message = my_processor.create_timer_message(timer)
-    
+
     with tenant_context(processor_config.tenant_id):
         my_processor_handler.execute(message)
+
 
 # HTTP-triggered function example
 @app.function_name(name="ProcessHttpRequest")
@@ -342,10 +347,10 @@ def process_http_request(req: func.HttpRequest) -> func.HttpResponse:
     try:
         # Create message from HTTP request
         message = my_processor.create_http_message(req)
-        
+
         with tenant_context(processor_config.tenant_id):
             result = my_processor_handler.execute(message)
-            
+
         # Return HTTP response based on processing result
         if result.success:
             return func.HttpResponse(
@@ -359,7 +364,7 @@ def process_http_request(req: func.HttpRequest) -> func.HttpResponse:
                 status_code=400 if result.can_retry else 500,
                 headers={"Content-Type": "application/json"}
             )
-            
+
     except Exception as e:
         return func.HttpResponse(
             body=f'{{"status": "error", "message": "Unexpected error: {str(e)}"}}',
@@ -386,8 +391,8 @@ When you use `ProcessorHandler` v2, you get:
 The v2 framework introduces type-safe output handlers for robust routing:
 
 ```python
-from src.processors.v2.output_handlers import (
-    QueueOutputHandler, 
+from processors import (
+    QueueOutputHandler,
     FileOutputHandler,
     ServiceBusOutputHandler,
     NoOpOutputHandler
@@ -432,13 +437,14 @@ The v2 framework follows a strict NO MOCKS policy for better test reliability:
 
 ```python
 import pytest
-from src.context.tenant_context import tenant_context
-from src.processors.v2.message import Message
-from processors.my_business_processor import MyBusinessProcessor
+from context.tenant_context import tenant_context
+from processors import Message
+from processors import MyBusinessProcessor
+
 
 class TestMyBusinessProcessor:
     """Test processor using real implementations."""
-    
+
     def test_entity_creation_success(self, processor, processor_context, test_tenant):
         """Test entity creation with real framework services."""
         # Use real tenant context
@@ -451,21 +457,21 @@ class TestMyBusinessProcessor:
                 data={"test": "data"}
             )
             entity = processor_context.get_entity(entity_id)
-            
+
             message = Message.create_entity_message(
                 entity=entity,
                 payload={"id": "test-123", "data": "test_data"}
             )
             message.metadata["operation"] = "create_entity"
-            
+
             # Execute with real processor context
             result = processor.process(message, processor_context)
-            
+
             # Verify with real results
             assert result.success is True
             assert len(result.entities_created) == 1
             assert len(result.output_handlers) == 1
-    
+
     def test_validation_logic(self, processor):
         """Test validation using real message objects."""
         # Real message with valid data
@@ -474,17 +480,18 @@ class TestMyBusinessProcessor:
             payload={"id": "test-123"}
         )
         valid_message.metadata["operation"] = "create_entity"
-        
+
         # Real message with invalid data
         invalid_message = Message.create_entity_message(
             entity=test_entity,
             payload={}  # Missing required 'id'
         )
         invalid_message.metadata["operation"] = "create_entity"
-        
+
         # Test with real validation logic
         assert processor.validate_message(valid_message) is True
         assert processor.validate_message(invalid_message) is False
+
 
 # Fixtures use real framework services
 @pytest.fixture
@@ -492,10 +499,11 @@ def processor(test_config):
     """Create real processor instance."""
     return MyBusinessProcessor(config=test_config)
 
-@pytest.fixture  
+
+@pytest.fixture
 def processor_context(processing_service):
     """Create real processor context."""
-    from src.processors.v2.processor_interface import ProcessorContext
+    from processors.v2.processor_interface import ProcessorContext
     return ProcessorContext(processing_service=processing_service)
 ```
 
@@ -731,17 +739,18 @@ Here's a complete example showing all the pieces together:
 
 ```python
 # processors/coffee_processor.py
-from src.processors.processor_interface import ProcessorInterface
-from src.processors.processing_result import ProcessingResult, ProcessingStatus
-from src.processors.message import Message
+from processors import ProcessorInterface
+from processors.processing_result import ProcessingResult, ProcessingStatus
+from processors import Message
+
 
 class CoffeeOrderProcessor(ProcessorInterface):
     """Simple processor - just implement business logic!"""
-    
+
     def process(self, message: Message) -> ProcessingResult:
         # Extract coffee order
         order = message.payload
-        
+
         # Business logic: validate coffee order
         if not order.get("drink_type"):
             return ProcessingResult(
@@ -749,14 +758,14 @@ class CoffeeOrderProcessor(ProcessorInterface):
                 success=False,
                 error_message="Missing drink type"
             )
-        
+
         # Transform: add processing info
         processed_order = {
             **order,
             "processed_at": datetime.now().isoformat(),
             "processor": "coffee_order_processor"
         }
-        
+
         # Return success with routing
         return ProcessingResult(
             status=ProcessingStatus.SUCCESS,
@@ -771,10 +780,12 @@ class CoffeeOrderProcessor(ProcessorInterface):
             routing_info={"destination": "barista-queue"}
         )
 
+
 # function_app.py - Azure Function setup
 import azure.functions as func
-from src.processors.processor_factory import create_processor_handler
-from src.processing.processor_config import ProcessorConfig
+from processors import create_processor_handler
+from processing.processor_config import ProcessorConfig
+
 # ... other imports
 
 # Initialize framework (once per app)
@@ -799,13 +810,14 @@ handler = create_processor_handler(
     processing_service=processing_service
 )
 
+
 # Azure Function - just pass to handler!
 @app.queue_trigger(arg_name="msg", queue_name="coffee-orders")
 @app.queue_output(arg_name="output", queue_name="barista-queue")
 def process_coffee_order(msg: func.QueueMessage, output: func.Out[str]):
     message_data = json.loads(msg.get_body().decode('utf-8'))
     result = handler.handle_message(message_data)
-    
+
     if result["success"]:
         for msg in result["output_messages"]:
             output.set(json.dumps(msg))

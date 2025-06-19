@@ -165,7 +165,7 @@ We enforce consistent code style across the project:
 1. **Imports**: Always use absolute imports from `src`
    ```python
    # Good
-   from src.services.entity_service import EntityService
+   from services.entity_service import EntityService
    
    # Bad
    from ..services.entity_service import EntityService
@@ -190,7 +190,7 @@ We enforce consistent code style across the project:
 
 3. **Error Handling**: Use the centralized exception system
    ```python
-   from src.exceptions import ValidationError, ErrorCode
+   from exceptions import ValidationError, ErrorCode
    
    raise ValidationError(
        "Invalid entity data",

@@ -6,12 +6,11 @@ using real Entity objects per the NO MOCKS policy.
 """
 
 from datetime import datetime
-from typing import Any, Dict
 
 import pytest
 
-from src.context.tenant_context import tenant_context as tenant_ctx
-from src.processors.v2.message import Message, MessageType
+from api_exchange_core.context.tenant_context import tenant_context as tenant_ctx
+from api_exchange_core.processors import Message, MessageType
 
 
 class TestMessageCreation:

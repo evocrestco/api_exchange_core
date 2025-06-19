@@ -5,26 +5,18 @@ Tests the core framework's ability to coordinate token access across
 multiple simulated Azure Functions using coordination table pattern.
 """
 
-import os
-import random
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timedelta
-from typing import Dict, List, Tuple
+from typing import Dict
 
 import pytest
-from sqlalchemy import text
-from sqlalchemy.orm import sessionmaker
 
-
-from src.context.tenant_context import tenant_context
-from src.repositories.credential_repository import CredentialRepository
-from src.repositories.api_token_repository import APITokenRepository
-from src.services.credential_service import CredentialService
-from src.services.api_token_service import APITokenService
-from src.exceptions import TokenNotAvailableError, ValidationError
-from src.db.db_config import import_all_models
+from api_exchange_core.context.tenant_context import tenant_context
+from api_exchange_core.repositories.api_token_repository import APITokenRepository
+from api_exchange_core.services.credential_service import CredentialService
+from api_exchange_core.services.api_token_service import APITokenService
+from api_exchange_core.db import import_all_models
 
 # Import all models to fix SQLAlchemy relationship issues
 import_all_models()

@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.config import (
+from api_exchange_core.config import (
     AppConfig,
     DatabaseConfig,
     FeatureFlags,
@@ -17,7 +17,7 @@ from src.config import (
     reset_config,
     set_config,
 )
-from src.constants import LogLevel
+from api_exchange_core.constants import LogLevel
 
 
 class TestDatabaseConfig:

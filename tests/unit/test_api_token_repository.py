@@ -4,12 +4,11 @@ Tests for generic API token repository.
 
 import pytest
 from datetime import datetime, timedelta
-from unittest.mock import Mock
 
-from src.db.db_api_token_models import APIToken, APITokenUsageLog
-from src.repositories.api_token_repository import APITokenRepository
-from src.context.tenant_context import tenant_context
-from src.exceptions import ValidationError, RepositoryError
+from api_exchange_core.db import APIToken, APITokenUsageLog
+from api_exchange_core.repositories.api_token_repository import APITokenRepository
+from api_exchange_core.context.tenant_context import tenant_context
+from api_exchange_core.exceptions import ValidationError
 
 
 class TestAPITokenRepository:

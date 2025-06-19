@@ -11,11 +11,10 @@ from unittest.mock import Mock
 
 import pytest
 
-from src.schemas.entity_schema import EntityCreate
-from src.services.entity_service import EntityService
-from src.services.processing_error_service import ProcessingErrorService
-from src.services.state_tracking_service import StateTrackingService
-from src.services.tenant_service import TenantService
+from api_exchange_core.services.entity_service import EntityService
+from api_exchange_core.services.processing_error_service import ProcessingErrorService
+from api_exchange_core.services.state_tracking_service import StateTrackingService
+from api_exchange_core.services.tenant_service import TenantService
 
 # ==================== LEGACY REPOSITORY FIXTURES ====================
 # These are kept for backward compatibility with existing tests
@@ -51,11 +50,11 @@ def processing_error_service(db_session):
 @pytest.fixture(scope="function")
 def processing_service(db_session):
     """Processing service with session-per-service pattern."""
-    from src.processing.processing_service import ProcessingService
-    from src.processing.entity_attributes import EntityAttributeBuilder
-    from src.processing.duplicate_detection import DuplicateDetectionService
-    from src.services.entity_service import EntityService
-    from src.utils.logger import get_logger
+    from api_exchange_core.processing import ProcessingService
+    from api_exchange_core.processing.entity_attributes import EntityAttributeBuilder
+    from api_exchange_core.processing.duplicate_detection import DuplicateDetectionService
+    from api_exchange_core.services.entity_service import EntityService
+    from api_exchange_core.utils.logger import get_logger
     
     # Create ProcessingService manually without using constructor
     processing_service = object.__new__(ProcessingService)
@@ -78,7 +77,7 @@ def processing_service(db_session):
 @pytest.fixture(scope="function")
 def processor_context(processing_service, state_tracking_service, processing_error_service):
     """ProcessorContext with all services for v2 processor testing."""
-    from src.processors.v2.processor_interface import ProcessorContext
+    from api_exchange_core.processors.v2.processor_interface import ProcessorContext
     
     return ProcessorContext(
         processing_service=processing_service,

@@ -19,16 +19,16 @@ import logging
 logging.getLogger('azure').setLevel(logging.WARNING)
 
 # Import framework components
-from src.processors.v2.processor_interface import ProcessorInterface, ProcessorContext
-from src.processors.v2.processor_factory import create_processor_handler
-from src.processors.v2.message import Message
-from src.processors.processing_result import ProcessingResult, ProcessingStatus
-from src.processors.v2.output_handlers import QueueOutputHandler
-from src.db.db_config import import_all_models
-from src.db.db_entity_models import Entity
-from src.context.tenant_context import tenant_context
-from src.utils.logger import get_logger
-from src.utils.hash_utils import calculate_entity_hash
+from processors.v2.processor_interface import ProcessorInterface, ProcessorContext
+from processors.v2.processor_factory import create_processor_handler
+from processors import Message
+from processors.processing_result import ProcessingResult, ProcessingStatus
+from processors import QueueOutputHandler
+from db import import_all_models
+from db import Entity
+from context.tenant_context import tenant_context
+from utils.logger import get_logger
+from utils.hash_utils import calculate_entity_hash
 
 # Create the Azure Functions app
 app = func.FunctionApp()
@@ -153,9 +153,9 @@ def hello_world_generator(timer: func.TimerRequest) -> None:
         # This validation is only here to demonstrate/verify the framework works.
         if result.status == ProcessingStatus.SUCCESS and result.entities_created:
             try:
-                from src.repositories.entity_repository import EntityRepository
-                from src.services.entity_service import EntityService
-                from src.processors.v2.processor_factory import create_db_manager
+                from api_exchange_core import EntityRepository
+                from services.entity_service import EntityService
+                from processors.v2.processor_factory import create_db_manager
 
                 # Validation needs tenant context too
                 with tenant_context(os.getenv("TENANT_ID", "e2e_test_tenant")):

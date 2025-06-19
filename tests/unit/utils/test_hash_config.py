@@ -7,7 +7,7 @@ configured instances.
 
 import pytest
 
-from src.utils.hash_config import HashConfig
+from api_exchange_core.utils.hash_config import HashConfig
 
 
 class TestHashConfig:

@@ -19,15 +19,14 @@ import os
 # Import models and schemas using our established path pattern
 import sys
 import uuid
-from typing import Any, Dict
 
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "src"))
 
-from src.context.tenant_context import TenantContext, tenant_context
-from src.exceptions import ErrorCode, RepositoryError, ServiceError, ValidationError
-from src.schemas.tenant_schema import TenantCreate, TenantUpdate
+from api_exchange_core.context.tenant_context import TenantContext, tenant_context
+from api_exchange_core.exceptions import ErrorCode, ServiceError
+from api_exchange_core.schemas.tenant_schema import TenantCreate, TenantUpdate
 
 
 class TestTenantServiceCreate:

@@ -12,13 +12,12 @@ import time
 # Add parent directories to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from src.db.db_config import DatabaseConfig, DatabaseManager
-from src.db.db_base import Base
+from db import DatabaseConfig, DatabaseManager
+from db import Base
 # Import all models to ensure they're registered with Base.metadata
-from src.db import db_entity_models, db_error_models, db_state_transition_models, db_tenant_models
-from src.services.tenant_service import TenantService
-from src.repositories.tenant_repository import TenantRepository
-from src.schemas.tenant_schema import TenantCreate
+from services.tenant_service import TenantService
+from api_exchange_core import TenantRepository
+from schemas.tenant_schema import TenantCreate
 
 
 def wait_for_db(db_manager, max_attempts=30):
@@ -68,7 +67,7 @@ def create_schema():
         
         # Import all models first (to resolve relationships)
         print("Importing models...")
-        from src.db.db_config import import_all_models
+        from db import import_all_models
         import_all_models()
         
         # Create all tables

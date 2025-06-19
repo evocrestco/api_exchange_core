@@ -9,8 +9,8 @@ from datetime import datetime
 
 import pytest
 
-from src.processing.duplicate_detection import DuplicateDetectionResult
-from src.processing.entity_attributes import EntityAttributeBuilder
+from api_exchange_core.processing.duplicate_detection import DuplicateDetectionResult
+from api_exchange_core.processing.entity_attributes import EntityAttributeBuilder
 
 
 class TestEntityAttributeBuilder:

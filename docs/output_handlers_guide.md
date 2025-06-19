@@ -38,8 +38,9 @@ Sends messages to Azure Storage Queues for reliable, scalable message delivery.
 - Fan-out processing scenarios
 
 **Configuration:**
+
 ```python
-from src.processors.v2.output_handlers import QueueOutputHandler
+from processors import QueueOutputHandler
 
 handler = QueueOutputHandler(
     destination="processing-queue",
@@ -72,8 +73,9 @@ Integrates with Azure Service Bus for enterprise messaging scenarios.
 - Message scheduling
 
 **Configuration:**
+
 ```python
-from src.processors.v2.output_handlers import ServiceBusOutputHandler
+from processors import ServiceBusOutputHandler
 
 handler = ServiceBusOutputHandler(
     destination="orders-topic",
@@ -126,8 +128,9 @@ Writes processing results to the local file system for archival, debugging, or i
 - File-based integrations
 
 **Configuration:**
+
 ```python
-from src.processors.v2.output_handlers import FileOutputHandler
+from processors import FileOutputHandler
 
 handler = FileOutputHandler(
     destination="/data/processed",
@@ -202,8 +205,9 @@ A no-operation handler for testing, conditional routing, or when no output is ne
 - Performance benchmarking
 
 **Configuration:**
+
 ```python
-from src.processors.v2.output_handlers import NoOpOutputHandler
+from processors import NoOpOutputHandler
 
 handler = NoOpOutputHandler(
     destination="test-complete",
@@ -225,7 +229,7 @@ handler = NoOpOutputHandler(
 The framework provides a centralized configuration system for managing output handlers:
 
 ```python
-from src.processors.v2.output_handlers.config import (
+from processors.v2.output_handlers.config import (
     QueueOutputHandlerConfig,
     OutputHandlerConfigFactory,
     OutputHandlerConfigManager
@@ -670,24 +674,25 @@ def process(self, message: Message, context: ProcessorContext) -> ProcessingResu
 Create custom output handlers for specific needs:
 
 ```python
-from src.processors.v2.output_handlers.base import OutputHandler, OutputHandlerResult
+from processors.v2.output_handlers.base import OutputHandler, OutputHandlerResult
+
 
 class WebhookOutputHandler(OutputHandler):
     """Send results to HTTP webhooks."""
-    
+
     def handle(self, message: Message, result: ProcessingResult) -> OutputHandlerResult:
         import requests
-        
+
         webhook_url = self.destination
         payload = self._prepare_payload(message, result)
-        
+
         try:
             response = requests.post(
                 webhook_url,
                 json=payload,
                 timeout=self.config.get("timeout", 30)
             )
-            
+
             if response.status_code < 300:
                 return self._create_success_result(
                     metadata={"status_code": response.status_code}
@@ -698,7 +703,7 @@ class WebhookOutputHandler(OutputHandler):
                     error_code="WEBHOOK_ERROR",
                     can_retry=response.status_code >= 500
                 )
-                
+
         except Exception as e:
             return self._create_failure_result(
                 error_message=str(e),

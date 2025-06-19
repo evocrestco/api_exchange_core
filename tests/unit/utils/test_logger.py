@@ -8,16 +8,14 @@ and configuration functions following the NO MOCKS policy.
 import logging
 import os
 import sys
-import tempfile
-from datetime import datetime
 from io import StringIO
 from unittest.mock import Mock, patch
 
 import pytest
 
-import src.utils.logger
-from src.context.tenant_context import TenantContext, tenant_context
-from src.utils.logger import (
+from api_exchange_core.context.tenant_context import tenant_context
+from api_exchange_core.utils import logger as utils_logger
+from api_exchange_core.utils.logger import (
     AzureQueueHandler,
     ContextAwareLogger,
     TenantContextFilter,
@@ -602,8 +600,8 @@ class TestGetLogger:
     def test_get_logger_fallback_without_function_logger(self):
         """Test get_logger fallback when no function logger configured."""
         # Clear the global function logger
-        original_logger = src.utils.logger._function_logger
-        src.utils.logger._function_logger = None
+        original_logger = utils_logger._function_logger
+        utils_logger._function_logger = None
         
         try:
             logger = get_logger()
@@ -614,13 +612,13 @@ class TestGetLogger:
         
         finally:
             # Restore original function logger
-            src.utils.logger._function_logger = original_logger
+            utils_logger._function_logger = original_logger
     
     def test_get_logger_with_custom_level(self):
         """Test get_logger with custom log level."""
         # Clear the global function logger
-        original_logger = src.utils.logger._function_logger
-        src.utils.logger._function_logger = None
+        original_logger = utils_logger._function_logger
+        utils_logger._function_logger = None
         
         try:
             logger = get_logger(log_level=logging.DEBUG)
@@ -630,13 +628,13 @@ class TestGetLogger:
         
         finally:
             # Restore original function logger
-            src.utils.logger._function_logger = original_logger
+            utils_logger._function_logger = original_logger
     
     def test_get_logger_with_string_level(self):
         """Test get_logger with string log level."""
         # Clear the global function logger
-        original_logger = src.utils.logger._function_logger
-        src.utils.logger._function_logger = None
+        original_logger = utils_logger._function_logger
+        utils_logger._function_logger = None
         
         try:
             logger = get_logger(log_level="ERROR")
@@ -646,7 +644,7 @@ class TestGetLogger:
         
         finally:
             # Restore original function logger
-            src.utils.logger._function_logger = original_logger
+            utils_logger._function_logger = original_logger
 
 
 class TestLoggerIntegration:

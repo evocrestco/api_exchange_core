@@ -7,8 +7,8 @@ from unittest.mock import patch
 import pytest
 from pydantic import BaseModel
 
-from src.utils.hash_config import HashConfig
-from src.utils.hash_utils import (
+from api_exchange_core.utils.hash_config import HashConfig
+from api_exchange_core.utils.hash_utils import (
     _apply_config,
     _get_nested_value,
     calculate_entity_hash,
@@ -478,7 +478,7 @@ class TestEdgeCases:
         """Test hash calculation logs error and uses fallback when json.dumps fails."""
         data = {"id": "123", "name": "test"}
 
-        with patch("src.utils.json_utils.dumps") as mock_dumps:
+        with patch("api_exchange_core.utils.json_utils.dumps") as mock_dumps:
             mock_dumps.side_effect = Exception("JSON encoding failed")
 
             # Should still return a hash using str() fallback

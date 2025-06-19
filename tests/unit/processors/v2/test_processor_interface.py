@@ -5,16 +5,14 @@ Uses parameterization and good test practices to keep tests concise but comprehe
 Follows NO MOCKS philosophy - uses real implementations and services.
 """
 
-from abc import ABC
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import pytest
 
-from src.context.tenant_context import tenant_context as tenant_ctx
-from src.exceptions import ValidationError
-from src.processors.processing_result import ProcessingResult, ProcessingStatus
-from src.processors.v2.message import Message, MessageType
-from src.processors.v2.processor_interface import ProcessorContext, ProcessorInterface
+from api_exchange_core.context.tenant_context import tenant_context as tenant_ctx
+from api_exchange_core.processors.processing_result import ProcessingResult, ProcessingStatus
+from api_exchange_core.processors import Message
+from api_exchange_core.processors.v2.processor_interface import ProcessorContext, ProcessorInterface
 
 # ==================== TEST PROCESSOR IMPLEMENTATIONS ====================
 
@@ -300,7 +298,7 @@ class TestMessageProcessingWorkflow:
     
     def test_entity_state_tracking_workflow(self, processor_context, tenant_context):
         """Test entity creation and state tracking."""
-        from src.db.db_base import EntityStateEnum
+        from api_exchange_core.db import EntityStateEnum
         
         with tenant_ctx(tenant_context["id"]):
             # Create entity

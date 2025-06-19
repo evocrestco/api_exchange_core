@@ -8,20 +8,15 @@ error handling, and retry logic.
 
 import json
 import os
-import uuid
-from datetime import UTC, datetime
-from typing import Any, Dict
 from unittest.mock import MagicMock, patch
 
 import pytest
 from azure.core.exceptions import ResourceExistsError, ServiceRequestError
 from azure.storage.queue import QueueClient, QueueServiceClient
 
-from src.processors.processing_result import ProcessingResult, ProcessingStatus
-from src.processors.v2.message import Message, MessageType
-from src.processors.v2.output_handlers import (
+from api_exchange_core.processors.processing_result import ProcessingResult
+from api_exchange_core.processors import (
     OutputHandlerError,
-    OutputHandlerResult,
     OutputHandlerStatus,
     QueueOutputHandler,
 )
@@ -302,7 +297,7 @@ class TestQueueOutputHandler:
     def test_handle_connection_failure(self, create_test_entity, create_test_message):
         """Test handling of connection failures using mocks to avoid timeout issues."""
         # Exception: Using mocks here to avoid Azure SDK timeout issues that can't be controlled
-        with patch('src.processors.v2.output_handlers.queue_output.QueueClient') as mock_queue_client:
+        with patch('api_exchange_core.processors.v2.output_handlers.queue_output.QueueClient') as mock_queue_client:
             # Mock the client creation to raise a connection error
             mock_queue_client.from_connection_string.side_effect = Exception("Connection failed")
             

@@ -61,8 +61,7 @@ e2e = [
 ]
 
 [tool.setuptools]
-package-dir = {"" = "src"}
-packages = {find = {where = ["src"], exclude = ["tests*"]}}
+packages = {find = {exclude = ["tests*"]}}
 
 [tool.black]
 line-length = 100

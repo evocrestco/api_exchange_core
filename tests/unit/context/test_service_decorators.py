@@ -3,14 +3,13 @@
 import pytest
 from pydantic import BaseModel
 
-from src.context.service_decorators import handle_repository_errors
-from src.exceptions import (
+from api_exchange_core.context.service_decorators import handle_repository_errors
+from api_exchange_core.exceptions import (
     ErrorCode,
     RepositoryError,
     ServiceError,
 )
-from src.repositories.base_repository import BaseRepository
-from src.services.base_service import BaseService
+from api_exchange_core.services.base_service import BaseService
 
 
 # Dummy schema for testing

@@ -13,25 +13,22 @@ import json
 import os
 import uuid
 from datetime import UTC, datetime
-from typing import Any, Dict
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
-from src.db.db_entity_models import Entity
-from src.processors.processing_result import ProcessingResult, ProcessingStatus
-from src.processors.v2.message import Message, MessageType
-from src.processors.v2.output_handlers.base import (
+from api_exchange_core.db import Entity
+from api_exchange_core.processors.processing_result import ProcessingResult, ProcessingStatus
+from api_exchange_core.processors import Message
+from api_exchange_core.processors.v2.output_handlers.base import (
     OutputHandlerError,
-    OutputHandlerResult,
     OutputHandlerStatus,
 )
-from src.processors.v2.output_handlers.service_bus_output import (
+from api_exchange_core.processors.v2.output_handlers.service_bus_output import (
     SERVICEBUS_AVAILABLE,
     ServiceBusOutputHandler,
 )
-from src.schemas.entity_schema import EntityReference
-from src.utils.hash_utils import calculate_entity_hash
+from api_exchange_core.utils.hash_utils import calculate_entity_hash
 
 
 class TestServiceBusOutputHandler:
@@ -117,7 +114,7 @@ class TestServiceBusOutputHandler:
     def test_import_error_when_no_servicebus(self):
         """Test that handler raises ImportError when Service Bus SDK is not available."""
         with patch.dict('sys.modules', {'azure.servicebus': None}):
-            with patch('src.processors.v2.output_handlers.service_bus_output.SERVICEBUS_AVAILABLE', False):
+            with patch('api_exchange_core.processors.v2.output_handlers.service_bus_output.SERVICEBUS_AVAILABLE', False):
                 with pytest.raises(ImportError) as exc_info:
                     ServiceBusOutputHandler("test-queue")
                 
@@ -234,7 +231,7 @@ class TestServiceBusOutputHandler:
         assert handler._is_valid_entity_name("invalid@char") is False
         assert handler._is_valid_entity_name("space char") is False
     
-    @patch('src.processors.v2.output_handlers.service_bus_output.ServiceBusClient')
+    @patch('api_exchange_core.processors.v2.output_handlers.service_bus_output.ServiceBusClient')
     def test_get_service_bus_client_success(self, mock_client_class, handler):
         """Test successful Service Bus client creation."""
         mock_client = Mock()
@@ -253,7 +250,7 @@ class TestServiceBusOutputHandler:
         assert client2 is mock_client
         assert mock_client_class.from_connection_string.call_count == 1
     
-    @patch('src.processors.v2.output_handlers.service_bus_output.ServiceBusClient')
+    @patch('api_exchange_core.processors.v2.output_handlers.service_bus_output.ServiceBusClient')
     def test_get_service_bus_client_failure(self, mock_client_class, handler):
         """Test Service Bus client creation failure."""
         mock_client_class.from_connection_string.side_effect = Exception("Connection failed")
@@ -268,7 +265,7 @@ class TestServiceBusOutputHandler:
     
     def test_prepare_service_bus_message_success(self, handler, mock_message, mock_result):
         """Test successful Service Bus message preparation."""
-        with patch('src.processors.v2.output_handlers.service_bus_output.ServiceBusMessage') as mock_sb_message_class:
+        with patch('api_exchange_core.processors.v2.output_handlers.service_bus_output.ServiceBusMessage') as mock_sb_message_class:
             mock_sb_message = Mock()
             mock_sb_message.application_properties = {}
             mock_sb_message_class.return_value = mock_sb_message
@@ -330,7 +327,7 @@ class TestServiceBusOutputHandler:
     
     def test_prepare_service_bus_message_with_scheduled_time(self, topic_handler, mock_message, mock_result):
         """Test message preparation with scheduled enqueue time."""
-        with patch('src.processors.v2.output_handlers.service_bus_output.ServiceBusMessage') as mock_sb_message_class:
+        with patch('api_exchange_core.processors.v2.output_handlers.service_bus_output.ServiceBusMessage') as mock_sb_message_class:
             mock_sb_message = Mock()
             mock_sb_message.application_properties = {}
             mock_sb_message_class.return_value = mock_sb_message
@@ -364,8 +361,8 @@ class TestServiceBusOutputHandler:
         assert error.can_retry is False
         assert error.error_details["message_id"] == mock_message.message_id
     
-    @patch('src.processors.v2.output_handlers.service_bus_output.ServiceBusClient')
-    @patch('src.processors.v2.output_handlers.service_bus_output.ServiceBusMessage')
+    @patch('api_exchange_core.processors.v2.output_handlers.service_bus_output.ServiceBusClient')
+    @patch('api_exchange_core.processors.v2.output_handlers.service_bus_output.ServiceBusMessage')
     def test_handle_queue_success(self, mock_sb_message_class, mock_client_class, handler, mock_message, mock_result):
         """Test successful queue message handling."""
         # Setup mocks
@@ -411,8 +408,8 @@ class TestServiceBusOutputHandler:
         mock_client.get_queue_sender.assert_called_once_with(queue_name="test-processing-queue")
         mock_sender.send_messages.assert_called_once_with(mock_sb_message)
     
-    @patch('src.processors.v2.output_handlers.service_bus_output.ServiceBusClient')
-    @patch('src.processors.v2.output_handlers.service_bus_output.ServiceBusMessage')
+    @patch('api_exchange_core.processors.v2.output_handlers.service_bus_output.ServiceBusClient')
+    @patch('api_exchange_core.processors.v2.output_handlers.service_bus_output.ServiceBusMessage')
     def test_handle_topic_success(self, mock_sb_message_class, mock_client_class, topic_handler, mock_message, mock_result):
         """Test successful topic message handling."""
         # Setup mocks
@@ -449,7 +446,7 @@ class TestServiceBusOutputHandler:
         mock_client.get_topic_sender.assert_called_once_with(topic_name="test-topic")
         mock_sender.send_messages.assert_called_once_with(mock_sb_message)
     
-    @patch('src.processors.v2.output_handlers.service_bus_output.ServiceBusClient')
+    @patch('api_exchange_core.processors.v2.output_handlers.service_bus_output.ServiceBusClient')
     def test_handle_service_request_error(self, mock_client_class, handler, mock_message, mock_result):
         """Test handling of Service Bus service errors."""
         from azure.core.exceptions import ServiceRequestError
@@ -468,7 +465,7 @@ class TestServiceBusOutputHandler:
         # Configure sender to raise ServiceRequestError
         mock_sender.send_messages.side_effect = ServiceRequestError("Service unavailable")
         
-        with patch('src.processors.v2.output_handlers.service_bus_output.ServiceBusMessage') as mock_sb_message_class:
+        with patch('api_exchange_core.processors.v2.output_handlers.service_bus_output.ServiceBusMessage') as mock_sb_message_class:
             mock_sb_message = Mock()
             mock_sb_message.application_properties = {}
             mock_sb_message.message_id = None
@@ -510,7 +507,7 @@ class TestServiceBusOutputHandler:
         assert result.error_code == "INVALID_CONFIGURATION"
         assert result.can_retry is False
     
-    @patch('src.processors.v2.output_handlers.service_bus_output.ServiceBusClient')
+    @patch('api_exchange_core.processors.v2.output_handlers.service_bus_output.ServiceBusClient')
     def test_handle_unexpected_error(self, mock_client_class, handler, mock_message, mock_result):
         """Test handling of unexpected errors."""
         mock_client = Mock()
@@ -527,7 +524,7 @@ class TestServiceBusOutputHandler:
         # Configure sender to raise unexpected error
         mock_sender.send_messages.side_effect = RuntimeError("Unexpected error")
         
-        with patch('src.processors.v2.output_handlers.service_bus_output.ServiceBusMessage') as mock_sb_message_class:
+        with patch('api_exchange_core.processors.v2.output_handlers.service_bus_output.ServiceBusMessage') as mock_sb_message_class:
             mock_sb_message = Mock()
             mock_sb_message.application_properties = {}
             mock_sb_message.message_id = None
@@ -552,7 +549,7 @@ class TestServiceBusOutputHandler:
             assert "calculated_backoff_delay" in result.error_details
             assert "backoff_algorithm" in result.error_details
     
-    @patch('src.processors.v2.output_handlers.service_bus_output.ServiceBusClient')
+    @patch('api_exchange_core.processors.v2.output_handlers.service_bus_output.ServiceBusClient')
     def test_handle_unsupported_destination_type(self, mock_client_class, skip_if_no_servicebus, mock_message, mock_result):
         """Test handling with unsupported destination type."""
         handler = ServiceBusOutputHandler(
@@ -569,7 +566,7 @@ class TestServiceBusOutputHandler:
         mock_client = Mock()
         mock_client_class.from_connection_string.return_value = mock_client
         
-        with patch('src.processors.v2.output_handlers.service_bus_output.ServiceBusMessage') as mock_sb_message_class:
+        with patch('api_exchange_core.processors.v2.output_handlers.service_bus_output.ServiceBusMessage') as mock_sb_message_class:
             mock_sb_message = Mock()
             mock_sb_message.application_properties = {}
             mock_sb_message.message_id = None
@@ -617,7 +614,7 @@ class TestServiceBusOutputHandler:
     
     def test_handler_cleanup(self, handler):
         """Test handler cleanup on destruction."""
-        with patch('src.processors.v2.output_handlers.service_bus_output.ServiceBusClient') as mock_client_class:
+        with patch('api_exchange_core.processors.v2.output_handlers.service_bus_output.ServiceBusClient') as mock_client_class:
             mock_client = Mock()
             mock_client_class.from_connection_string.return_value = mock_client
             
@@ -633,7 +630,7 @@ class TestServiceBusOutputHandler:
     
     def test_handler_cleanup_with_exception(self, handler):
         """Test handler cleanup handles exceptions gracefully."""
-        with patch('src.processors.v2.output_handlers.service_bus_output.ServiceBusClient') as mock_client_class:
+        with patch('api_exchange_core.processors.v2.output_handlers.service_bus_output.ServiceBusClient') as mock_client_class:
             mock_client = Mock()
             mock_client.close.side_effect = Exception("Cleanup error")
             mock_client_class.from_connection_string.return_value = mock_client

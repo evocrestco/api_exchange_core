@@ -5,22 +5,12 @@ These tests use real implementations following the NO MOCKS philosophy.
 Tests verify that ProcessorContext properly provides access to framework services.
 """
 
-from datetime import datetime
-
 import pytest
 
-from src.context.tenant_context import tenant_context as tenant_ctx
-from src.db.db_base import EntityStateEnum
-from src.exceptions import ServiceError
-from src.processing.duplicate_detection import DuplicateDetectionService
-from src.processing.entity_attributes import EntityAttributeBuilder
-from src.processing.processing_service import ProcessingService
-from src.processing.processor_config import ProcessorConfig
-from src.processors.v2.processor_interface import ProcessorContext
-from src.schemas.entity_schema import EntityRead
-from src.services.entity_service import EntityService
-from src.services.processing_error_service import ProcessingErrorService
-from src.services.state_tracking_service import StateTrackingService
+from api_exchange_core.context.tenant_context import tenant_context as tenant_ctx
+from api_exchange_core.db import EntityStateEnum
+from api_exchange_core.exceptions import ServiceError
+from api_exchange_core.processors.v2.processor_interface import ProcessorContext
 
 
 class TestProcessorContext:
