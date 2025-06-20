@@ -16,7 +16,6 @@ from typing import Any, Dict, List, Optional, Union
 from azure.storage.queue import QueueClient, QueueServiceClient
 
 from ..config import get_config
-from ..context.tenant_context import TenantContext
 from .json_utils import dumps
 
 _function_logger = None
@@ -97,6 +96,9 @@ class TenantContextFilter(logging.Filter):
         Returns:
             True to include the record in the log output
         """
+        # Lazy import to avoid circular dependency
+        from ..context.tenant_context import TenantContext
+        
         tenant_id = TenantContext.get_current_tenant_id()
         if tenant_id:
             record.tenant_id = tenant_id
