@@ -129,8 +129,11 @@ class TestProcessorContext:
             assert "source_metadata" in entity.attributes
             assert entity.attributes["source_metadata"]["product_type"] == "electronics"
     
-    def test_record_state_transition(self, processor_context, tenant_context):
-        """Test recording state transitions through context."""
+    def test_record_state_transition(self, processor_context, tenant_context, caplog):
+        """Test recording state transitions via logging."""
+        import logging
+        from api_exchange_core.db import EntityStateEnum
+        
         with tenant_ctx(tenant_context["id"]):
             # Create entity first
             entity_id = processor_context.create_entity(
@@ -140,27 +143,40 @@ class TestProcessorContext:
                 data={"status": "new"}
             )
             
-            # Record state transition
-            processor_context.record_state_transition(
-                entity_id=entity_id,
-                from_state=EntityStateEnum.RECEIVED,
-                to_state=EntityStateEnum.PROCESSING,
-                processor_name="test_processor",
-                metadata={"reason": "Starting processing"}
-            )
+            # Clear logs and set appropriate level
+            caplog.clear()
+            with caplog.at_level(logging.INFO):
+                # Record state transition
+                processor_context.record_state_transition(
+                    entity_id=entity_id,
+                    from_state=EntityStateEnum.RECEIVED,
+                    to_state=EntityStateEnum.PROCESSING,
+                    processor_name="test_processor",
+                    metadata={"reason": "Starting processing"}
+                )
             
-            # Verify transition was recorded
-            history = processor_context.get_entity_state_history(entity_id)
-            assert history is not None
-            assert len(history.transitions) > 0
+            # Verify transition was logged
+            state_logs = [
+                record for record in caplog.records 
+                if hasattr(record, 'event_type') and record.event_type == 'state_transition'
+            ]
             
-            latest_transition = history.transitions[-1]
-            assert latest_transition.from_state == EntityStateEnum.RECEIVED.value
-            assert latest_transition.to_state == EntityStateEnum.PROCESSING.value
-            assert latest_transition.processor_data["processor_name"] == "test_processor"
+            assert len(state_logs) > 0, "Should have logged at least one state transition"
+            
+            # Verify log structure
+            transition_log = state_logs[0]
+            assert hasattr(transition_log, 'entity_id')
+            assert hasattr(transition_log, 'from_state')
+            assert hasattr(transition_log, 'to_state')
+            assert hasattr(transition_log, 'actor')
+            assert transition_log.entity_id == entity_id
+            assert transition_log.from_state == EntityStateEnum.RECEIVED.value
+            assert transition_log.to_state == EntityStateEnum.PROCESSING.value
     
-    def test_record_processing_error(self, processor_context, tenant_context):
-        """Test recording processing errors through context."""
+    def test_record_processing_error(self, processor_context, tenant_context, caplog):
+        """Test recording processing errors via logging."""
+        import logging
+        
         with tenant_ctx(tenant_context["id"]):
             # Create entity
             entity_id = processor_context.create_entity(
@@ -170,24 +186,39 @@ class TestProcessorContext:
                 data={"status": "error"}
             )
             
-            # Record processing error
-            error_id = processor_context.record_processing_error(
-                entity_id=entity_id,
-                processor_name="test_processor",
-                error_code="VALIDATION_ERROR",
-                error_message="Invalid order data",
-                error_details={"field": "customer_email", "reason": "missing"},
-                is_retryable=True
-            )
+            # Clear logs and set appropriate level
+            caplog.clear()
+            with caplog.at_level(logging.ERROR):
+                # Record processing error
+                error_id = processor_context.record_processing_error(
+                    entity_id=entity_id,
+                    processor_name="test_processor",
+                    error_code="VALIDATION_ERROR",
+                    error_message="Invalid order data",
+                    error_details={"field": "customer_email", "reason": "missing"},
+                    is_retryable=True
+                )
+                
+            assert error_id is not None, "Should return an error ID"
             
-            assert error_id is not None
+            # Verify error was logged
+            error_logs = [
+                record for record in caplog.records 
+                if hasattr(record, 'event_type') and record.event_type == 'processing_error'
+            ]
             
-            # Verify error was recorded
-            errors = processor_context.get_entity_errors(entity_id)
-            assert len(errors) == 1
-            assert errors[0].error_type_code == "VALIDATION_ERROR"
-            assert errors[0].message == "Invalid order data"
-            assert errors[0].processing_step == "test_processor"
+            assert len(error_logs) > 0, "Should have logged at least one processing error"
+            
+            # Verify log structure
+            error_log = error_logs[0]
+            assert hasattr(error_log, 'entity_id')
+            assert hasattr(error_log, 'error_type') 
+            assert hasattr(error_log, 'error_message')
+            assert hasattr(error_log, 'processing_step')
+            assert error_log.entity_id == entity_id
+            assert error_log.error_type == "VALIDATION_ERROR"
+            assert error_log.error_message == "Invalid order data"
+            assert error_log.processing_step == "test_processor"
     
     def test_context_without_optional_services(self, processing_service, tenant_context):
         """Test ProcessorContext works without state/error services."""

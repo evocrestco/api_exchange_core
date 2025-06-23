@@ -139,8 +139,6 @@ def import_all_models():
     from .db_api_token_models import APIToken, APITokenUsageLog, TokenCoordination  # noqa
     from .db_credential_models import ExternalCredential  # noqa
     from .db_entity_models import Entity  # noqa
-    from .db_error_models import ProcessingError  # noqa
-    from .db_state_transition_models import StateTransition  # noqa
     from .db_tenant_models import Tenant  # noqa
 
     configure_mappers()

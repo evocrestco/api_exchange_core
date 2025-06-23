@@ -14,7 +14,6 @@ from typing import Any, Callable, Dict, Optional, TypeVar, Union, cast
 
 from .tenant_context import TenantContext
 from ..exceptions import BaseError, get_correlation_id, set_correlation_id
-from ..utils.logger import ContextAwareLogger, get_logger
 
 
 class OperationContext:
@@ -59,7 +58,10 @@ class OperationHandler:
         logger: Optional[Union[logging.Logger, "ContextAwareLogger"]] = None,
         module_name: Optional[str] = None,
     ):
-        self.logger = logger if logger is not None else get_logger()
+        if logger is None:
+            from ..utils.logger import get_logger
+            logger = get_logger()
+        self.logger = logger
 
     @contextmanager
     def operation(self, name: str, **context):
@@ -100,21 +102,26 @@ class OperationHandler:
             self.logger.info(f"EXIT: {name}", extra=log_context)
 
             try:
-                from ..schemas.metric_model import OperationMetric
-                from ..utils.azure_queue_utils import process_metrics
+                from ..config import get_config
+                app_config = get_config()
+                
+                # Only send metrics to queue if enabled
+                if app_config.features.enable_metrics_queue:
+                    from ..schemas.metric_model import OperationMetric
+                    from ..utils.azure_queue_utils import process_metrics
 
-                # Create operation duration metric
-                metric = OperationMetric.duration(
-                    operation=name,
-                    module=context.get("source_module", ""),
-                    function=name.split(".")[-1] if "." in name else name,
-                    tenant_id=context.get("tenant_id", ""),
-                    status="success",
-                    duration_ms=op_ctx.duration_ms,
-                )
+                    # Create operation duration metric
+                    metric = OperationMetric.duration(
+                        operation=name,
+                        module=context.get("source_module", ""),
+                        function=name.split(".")[-1] if "." in name else name,
+                        tenant_id=context.get("tenant_id", ""),
+                        status="success",
+                        duration_ms=op_ctx.duration_ms,
+                    )
 
-                # Send to metrics queue
-                process_metrics([metric], queue_name="metrics-queue")
+                    # Send to metrics queue
+                    process_metrics([metric], queue_name="metrics-queue")
             except Exception as metric_error:
                 # Don't let metric collection failures affect the main operation
                 self.logger.warning(f"Failed to collect metrics: {str(metric_error)}")
@@ -145,18 +152,23 @@ class OperationHandler:
 
             # Send error metric
             try:
-                from ..schemas.metric_model import OperationMetric
-                from ..utils.azure_queue_utils import process_metrics
+                from ..config import get_config
+                app_config = get_config()
+                
+                # Only send metrics to queue if enabled
+                if app_config.features.enable_metrics_queue:
+                    from ..schemas.metric_model import OperationMetric
+                    from ..utils.azure_queue_utils import process_metrics
 
-                metric = OperationMetric.duration(
-                    operation=name,
-                    module=context.get("source_module", ""),
-                    function=name.split(".")[-1] if "." in name else name,
-                    tenant_id=context.get("tenant_id", ""),
-                    status=f"error:{e.error_code.value}",
-                    duration_ms=op_ctx.duration_ms,
-                )
-                process_metrics([metric], queue_name="metrics-queue")
+                    metric = OperationMetric.duration(
+                        operation=name,
+                        module=context.get("source_module", ""),
+                        function=name.split(".")[-1] if "." in name else name,
+                        tenant_id=context.get("tenant_id", ""),
+                        status=f"error:{e.error_code.value}",
+                        duration_ms=op_ctx.duration_ms,
+                    )
+                    process_metrics([metric], queue_name="metrics-queue")
             except Exception as metric_error:
                 self.logger.warning(f"Failed to collect error metrics: {str(metric_error)}")
 
@@ -213,6 +225,7 @@ def operation(name: Union[Optional[str], Callable] = None):
     def decorator(func: F) -> F:
         @wraps(func)
         def wrapper(*args, **kwargs) -> Any:
+            from ..utils.logger import get_logger
             logger = get_logger()
             # Generate operation name that includes class information if it's a method
             if name is not None:

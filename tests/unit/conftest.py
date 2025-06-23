@@ -12,8 +12,8 @@ from unittest.mock import Mock
 import pytest
 
 from api_exchange_core.services.entity_service import EntityService
-from api_exchange_core.services.processing_error_service import ProcessingErrorService
-from api_exchange_core.services.state_tracking_service import StateTrackingService
+from api_exchange_core.services.logging_processing_error_service import LoggingProcessingErrorService
+from api_exchange_core.services.logging_state_tracking_service import LoggingStateTrackingService
 from api_exchange_core.services.tenant_service import TenantService
 
 # ==================== LEGACY REPOSITORY FIXTURES ====================
@@ -36,15 +36,15 @@ def tenant_service(db_session):
 
 
 @pytest.fixture(scope="function")
-def state_tracking_service(db_session):
-    """State tracking service with test session."""
-    return StateTrackingService(session=db_session)
+def state_tracking_service():
+    """Logging-based state tracking service (no session needed)."""
+    return LoggingStateTrackingService()
 
 
 @pytest.fixture(scope="function")
-def processing_error_service(db_session):
-    """Processing error service with test session."""
-    return ProcessingErrorService(session=db_session)
+def processing_error_service():
+    """Logging-based processing error service (no session needed)."""
+    return LoggingProcessingErrorService()
 
 
 @pytest.fixture(scope="function")

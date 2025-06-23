@@ -296,8 +296,9 @@ class TestMessageProcessingWorkflow:
             is_valid = processor.validate_message(message)
             assert is_valid is expected_valid
     
-    def test_entity_state_tracking_workflow(self, processor_context, tenant_context):
-        """Test entity creation and state tracking."""
+    def test_entity_state_tracking_workflow(self, processor_context, tenant_context, caplog):
+        """Test entity creation and state tracking via logging."""
+        import logging
         from api_exchange_core.db import EntityStateEnum
         
         with tenant_ctx(tenant_context["id"]):
@@ -309,22 +310,37 @@ class TestMessageProcessingWorkflow:
                 data={"status": "received"}
             )
             
-            # Record state transition
-            processor_context.record_state_transition(
-                entity_id=entity_id,
-                from_state=EntityStateEnum.RECEIVED,
-                to_state=EntityStateEnum.PROCESSING,
-                processor_name="WorkflowProcessor",
-                metadata={"step": "validation"}
-            )
+            # Clear logs and set appropriate level
+            caplog.clear()
+            with caplog.at_level(logging.INFO):
+                # Record state transition
+                processor_context.record_state_transition(
+                    entity_id=entity_id,
+                    from_state=EntityStateEnum.RECEIVED,
+                    to_state=EntityStateEnum.PROCESSING,
+                    processor_name="WorkflowProcessor",
+                    metadata={"step": "validation"}
+                )
             
-            # Verify transition was recorded
-            history = processor_context.get_entity_state_history(entity_id)
-            assert history is not None
-            assert len(history.transitions) > 0
+            # Verify transition was logged
+            state_logs = [
+                record for record in caplog.records 
+                if hasattr(record, 'event_type') and record.event_type == 'state_transition'
+            ]
+            
+            assert len(state_logs) > 0, "Should have logged state transition"
+            
+            # Verify workflow details
+            transition_log = state_logs[0]
+            assert transition_log.entity_id == entity_id
+            assert transition_log.from_state == EntityStateEnum.RECEIVED.value
+            assert transition_log.to_state == EntityStateEnum.PROCESSING.value
+            assert transition_log.actor == "WorkflowProcessor"
     
-    def test_error_handling_workflow(self, processor_context, tenant_context):
-        """Test error recording and retrieval."""
+    def test_error_handling_workflow(self, processor_context, tenant_context, caplog):
+        """Test error recording via logging."""
+        import logging
+        
         with tenant_ctx(tenant_context["id"]):
             # Create entity
             entity_id = processor_context.create_entity(
@@ -334,23 +350,35 @@ class TestMessageProcessingWorkflow:
                 data={"status": "error"}
             )
             
-            # Record error
-            error_id = processor_context.record_processing_error(
-                entity_id=entity_id,
-                processor_name="WorkflowProcessor",
-                error_code="VALIDATION_ERROR",
-                error_message="Test validation failed",
-                error_details={"field": "customer_id", "issue": "missing"},
-                is_retryable=True
-            )
+            # Clear logs and set appropriate level
+            caplog.clear()
+            with caplog.at_level(logging.ERROR):
+                # Record error
+                error_id = processor_context.record_processing_error(
+                    entity_id=entity_id,
+                    processor_name="WorkflowProcessor",
+                    error_code="VALIDATION_ERROR",
+                    error_message="Test validation failed",
+                    error_details={"field": "customer_id", "issue": "missing"},
+                    is_retryable=True
+                )
             
             assert error_id is not None
             
-            # Verify error was recorded
-            errors = processor_context.get_entity_errors(entity_id)
-            assert len(errors) == 1
-            assert errors[0].error_type_code == "VALIDATION_ERROR"
-            assert errors[0].message == "Test validation failed"
+            # Verify error was logged
+            error_logs = [
+                record for record in caplog.records 
+                if hasattr(record, 'event_type') and record.event_type == 'processing_error'
+            ]
+            
+            assert len(error_logs) > 0, "Should have logged processing error"
+            
+            # Verify workflow error details
+            error_log = error_logs[0]
+            assert error_log.entity_id == entity_id
+            assert error_log.error_type == "VALIDATION_ERROR"
+            assert error_log.error_message == "Test validation failed"
+            assert error_log.processing_step == "WorkflowProcessor"
 
 
 class TestEdgeCasesAndErrorConditions:

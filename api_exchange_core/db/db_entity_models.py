@@ -30,13 +30,7 @@ class Entity(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
 
-    # Relationships
-    state_transitions = relationship(
-        "StateTransition", back_populates="entity", cascade="all, delete-orphan"
-    )
-    processing_errors = relationship(
-        "ProcessingError", back_populates="entity", cascade="all, delete-orphan"
-    )
+    # Relationships - state transitions and processing errors now handled via logging
 
     # Indexes for efficient querying and constraints for data integrity
     __table_args__ = (

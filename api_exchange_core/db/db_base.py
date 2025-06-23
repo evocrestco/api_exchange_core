@@ -176,3 +176,7 @@ class EntityTypeEnum(enum.Enum):
 class RefTypeEnum(enum.Enum):
     SOURCE = "SOURCE"
     TARGET = "TARGET"
+
+
+# Import from centralized enums module to avoid circular imports
+from ..enums import TransitionTypeEnum

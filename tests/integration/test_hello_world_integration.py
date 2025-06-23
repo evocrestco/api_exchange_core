@@ -92,8 +92,14 @@ class HelloWorldProcessor(ProcessorInterface):
 
 @pytest.fixture
 def hello_world_processor_handler():
-    """Create processor handler for testing."""
-    return create_processor_handler(processor=HelloWorldProcessor())
+    """Create processor handler for testing with thread-safe session management."""
+    from api_exchange_core.processors.v2.processor_factory import create_db_manager
+    
+    # Use same database configuration as production
+    db_manager = create_db_manager()
+    
+    # Create processor handler with db_manager for thread-safe sessions
+    return create_processor_handler(processor=HelloWorldProcessor(), db_manager=db_manager)
 
 
 @pytest.fixture
@@ -510,46 +516,13 @@ class TestHelloWorldIntegration:
 
     def test_state_transition_tracking(
         self,
-        hello_world_processor_handler
+        hello_world_processor_handler,
+        caplog
     ):
-        """Test that state transitions are tracked during processing."""
+        """Test that state transitions are logged during processing."""
+        import logging
         import os
 
-        from api_exchange_core.db import Tenant
-        from api_exchange_core.processors.v2.processor_factory import create_db_manager, create_processor_handler
-        from api_exchange_core.services.state_tracking_service import StateTrackingService
-
-        # Ensure test tenant exists
-        tenant_id = os.getenv("TENANT_ID", "e2e_test_tenant")
-        db_manager = create_db_manager()
-        db_session = db_manager.get_session()
-        
-        existing_tenant = db_session.query(Tenant).filter_by(tenant_id=tenant_id).first()
-        if not existing_tenant:
-            test_tenant = Tenant(
-                tenant_id=tenant_id,
-                customer_name="E2E Test Tenant",
-                is_active=True,
-                tenant_config={
-                    "hash_algorithm": {"value": "sha256", "updated_at": "2024-01-01T12:00:00Z"},
-                    "enable_duplicate_detection": {"value": True, "updated_at": "2024-01-01T12:00:00Z"},
-                }
-            )
-            db_session.add(test_tenant)
-            db_session.commit()
-        
-        # Create processor handler with state tracking enabled
-        from tests.integration.test_hello_world_integration import HelloWorldProcessor
-
-        # Create state tracking service with session-per-service pattern
-        state_service = StateTrackingService(session=db_session)
-        
-        # Create processor handler with state tracking
-        processor_with_state = create_processor_handler(
-            processor=HelloWorldProcessor(),
-            state_tracking_service=state_service
-        )
-        
         external_id = f"hello-state-{uuid.uuid4().hex[:8]}"
         
         payload = {
@@ -558,8 +531,9 @@ class TestHelloWorldIntegration:
             "track_states": True
         }
         
+        # Create entity and message
         entity = Entity.create(
-            tenant_id=os.getenv("TENANT_ID", "e2e_test_tenant"),
+            tenant_id=os.getenv("TENANT_ID", "integration_test_tenant"),
             external_id=external_id,
             canonical_type="greeting",
             source="hello_world_generator",
@@ -568,38 +542,46 @@ class TestHelloWorldIntegration:
         
         message = Message.from_entity(entity=entity, payload=payload)
         
-        # Execute processor with state tracking
-        result = processor_with_state.execute(message)
+        # Clear any previous log records and set appropriate log level
+        caplog.clear()
+        with caplog.at_level(logging.INFO):
+            # Execute processor - this should generate state transition logs
+            result = hello_world_processor_handler.execute(message)
+            
+        # Verify processing succeeded
         assert result.status == ProcessingStatus.SUCCESS
+        assert len(result.entities_created) > 0
         entity_id = result.entities_created[0]
         
-        # Verify state transitions were recorded (if state tracking is working)
-        with tenant_context(os.getenv("TENANT_ID", "e2e_test_tenant")):
-            try:
-                # Get state history for the entity
-                state_history = state_service.get_entity_state_history(entity_id)
-                
-                if state_history is not None:
-                    # Verify we have state transitions
-                    assert len(state_history.transitions) > 0
-                    
-                    # Verify state progression makes sense
-                    for transition in state_history.transitions:
-                        assert transition.entity_id == entity_id
-                        assert transition.actor is not None
-                        assert transition.transition_type is not None
-                        
-                    # Verify current state
-                    current_state = state_service.get_current_state(entity_id)
-                    assert current_state is not None
-                    print(f"✅ State tracking working - recorded {len(state_history.transitions)} transitions")
-                else:
-                    print("ℹ️  No state history found - state tracking may be disabled")
-            except Exception as e:
-                # State tracking might fail due to session coordination issues
-                # This is a known limitation we're working on
-                print(f"⚠️  State tracking failed (expected): {type(e).__name__}: {e}")
-                # The main test is that processing succeeded
+        # Verify state transition logs were created
+        state_transition_logs = [
+            record for record in caplog.records 
+            if hasattr(record, 'event_type') and record.event_type == 'state_transition'
+        ]
+        
+        if state_transition_logs:
+            print(f"✅ Found {len(state_transition_logs)} state transition log events")
+            
+            # Verify log structure
+            for log_record in state_transition_logs:
+                assert hasattr(log_record, 'entity_id')
+                assert hasattr(log_record, 'from_state')
+                assert hasattr(log_record, 'to_state')
+                assert hasattr(log_record, 'actor')
+                assert hasattr(log_record, 'transition_id')
+                print(f"  State transition: {log_record.from_state} → {log_record.to_state} (actor: {log_record.actor})")
+        else:
+            # Check if state transitions are mentioned in regular log messages
+            state_logs = [
+                record for record in caplog.records 
+                if 'state' in record.getMessage().lower() or 'transition' in record.getMessage().lower()
+            ]
+            print(f"ℹ️  No structured state transition logs found, but found {len(state_logs)} state-related logs")
+            for log in state_logs[:3]:  # Show first 3
+                print(f"  {log.levelname}: {log.getMessage()}")
+        
+        # The main assertion is that processing succeeded with logging-based state tracking
+        assert result.success, "Processing should succeed with logging-based state tracking"
 
     def test_duplicate_detection_integration(
         self,
@@ -717,7 +699,7 @@ class TestHelloWorldIntegration:
         """Test error handling and dead letter queue routing with real Azure Storage."""
         import os
 
-        from api_exchange_core.processors.v2.processor_factory import create_processor_handler
+        from api_exchange_core.processors.v2.processor_factory import create_processor_handler, create_db_manager
 
         # Create a failing processor for testing
         class FailingProcessor(ProcessorInterface):
@@ -736,8 +718,10 @@ class TestHelloWorldIntegration:
                 return False
         
         # Create processor handler with REAL dead letter queue client
+        db_manager = create_db_manager()
         failing_processor_handler = create_processor_handler(
             processor=FailingProcessor(),
+            db_manager=db_manager,
             dead_letter_queue_client=dead_letter_queue_client
         )
         
@@ -792,7 +776,7 @@ class TestHelloWorldIntegration:
         """Test retryable errors do not go to DLQ immediately with real Azure Storage."""
         import os
 
-        from api_exchange_core.processors.v2.processor_factory import create_processor_handler
+        from api_exchange_core.processors.v2.processor_factory import create_processor_handler, create_db_manager
 
         # Create a processor that fails with retryable error
         class RetryableFailingProcessor(ProcessorInterface):
@@ -811,8 +795,10 @@ class TestHelloWorldIntegration:
                 return isinstance(error, ConnectionError)
         
         # Create processor handler with REAL dead letter queue client
+        db_manager = create_db_manager()
         retryable_processor_handler = create_processor_handler(
             processor=RetryableFailingProcessor(),
+            db_manager=db_manager,
             dead_letter_queue_client=dead_letter_queue_client
         )
         
@@ -855,7 +841,7 @@ class TestHelloWorldIntegration:
         """Test message validation failures."""
         import os
 
-        from api_exchange_core.processors.v2.processor_factory import create_processor_handler
+        from api_exchange_core.processors.v2.processor_factory import create_processor_handler, create_db_manager
 
         # Create a processor with strict validation
         class StrictValidationProcessor(ProcessorInterface):
@@ -873,8 +859,10 @@ class TestHelloWorldIntegration:
                 return False
         
         # Create processor handler
+        db_manager = create_db_manager()
         validation_processor_handler = create_processor_handler(
-            processor=StrictValidationProcessor()
+            processor=StrictValidationProcessor(),
+            db_manager=db_manager
         )
         
         external_id = f"hello-validation-{uuid.uuid4().hex[:8]}"
@@ -918,7 +906,7 @@ class TestHelloWorldIntegration:
         import os
 
         from api_exchange_core.processors import QueueOutputHandler
-        from api_exchange_core.processors.v2.processor_factory import create_processor_handler
+        from api_exchange_core.processors.v2.processor_factory import create_processor_handler, create_db_manager
 
         # Create a processor that uses QueueOutputHandler
         class HelloWorldWithQueueOutput(ProcessorInterface):
@@ -984,7 +972,8 @@ class TestHelloWorldIntegration:
             pytest.skip("AZURE_STORAGE_CONNECTION_STRING not configured")
         
         processor_with_queue = HelloWorldWithQueueOutput(azure_connection_string)
-        processor_handler = create_processor_handler(processor=processor_with_queue)
+        db_manager = create_db_manager()
+        processor_handler = create_processor_handler(processor=processor_with_queue, db_manager=db_manager)
         
         # Create test message
         external_id = f"hello-queue-{uuid.uuid4().hex[:8]}"
@@ -1088,7 +1077,7 @@ class TestHelloWorldIntegration:
         import os
 
         from api_exchange_core.processors import NoOpOutputHandler, QueueOutputHandler
-        from api_exchange_core.processors.v2.processor_factory import create_processor_handler
+        from api_exchange_core.processors.v2.processor_factory import create_processor_handler, create_db_manager
 
         # Create a processor that uses multiple output handlers
         class MultiOutputProcessor(ProcessorInterface):
@@ -1149,7 +1138,8 @@ class TestHelloWorldIntegration:
             pytest.skip("AZURE_STORAGE_CONNECTION_STRING not configured")
         
         processor = MultiOutputProcessor(azure_connection_string)
-        processor_handler = create_processor_handler(processor=processor)
+        db_manager = create_db_manager()
+        processor_handler = create_processor_handler(processor=processor, db_manager=db_manager)
         
         # Create test message
         external_id = f"multi-output-{uuid.uuid4().hex[:8]}"

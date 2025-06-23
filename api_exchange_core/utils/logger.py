@@ -277,9 +277,13 @@ class AzureQueueHandler(logging.Handler):
                 conn_str=self.connection_string, queue_name=self.queue_name
             )
 
-            # Serialize and send the batch
-            json_data = dumps(self.log_buffer)
-            queue_client.send_message(json_data)
+            # Send individual log entries (like metrics) to avoid base64 encoding bug
+            for log_entry in self.log_buffer:
+                try:
+                    json_data = dumps(log_entry)
+                    queue_client.send_message(json_data)
+                except Exception as log_error:
+                    sys.stderr.write(f"Error sending individual log entry: {str(log_error)}\n")
 
             # Clear buffer
             self.log_buffer.clear()
@@ -307,7 +311,7 @@ def configure_logging(
     Args:
         function_name: Name of the function
         log_level: Logging level (default: INFO)
-        enable_queue: Whether to enable Azure Queue logging (default: False)
+        enable_queue: Whether to enable Azure Queue logging (default: from config.features.enable_logs_queue)
         queue_name: Name of the queue to send logs to (default: "logs-queue")
         queue_batch_size: Number of logs to batch before sending (default: 10)
         connection_string: Azure Storage connection string (default: from env)
@@ -324,7 +328,7 @@ def configure_logging(
     if log_level is None:
         log_level = app_config.logging.level
     if enable_queue is None:
-        enable_queue = app_config.features.enable_metrics
+        enable_queue = app_config.features.enable_logs_queue
     if connection_string is None:
         connection_string = app_config.queue.connection_string
 

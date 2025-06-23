@@ -4,8 +4,8 @@ from .api_token_service import APITokenService
 from .base_service import BaseService, SessionManagedService
 from .credential_service import CredentialService
 from .entity_service import EntityService
-from .processing_error_service import ProcessingErrorService
-from .state_tracking_service import StateTrackingService
+from .logging_processing_error_service import LoggingProcessingErrorService
+from .logging_state_tracking_service import LoggingStateTrackingService
 from .tenant_service import TenantService
 
 __all__ = [
@@ -14,7 +14,7 @@ __all__ = [
     "SessionManagedService",
     "CredentialService",
     "EntityService",
-    "ProcessingErrorService",
-    "StateTrackingService",
+    "LoggingProcessingErrorService",
+    "LoggingStateTrackingService",
     "TenantService",
 ]

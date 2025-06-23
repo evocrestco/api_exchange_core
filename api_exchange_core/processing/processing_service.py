@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from ..context.operation_context import operation
 from ..context.tenant_context import TenantContext, tenant_aware
 from ..db import EntityStateEnum
-from ..db.db_state_transition_models import TransitionTypeEnum
+from ..db import TransitionTypeEnum
 from ..exceptions import ErrorCode, ServiceError, ValidationError
 from .duplicate_detection import DuplicateDetectionResult, DuplicateDetectionService
 from .entity_attributes import EntityAttributeBuilder
@@ -20,8 +20,8 @@ from .processor_config import ProcessorConfig
 from ..utils.logger import get_logger
 
 if TYPE_CHECKING:
-    from ..services.processing_error_service import ProcessingErrorService
-    from ..services.state_tracking_service import StateTrackingService
+    from ..services.logging_processing_error_service import LoggingProcessingErrorService
+    from ..services.logging_state_tracking_service import LoggingStateTrackingService
 
 
 class ProcessingResult(BaseModel):
@@ -65,8 +65,8 @@ class ProcessingService:
         """
         # Import here to avoid circular dependencies
         from ..services.entity_service import EntityService
-        from ..services.state_tracking_service import StateTrackingService
-        from ..services.processing_error_service import ProcessingErrorService
+        from ..services.logging_state_tracking_service import LoggingStateTrackingService
+        from ..services.logging_processing_error_service import LoggingProcessingErrorService
         
         # Create shared session for all services
         if db_manager is not None:
@@ -76,10 +76,10 @@ class ProcessingService:
             # Backward compatibility: create from environment
             self.session = self._create_session()
         
-        # Create services with shared session
+        # Create services - EntityService with session, logging services without
         self.entity_service = EntityService(session=self.session)
-        self.state_tracking_service = StateTrackingService(session=self.session)
-        self.error_service = ProcessingErrorService(session=self.session)
+        self.state_tracking_service = LoggingStateTrackingService()
+        self.error_service = LoggingProcessingErrorService()
         
         # Keep existing services that don't need sessions
         self.duplicate_detection_service = DuplicateDetectionService()

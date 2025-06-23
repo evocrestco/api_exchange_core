@@ -65,8 +65,6 @@ def create_processor_handler(
     processor: ProcessorInterface,
     db_manager: Optional[DatabaseManager] = None,
     config: Optional[Dict[str, Any]] = None,
-    state_tracking_service=None,
-    error_service=None,
     dead_letter_queue_client=None,
 ) -> ProcessorHandler:
     """
@@ -76,8 +74,6 @@ def create_processor_handler(
         processor: The processor implementation
         db_manager: Optional database manager. If not provided, will create from environment
         config: Optional configuration dict
-        state_tracking_service: Optional state tracking service
-        error_service: Optional error service
         dead_letter_queue_client: Optional DLQ client
 
     Returns:
@@ -106,28 +102,16 @@ def create_processor_handler(
     
     # Create ProcessingService with the database manager
     processing_service = ProcessingService(db_manager=db_manager)
-    
-    # Create state tracking and error services if not provided
-    # These will use their own sessions from the session-per-service pattern
-    if state_tracking_service is None:
-        from ...services.state_tracking_service import StateTrackingService
-        state_tracking_service = StateTrackingService()
-        logger.info("Created StateTrackingService with session-per-service pattern")
-    
-    if error_service is None:
-        from ...services.processing_error_service import ProcessingErrorService
-        error_service = ProcessingErrorService()
-        logger.info("Created ProcessingErrorService with session-per-service pattern")
 
     # Create and return the processor handler
+    # Note: state_tracking_service and error_service are now logging-based
+    # and created per-execution within ProcessorHandler (no sessions needed)
     return ProcessorHandler(
         processor=processor,
         processing_service=processing_service,
         config=config or {},
-        state_tracking_service=state_tracking_service,
-        error_service=error_service,
         dead_letter_queue_client=dead_letter_queue_client,
-        db_manager=db_manager,  # Pass db_manager for thread-safe session creation
+        db_manager=db_manager,  # Pass db_manager for ProcessingService
     )
 
 

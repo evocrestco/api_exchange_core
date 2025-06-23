@@ -141,8 +141,12 @@ def calculate_entity_hash(
     try:
         # Use the same JSON serialization as the system to ensure consistency
         serialized = dumps(filtered_data, sort_keys=sort_keys)
+        
         # Calculate hash
-        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+        hash_value = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+        
+        
+        return hash_value
     except Exception as e:
         logger.error(f"Error calculating entity hash: {str(e)}")
         # Return a fallback hash of the str representation as a last resort

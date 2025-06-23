@@ -9,7 +9,7 @@ from typing import Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..db.db_state_transition_models import TransitionTypeEnum
+from ..enums import TransitionTypeEnum
 from .mixins import CoreEntityMixin, DateRangeFilterMixin
 from ..type_definitions import ProcessorData
 

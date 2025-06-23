@@ -16,6 +16,9 @@ from .db_base import (
     EncryptedBinary,
 )
 
+# Import enums from centralized location
+from ..enums import TransitionTypeEnum
+
 # Import configuration
 from .db_config import Base, DatabaseConfig, DatabaseManager, import_all_models
 
@@ -23,8 +26,6 @@ from .db_config import Base, DatabaseConfig, DatabaseManager, import_all_models
 from .db_api_token_models import APIToken, APITokenUsageLog, TokenCoordination
 from .db_credential_models import ExternalCredential
 from .db_entity_models import Entity
-from .db_error_models import ProcessingError
-from .db_state_transition_models import StateTransition, TransitionTypeEnum
 from .db_tenant_models import Tenant, TenantNotFoundError
 
 # Re-export all models for easy access
@@ -38,6 +39,7 @@ __all__ = [
     "EntityStateEnum",
     "ErrorTypeEnum",
     "RefTypeEnum",
+    "TransitionTypeEnum",
     # Configuration
     "DatabaseConfig",
     "DatabaseManager",
@@ -48,9 +50,6 @@ __all__ = [
     "TokenCoordination",
     "ExternalCredential",
     "Entity",
-    "ProcessingError",
-    "StateTransition",
-    "TransitionTypeEnum",
     "Tenant",
     "TenantNotFoundError",
 ]

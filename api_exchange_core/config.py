@@ -71,6 +71,8 @@ class FeatureFlags(BaseModel):
     """Feature flags for controlling framework behavior."""
 
     enable_metrics: bool = Field(default=True, description="Enable metrics collection")
+    enable_metrics_queue: bool = Field(default=True, description="Enable metrics queue output")
+    enable_logs_queue: bool = Field(default=True, description="Enable logs queue output")
     enable_state_tracking: bool = Field(default=True, description="Enable automatic state tracking")
     enable_content_hashing: bool = Field(
         default=True, description="Enable content hashing for entities"
