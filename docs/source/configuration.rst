@@ -59,7 +59,7 @@ Multi-tenant setup requires tenant context management:
 
 .. code-block:: python
 
-   from src.context.tenant_context import tenant_context
+   from api_exchange_core.context.tenant_context import tenant_context
    
    # All operations within this context are scoped to the tenant
    with tenant_context("customer-a-tenant-id"):
@@ -93,7 +93,7 @@ The processor factory accepts optional configuration:
 
 .. code-block:: python
 
-   from src.processors.v2.processor_factory import create_processor_handler
+   from api_exchange_core.processors.v2.processor_factory import create_processor_handler
    
    config = {
        "max_retries": 3,
@@ -114,7 +114,7 @@ Queue output handlers support various options:
 
 .. code-block:: python
 
-   from src.processors.v2.output_handlers.queue_output import QueueOutputHandler
+   from api_exchange_core.processors.v2.output_handlers.queue_output import QueueOutputHandler
    
    queue_config = {
        "connection_string": "your_connection_string",
@@ -135,10 +135,10 @@ For external API integration with token coordination:
 
 .. code-block:: python
 
-   from src.services.credential_service import CredentialService
-   from src.repositories.credential_repository import CredentialRepository
-   from src.services.api_token_service import APITokenService
-   from src.repositories.api_token_repository import APITokenRepository
+   from api_exchange_core.services.credential_service import CredentialService
+   from api_exchange_core.repositories.credential_repository import CredentialRepository
+   from api_exchange_core.services.api_token_service import APITokenService
+   from api_exchange_core.repositories.api_token_repository import APITokenRepository
    
    # Create services with token management
    credential_repo = CredentialRepository(session)
@@ -247,7 +247,7 @@ The framework validates configuration on startup:
 
 .. code-block:: python
 
-   from src.db.db_config import DatabaseConfig
+   from api_exchange_core.db.db_config import DatabaseConfig
    from pydantic import ValidationError
    
    try:

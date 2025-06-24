@@ -1,12 +1,16 @@
-Repositories
-============
+Repositories (Legacy)
+====================
 
-Data access layer that provides abstraction over database operations with tenant scoping.
+.. warning::
+   The repository pattern is being phased out in favor of direct service-based database access.
+   New code should use services that inherit from SessionManagedService instead.
+
+Legacy data access layer that provided abstraction over database operations. These are maintained for backward compatibility but should not be used in new code.
 
 Base Repository
 ---------------
 
-.. automodule:: src.repositories.base_repository
+.. automodule:: api_exchange_core.repositories.base_repository
    :members:
    :undoc-members:
    :show-inheritance:
@@ -14,7 +18,7 @@ Base Repository
 Entity Repository
 -----------------
 
-.. automodule:: src.repositories.entity_repository
+.. automodule:: api_exchange_core.repositories.entity_repository
    :members:
    :undoc-members:
    :show-inheritance:
@@ -22,7 +26,7 @@ Entity Repository
 Credential Repository
 ---------------------
 
-.. automodule:: src.repositories.credential_repository
+.. automodule:: api_exchange_core.repositories.credential_repository
    :members:
    :undoc-members:
    :show-inheritance:
@@ -30,7 +34,7 @@ Credential Repository
 API Token Repository
 --------------------
 
-.. automodule:: src.repositories.api_token_repository
+.. automodule:: api_exchange_core.repositories.api_token_repository
    :members:
    :undoc-members:
    :show-inheritance:
@@ -38,7 +42,7 @@ API Token Repository
 State Transition Repository
 ---------------------------
 
-.. automodule:: src.repositories.state_transition_repository
+.. automodule:: api_exchange_core.repositories.state_transition_repository
    :members:
    :undoc-members:
    :show-inheritance:
@@ -46,7 +50,7 @@ State Transition Repository
 Processing Error Repository
 ---------------------------
 
-.. automodule:: src.repositories.processing_error_repository
+.. automodule:: api_exchange_core.repositories.processing_error_repository
    :members:
    :undoc-members:
    :show-inheritance:

@@ -6,7 +6,7 @@ Database models and configuration for PostgreSQL with SQLAlchemy.
 Database Configuration
 ----------------------
 
-.. automodule:: src.db.db_config
+.. automodule:: api_exchange_core.db.db_config
    :members:
    :undoc-members:
    :show-inheritance:
@@ -14,7 +14,7 @@ Database Configuration
 Base Models
 -----------
 
-.. automodule:: src.db.db_base
+.. automodule:: api_exchange_core.db.db_base
    :members:
    :undoc-members:
    :show-inheritance:
@@ -22,7 +22,7 @@ Base Models
 Entity Models
 -------------
 
-.. automodule:: src.db.db_entity_models
+.. automodule:: api_exchange_core.db.db_entity_models
    :members:
    :undoc-members:
    :show-inheritance:
@@ -30,7 +30,7 @@ Entity Models
 Credential Models
 -----------------
 
-.. automodule:: src.db.db_credential_models
+.. automodule:: api_exchange_core.db.db_credential_models
    :members:
    :undoc-members:
    :show-inheritance:
@@ -38,7 +38,7 @@ Credential Models
 API Token Models
 ----------------
 
-.. automodule:: src.db.db_api_token_models
+.. automodule:: api_exchange_core.db.db_api_token_models
    :members:
    :undoc-members:
    :show-inheritance:
@@ -46,7 +46,7 @@ API Token Models
 State Transition Models
 -----------------------
 
-.. automodule:: src.db.db_state_transition_models
+.. automodule:: api_exchange_core.db.db_state_transition_models
    :members:
    :undoc-members:
    :show-inheritance:
@@ -54,7 +54,7 @@ State Transition Models
 Error Models
 ------------
 
-.. automodule:: src.db.db_error_models
+.. automodule:: api_exchange_core.db.db_error_models
    :members:
    :undoc-members:
    :show-inheritance:
@@ -62,7 +62,7 @@ Error Models
 Tenant Models
 -------------
 
-.. automodule:: src.db.db_tenant_models
+.. automodule:: api_exchange_core.db.db_tenant_models
    :members:
    :undoc-members:
    :show-inheritance:

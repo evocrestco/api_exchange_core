@@ -43,7 +43,7 @@ Installation
 
    .. code-block:: python
 
-      from src.db.db_config import DatabaseManager, DatabaseConfig, init_db
+      from api_exchange_core.db.db_config import DatabaseManager, DatabaseConfig, init_db
       
       db_config = DatabaseConfig(
           db_type="postgres",
@@ -64,10 +64,10 @@ Creating Your First Processor
 
    .. code-block:: python
 
-      from src.processors.v2.processor_interface import ProcessorInterface, ProcessorContext
-      from src.processors.v2.message import Message
-      from src.processors.processing_result import ProcessingResult
-      from src.context.operation_context import operation
+      from api_exchange_core.processors.v2.processor_interface import ProcessorInterface, ProcessorContext
+      from api_exchange_core.processors.v2.message import Message
+      from api_exchange_core.processors.processing_result import ProcessingResult
+      from api_exchange_core.context.operation_context import operation
 
       class MyProcessor(ProcessorInterface):
           """A simple processor that processes customer data."""
@@ -117,9 +117,9 @@ Creating Your First Processor
    .. code-block:: python
 
       import azure.functions as func
-      from src.processors.v2.processor_factory import create_processor_handler
-      from src.context.tenant_context import tenant_context
-      from src.processors.v2.message import Message
+      from api_exchange_core.processors.v2.processor_factory import create_processor_handler
+      from api_exchange_core.context.tenant_context import tenant_context
+      from api_exchange_core.processors.v2.message import Message
 
       # Initialize your processor
       my_processor = MyProcessor()
@@ -189,4 +189,4 @@ Next Steps
 - Learn about :doc:`architecture` patterns
 - Explore the :doc:`api/processors` reference
 - Set up :doc:`configuration` for production
-- Check out the gateway processor example in :class:`src.processors.infrastructure.gateway_processor.GatewayProcessor`
+- Check out the gateway processor example in :class:`api_exchange_core.processors.infrastructure.gateway_processor.GatewayProcessor`

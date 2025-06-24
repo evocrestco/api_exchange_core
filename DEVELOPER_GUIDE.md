@@ -63,7 +63,7 @@ This guide provides comprehensive information for developers working with or con
 - Enable type checking: `"python.analysis.typeCheckingMode": "strict"`
 
 #### PyCharm
-- Mark `src` directory as Sources Root
+- Mark `api_exchange_core` directory as Sources Root
 - Configure Python interpreter
 - Enable type checking in preferences
 
@@ -71,33 +71,32 @@ This guide provides comprehensive information for developers working with or con
 
 ```
 api_exchange_core/
-├── src/
-│   ├── context/           # Context management (tenant, operation)
+├── api_exchange_core/    # Main package directory
+│   ├── context/          # Context management (tenant, operation)
 │   │   ├── tenant_context.py
 │   │   ├── operation_context.py
 │   │   └── service_decorators.py
-│   ├── db/               # Database models and configuration
+│   ├── db/              # Database models and configuration
 │   │   ├── db_base.py
 │   │   ├── db_entity_models.py
 │   │   └── ...
-│   ├── repositories/     # Data access layer
+│   ├── repositories/    # Legacy data access (being phased out)
 │   │   ├── base_repository.py
-│   │   ├── entity_repository.py
 │   │   └── ...
-│   ├── schemas/          # Pydantic models
+│   ├── schemas/         # Pydantic models
 │   │   ├── entity_schema.py
 │   │   ├── processing_error_schema.py
 │   │   └── ...
-│   ├── services/         # Business logic layer
-│   │   ├── base_service.py
+│   ├── services/        # Business logic with session management
+│   │   ├── base_service.py      # SessionManagedService base
 │   │   ├── entity_service.py
 │   │   └── ...
-│   ├── utils/            # Utility functions
+│   ├── utils/           # Utility functions
 │   │   ├── hash_utils.py
 │   │   ├── logger.py
 │   │   └── ...
-│   ├── config.py         # Configuration management
-│   ├── constants.py      # System constants
+│   ├── config.py        # Configuration management
+│   ├── constants.py     # System constants
 │   ├── exceptions.py     # Custom exceptions
 │   └── type_definitions.py  # Type definitions
 ├── tests/
@@ -133,23 +132,25 @@ entity = Entity(
 Every operation is tenant-scoped:
 
 ```python
-from context.tenant_context import tenant_context
+from api_exchange_core.context.tenant_context import tenant_context
 
 with tenant_context("customer-1"):
     # All operations here are scoped to customer-1
     entity = entity_service.get_entity(entity_id)
 ```
 
-### 3. Repository Pattern
+### 3. Service-Based Data Access
 
-Data access is abstracted through repositories:
+Services manage their own database sessions using the SessionManagedService pattern:
 
 ```python
-# Don't do this:
-session.query(Entity).filter(Entity.id == entity_id).first()
-
-# Do this:
-entity = entity_repository.get_by_id(entity_id)
+# Services inherit from SessionManagedService
+class EntityService(SessionManagedService):
+    def get_entity(self, entity_id: str) -> Entity:
+        # Direct SQLAlchemy access with automatic tenant filtering
+        return self.session.query(Entity).filter(
+            Entity.id == entity_id
+        ).first()
 ```
 
 ### 4. Service Layer
@@ -171,7 +172,7 @@ entity_id = entity_service.create_entity(
 All data is validated using Pydantic:
 
 ```python
-from schemas import EntityCreate
+from api_exchange_core.schemas import EntityCreate
 
 # This will validate the data
 entity_data = EntityCreate(
@@ -186,32 +187,26 @@ entity_data = EntityCreate(
 
 ### 1. Creating a New Feature
 
-1. **Create/update schema models** (`src/schemas/`)
+1. **Create/update schema models** (`api_exchange_core/schemas/`)
    ```python
    class NewFeatureCreate(BaseModel):
        name: str
        description: Optional[str] = None
    ```
 
-2. **Update database models** if needed (`src/db/`)
+2. **Update database models** if needed (`api_exchange_core/db/`)
    ```python
    class NewFeature(Base, BaseModel):
        __tablename__ = "new_features"
        # ... columns
    ```
 
-3. **Create/update repository** (`src/repositories/`)
+3. **Create/update service** (`api_exchange_core/services/`)
    ```python
-   class NewFeatureRepository(BaseRepository):
-       def custom_query(self):
-           # Custom data access methods
-   ```
-
-4. **Create/update service** (`src/services/`)
-   ```python
-   class NewFeatureService(BaseService):
+   class NewFeatureService(SessionManagedService):
        def business_logic(self):
-           # Business rules and orchestration
+           # Business rules with direct database access
+           # self.session provides SQLAlchemy session
    ```
 
 5. **Write tests** (`tests/unit/` and `tests/integration/`)
@@ -238,9 +233,9 @@ def test_with_mock():
     
 # ✅ Do this:
 def test_with_real_objects(db_session):
-    repo = EntityRepository(db_session)
+    service = EntityService(session=db_session)
     entity = factories.EntityFactory.create()
-    result = repo.get_by_id(entity.id)
+    result = service.get_entity(entity.id)
 ```
 
 ### Test Structure

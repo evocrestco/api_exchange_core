@@ -15,7 +15,7 @@ API Exchange Core is a framework that helps you build reliable data pipelines th
 - ✅ Multi-tenant data isolation  
 - ✅ State tracking and transitions
 - ✅ Error handling and recovery
-- ✅ Repository and service patterns
+- ✅ Service-oriented architecture with session management
 - ✅ Comprehensive test suite (85%+ coverage)
 - ✅ Type safety with full type hints
 
@@ -57,7 +57,9 @@ The framework is built around three core concepts:
 
 ```python
 # Example: Simple product price monitoring pipeline
-from api_exchange_core import ProcessorInterface, Message
+from api_exchange_core.processors.v2.processor_interface import ProcessorInterface
+from api_exchange_core.processors.v2.message import Message
+from api_exchange_core.processors.processing_result import ProcessingResult
 
 class PriceMonitorProcessor(ProcessorInterface):
     def __init__(self, config):

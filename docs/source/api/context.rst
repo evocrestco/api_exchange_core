@@ -6,7 +6,7 @@ Context management for tenant scoping and operation tracking.
 Tenant Context
 --------------
 
-.. automodule:: src.context.tenant_context
+.. automodule:: api_exchange_core.context.tenant_context
    :members:
    :undoc-members:
    :show-inheritance:
@@ -14,7 +14,7 @@ Tenant Context
 Operation Context
 -----------------
 
-.. automodule:: src.context.operation_context
+.. automodule:: api_exchange_core.context.operation_context
    :members:
    :undoc-members:
    :show-inheritance:
@@ -22,7 +22,7 @@ Operation Context
 Service Decorators
 ------------------
 
-.. automodule:: src.context.service_decorators
+.. automodule:: api_exchange_core.context.service_decorators
    :members:
    :undoc-members:
    :show-inheritance:

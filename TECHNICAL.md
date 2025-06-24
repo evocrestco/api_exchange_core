@@ -29,7 +29,7 @@ The framework follows a layered architecture with clear separation of concerns:
                             ↕
 ┌─────────────────────────────────────────────────────────┐
 │                   Data Layer                             │
-│        (Repositories, Models, Database)                  │
+│         (Services, Models, Database)                     │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -290,12 +290,18 @@ def test_entity_service(db_session, entity_repository):
 ### Enhanced Error Handling (2024)
 - Centralized exception hierarchy with error codes
 - Structured error context and chaining
-- Repository and service-level error translation
+- Service-level error translation and handling
 
 ### Type System Improvements
 - Migration to Pydantic v2
 - Comprehensive type hints
 - Reduced mypy errors by 70%
+
+### Service Architecture Pattern (2024)
+- Moved from Repository pattern to direct SQLAlchemy session management
+- SessionManagedService base class for proper session lifecycle
+- Services own their database sessions, eliminating session conflicts
+- Automatic tenant context application via decorators
 
 ### Testing Infrastructure
 - NO MOCKS philosophy enforcement

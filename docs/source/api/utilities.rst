@@ -6,7 +6,7 @@ Utility modules for logging, hashing, JSON handling, and Azure integration.
 Logging
 -------
 
-.. automodule:: src.utils.logger
+.. automodule:: api_exchange_core.utils.logger
    :members:
    :undoc-members:
    :show-inheritance:
@@ -14,12 +14,12 @@ Logging
 Hashing
 -------
 
-.. automodule:: src.utils.hash_utils
+.. automodule:: api_exchange_core.utils.hash_utils
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: src.utils.hash_config
+.. automodule:: api_exchange_core.utils.hash_config
    :members:
    :undoc-members:
    :show-inheritance:
@@ -27,7 +27,7 @@ Hashing
 JSON Utilities
 --------------
 
-.. automodule:: src.utils.json_utils
+.. automodule:: api_exchange_core.utils.json_utils
    :members:
    :undoc-members:
    :show-inheritance:
@@ -35,7 +35,7 @@ JSON Utilities
 Azure Queue Utilities
 ---------------------
 
-.. automodule:: src.utils.azure_queue_utils
+.. automodule:: api_exchange_core.utils.azure_queue_utils
    :members:
    :undoc-members:
    :show-inheritance:

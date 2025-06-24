@@ -6,7 +6,7 @@ The processor system provides a clean interface for implementing business logic 
 Processor Interface
 -------------------
 
-.. automodule:: src.processors.v2.processor_interface
+.. automodule:: api_exchange_core.processors.v2.processor_interface
    :members:
    :undoc-members:
    :show-inheritance:
@@ -14,7 +14,7 @@ Processor Interface
 Message System
 --------------
 
-.. automodule:: src.processors.v2.message
+.. automodule:: api_exchange_core.processors.v2.message
    :members:
    :undoc-members:
    :show-inheritance:
@@ -22,7 +22,7 @@ Message System
 Processor Handler
 -----------------
 
-.. automodule:: src.processors.v2.processor_handler
+.. automodule:: api_exchange_core.processors.v2.processor_handler
    :members:
    :undoc-members:
    :show-inheritance:
@@ -30,7 +30,7 @@ Processor Handler
 Processing Results
 ------------------
 
-.. automodule:: src.processors.processing_result
+.. automodule:: api_exchange_core.processors.processing_result
    :members:
    :undoc-members:
    :show-inheritance:
@@ -38,12 +38,12 @@ Processing Results
 Output Handlers
 ---------------
 
-.. automodule:: src.processors.v2.output_handlers.base
+.. automodule:: api_exchange_core.processors.v2.output_handlers.base
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: src.processors.v2.output_handlers.queue_output
+.. automodule:: api_exchange_core.processors.v2.output_handlers.queue_output
    :members:
    :undoc-members:
    :show-inheritance:
@@ -51,7 +51,7 @@ Output Handlers
 Infrastructure Processors
 --------------------------
 
-.. automodule:: src.processors.infrastructure.gateway_processor
+.. automodule:: api_exchange_core.processors.infrastructure.gateway_processor
    :members:
    :undoc-members:
    :show-inheritance:

@@ -1,12 +1,20 @@
 Services
 ========
 
-High-level business logic services that coordinate between repositories and implement complex operations.
+High-level business logic services that manage database sessions and implement complex operations. Services inherit from SessionManagedService to handle their own database session lifecycle, eliminating the need for repositories.
+
+Base Service
+------------
+
+.. automodule:: api_exchange_core.services.base_service
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
 Entity Service
 --------------
 
-.. automodule:: src.services.entity_service
+.. automodule:: api_exchange_core.services.entity_service
    :members:
    :undoc-members:
    :show-inheritance:
@@ -14,7 +22,7 @@ Entity Service
 Credential Service
 ------------------
 
-.. automodule:: src.services.credential_service
+.. automodule:: api_exchange_core.services.credential_service
    :members:
    :undoc-members:
    :show-inheritance:
@@ -22,7 +30,7 @@ Credential Service
 API Token Service
 -----------------
 
-.. automodule:: src.services.api_token_service
+.. automodule:: api_exchange_core.services.api_token_service
    :members:
    :undoc-members:
    :show-inheritance:
@@ -30,7 +38,7 @@ API Token Service
 Processing Service
 ------------------
 
-.. automodule:: src.processing.processing_service
+.. automodule:: api_exchange_core.processing.processing_service
    :members:
    :undoc-members:
    :show-inheritance:
@@ -38,7 +46,7 @@ Processing Service
 State Tracking Service
 ----------------------
 
-.. automodule:: src.services.state_tracking_service
+.. automodule:: api_exchange_core.services.state_tracking_service
    :members:
    :undoc-members:
    :show-inheritance:
@@ -46,7 +54,7 @@ State Tracking Service
 Processing Error Service
 ------------------------
 
-.. automodule:: src.services.processing_error_service
+.. automodule:: api_exchange_core.services.processing_error_service
    :members:
    :undoc-members:
    :show-inheritance:

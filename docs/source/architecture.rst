@@ -160,11 +160,11 @@ Database Isolation
 **Row-Level Security**
    All database tables include a ``tenant_id`` column and operations are automatically filtered by tenant.
 
-**Repository Pattern**
-   All database access goes through repositories that enforce tenant scoping.
+**Direct Database Access**
+   Services use SQLAlchemy sessions directly with automatic tenant filtering via the tenant context.
 
 **Service Layer**
-   Services automatically inject tenant context into all operations.
+   Services manage their own database sessions and automatically apply tenant context to all operations. The SessionManagedService pattern ensures proper session lifecycle management.
 
 Serverless Token Management
 ===========================

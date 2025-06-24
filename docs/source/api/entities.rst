@@ -6,7 +6,7 @@ The entity system provides versioned data objects with state tracking and duplic
 Entity Models
 -------------
 
-.. automodule:: src.db.db_entity_models
+.. automodule:: api_exchange_core.db.db_entity_models
    :members:
    :undoc-members:
    :show-inheritance:
@@ -14,7 +14,7 @@ Entity Models
 Entity Schemas
 --------------
 
-.. automodule:: src.schemas.entity_schema
+.. automodule:: api_exchange_core.schemas.entity_schema
    :members:
    :undoc-members:
    :show-inheritance:
@@ -22,12 +22,12 @@ Entity Schemas
 Entity Processing
 -----------------
 
-.. automodule:: src.processing.entity_attributes
+.. automodule:: api_exchange_core.processing.entity_attributes
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: src.processing.duplicate_detection
+.. automodule:: api_exchange_core.processing.duplicate_detection
    :members:
    :undoc-members:
    :show-inheritance:

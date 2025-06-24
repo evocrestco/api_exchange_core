@@ -27,7 +27,6 @@ A comprehensive framework for building data integration pipelines in serverless 
    :caption: Infrastructure:
 
    api/database
-   api/queues
    api/context
    api/utilities
 
@@ -62,9 +61,9 @@ Quick Start
 
 .. code-block:: python
 
-   from src.processors.v2.processor_interface import ProcessorInterface
-   from src.processors.v2.message import Message
-   from src.processors.processing_result import ProcessingResult
+   from api_exchange_core.processors.v2.processor_interface import ProcessorInterface
+   from api_exchange_core.processors.v2.message import Message
+   from api_exchange_core.processors.processing_result import ProcessingResult
 
    class MyProcessor(ProcessorInterface):
        def process(self, message: Message, context: ProcessorContext) -> ProcessingResult:
