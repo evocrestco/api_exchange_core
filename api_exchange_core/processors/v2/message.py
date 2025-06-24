@@ -9,10 +9,10 @@ Simplified message structure for queue transport:
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from ...schemas.entity_schema import EntityReference
 
@@ -38,8 +38,16 @@ class Message(BaseModel):
     # Entity reference (not full entity) - for lightweight transport
     entity_reference: Optional[EntityReference] = Field(default=None)
 
-    # The actual data being processed
-    payload: Dict[str, Any] = Field()
+    # The actual data being processed - accepts dicts or Pydantic models
+    payload: Union[Dict[str, Any], BaseModel] = Field()
+    
+    @field_validator('payload', mode='before')
+    @classmethod
+    def convert_payload(cls, v):
+        """Convert Pydantic models to dicts for JSON serialization."""
+        if isinstance(v, BaseModel):
+            return v.model_dump()
+        return v
 
     # Optional metadata for routing/processing hints
     metadata: Dict[str, Any] = Field(default_factory=dict)
