@@ -113,14 +113,14 @@ class DuplicateDetectionService:
 
     Provides configurable duplicate detection with confidence scoring and
     sophisticated matching logic for different scenarios.
-    
+
     Uses session-per-service pattern - creates its own EntityService.
     """
 
     def __init__(self, entity_service=None):
         """
         Initialize the duplicate detection service.
-        
+
         Args:
             entity_service: Optional EntityService instance (for testing)
         """
@@ -129,13 +129,14 @@ class DuplicateDetectionService:
         else:
             # Import here to avoid circular dependencies
             from ..services.entity_service import EntityService
+
             self.entity_service = EntityService()
-            
+
         self.logger = get_logger()
 
     def close(self):
         """Close the entity service session."""
-        if hasattr(self.entity_service, 'close'):
+        if hasattr(self.entity_service, "close"):
             self.entity_service.close()
 
     @tenant_aware

@@ -417,7 +417,7 @@ class BaseRepository(Generic[T]):
             )
 
         # Convert schema to dict, ensuring JSON compatibility for JSONB columns
-        data_dict = create_schema.model_dump(mode='json')
+        data_dict = create_schema.model_dump(mode="json")
 
         # Ensure tenant_id is set
         data_dict["tenant_id"] = tenant_id

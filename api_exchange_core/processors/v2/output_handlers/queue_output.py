@@ -293,7 +293,7 @@ class QueueOutputHandler(OutputHandler):
                 )
 
                 self.logger.info(
-                    f"Message sent to queue successfully",
+                    "Message sent to queue successfully",
                     extra={
                         "queue_name": self.destination,
                         "message_id": message.message_id,
@@ -385,7 +385,7 @@ class QueueOutputHandler(OutputHandler):
             _, duration_ms = self._execute_with_timing(lambda: None)
 
             self.logger.error(
-                f"Unexpected error in QueueOutputHandler",
+                "Unexpected error in QueueOutputHandler",
                 extra={
                     "queue_name": self.destination,
                     "message_id": message.message_id,

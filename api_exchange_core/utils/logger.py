@@ -98,7 +98,7 @@ class TenantContextFilter(logging.Filter):
         """
         # Lazy import to avoid circular dependency
         from ..context.tenant_context import TenantContext
-        
+
         tenant_id = TenantContext.get_current_tenant_id()
         if tenant_id:
             record.tenant_id = tenant_id

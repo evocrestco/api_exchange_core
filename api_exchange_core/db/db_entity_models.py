@@ -5,7 +5,6 @@ from typing import Any, Dict, Optional
 
 from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import relationship
 from sqlalchemy.orm.attributes import flag_modified
 
 from .db_base import Base, utc_now

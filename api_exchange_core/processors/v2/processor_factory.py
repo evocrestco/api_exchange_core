@@ -13,12 +13,10 @@ from typing import Any, Dict, Optional
 from pydantic import ValidationError
 
 from ...db.db_config import DatabaseConfig, DatabaseManager, init_db
-from ...processing.duplicate_detection import DuplicateDetectionService
-from ...processing.entity_attributes import EntityAttributeBuilder
 from ...processing.processing_service import ProcessingService
+from ...utils.logger import get_logger
 from .processor_handler import ProcessorHandler
 from .processor_interface import ProcessorInterface
-from ...utils.logger import get_logger
 
 
 def create_db_manager() -> DatabaseManager:
@@ -95,11 +93,9 @@ def create_processor_handler(
 
     # Store db_manager for services to create their own sessions
     # Note: Each service now creates its own session to eliminate session conflicts
-    
-    # Create services that don't need sessions
-    duplicate_detection_service = DuplicateDetectionService()
-    attribute_builder = EntityAttributeBuilder()
-    
+
+    # Services are created per-execution within ProcessorHandler as needed
+
     # Create ProcessingService with the database manager
     processing_service = ProcessingService(db_manager=db_manager)
 

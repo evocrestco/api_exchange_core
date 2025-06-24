@@ -20,8 +20,8 @@ from ..exceptions import (
     TenantIsolationViolationError,
     ValidationError,
 )
-from .base_repository import BaseRepository
 from ..utils.logger import get_logger
+from .base_repository import BaseRepository
 
 
 class APITokenRepository(BaseRepository[APIToken]):
@@ -38,12 +38,12 @@ class APITokenRepository(BaseRepository[APIToken]):
     """
 
     def __init__(
-        self,
-        session: Session,
-        api_provider: str,
-        max_tokens: int = 25,
-        token_validity_hours: int = 1,
-        tokens_reusable: bool = False,
+            self,
+            session: Session,
+            api_provider: str,
+            max_tokens: int = 25,
+            token_validity_hours: int = 1,
+            tokens_reusable: bool = False,
     ):
         """
         Initialize repository for specific API provider.
@@ -64,7 +64,7 @@ class APITokenRepository(BaseRepository[APIToken]):
 
     @tenant_aware
     def get_valid_token(
-        self, operation: str = "api_call", buffer_minutes: int = 5
+            self, operation: str = "api_call", buffer_minutes: int = 5
     ) -> Optional[Tuple[str, str]]:
         """
         Get a valid token for API operations (shared access).
@@ -177,7 +177,7 @@ class APITokenRepository(BaseRepository[APIToken]):
 
     @tenant_aware
     def store_new_token(
-        self, token: str, generated_by: str, generation_context: Optional[Dict[str, Any]] = None
+            self, token: str, generated_by: str, generation_context: Optional[Dict[str, Any]] = None
     ) -> str:
         """
         Store a new token with atomic coordination.
@@ -324,10 +324,10 @@ class APITokenRepository(BaseRepository[APIToken]):
 
     @tenant_aware
     def get_or_create_token_with_coordination(
-        self,
-        operation: str = "api_call",
-        buffer_minutes: int = 5,
-        token_generator: Optional[Callable[[], str]] = None,
+            self,
+            operation: str = "api_call",
+            buffer_minutes: int = 5,
+            token_generator: Optional[Callable[[], str]] = None,
     ) -> Optional[Tuple[str, str]]:
         """
         Get existing token or create new one with coordination table pattern.
@@ -491,9 +491,9 @@ class APITokenRepository(BaseRepository[APIToken]):
                     text(
                         """
                         SELECT id
-                        FROM api_tokens 
-                        WHERE tenant_id = :tenant_id 
-                          AND api_provider = :api_provider 
+                        FROM api_tokens
+                        WHERE tenant_id = :tenant_id
+                          AND api_provider = :api_provider
                           AND (expires_at <= :now OR is_active = 'inactive')
                         FOR UPDATE SKIP LOCKED
                     """
@@ -664,7 +664,7 @@ class APITokenRepository(BaseRepository[APIToken]):
             ) from e
 
     def _log_token_usage(
-        self, token: APIToken, operation: str, success: str = "unknown", **kwargs
+            self, token: APIToken, operation: str, success: str = "unknown", **kwargs
     ) -> None:
         """
         Log token usage for audit and monitoring.
@@ -702,7 +702,7 @@ class APITokenRepository(BaseRepository[APIToken]):
 
     @tenant_aware
     def try_acquire_coordination_lock(
-        self, locked_by: str, lock_duration_seconds: int = 10
+            self, locked_by: str, lock_duration_seconds: int = 10
     ) -> bool:
         """
         Try to acquire a coordination lock for token creation.
@@ -742,7 +742,7 @@ class APITokenRepository(BaseRepository[APIToken]):
                 self.session.execute(
                     text(
                         """
-                        INSERT INTO token_coordination 
+                        INSERT INTO token_coordination
                         (tenant_id, api_provider, locked_by, locked_at, expires_at, attempt_count, last_attempt_at)
                         VALUES (:tenant_id, :api_provider, '', '1970-01-01', '1970-01-01', 0, '1970-01-01')
                         ON CONFLICT (tenant_id, api_provider) DO NOTHING
@@ -756,8 +756,8 @@ class APITokenRepository(BaseRepository[APIToken]):
                     self.session.execute(
                         text(
                             """
-                            SELECT 1 FROM token_coordination 
-                            WHERE tenant_id = :tenant_id 
+                            SELECT 1 FROM token_coordination
+                            WHERE tenant_id = :tenant_id
                               AND api_provider = :api_provider
                             FOR UPDATE NOWAIT
                         """
@@ -770,13 +770,13 @@ class APITokenRepository(BaseRepository[APIToken]):
                     self.session.execute(
                         text(
                             """
-                            UPDATE token_coordination 
+                            UPDATE token_coordination
                             SET locked_by = :locked_by,
                                 locked_at = :locked_at,
                                 expires_at = :expires_at,
                                 attempt_count = attempt_count + 1,
                                 last_attempt_at = :last_attempt_at
-                            WHERE tenant_id = :tenant_id 
+                            WHERE tenant_id = :tenant_id
                               AND api_provider = :api_provider
                         """
                         ),
@@ -785,8 +785,7 @@ class APITokenRepository(BaseRepository[APIToken]):
                             "api_provider": self.api_provider,
                             "locked_by": locked_by,
                             "locked_at": datetime.utcnow(),
-                            "expires_at": datetime.utcnow()
-                            + timedelta(seconds=lock_duration_seconds),
+                            "expires_at": datetime.utcnow() + timedelta(seconds=lock_duration_seconds),
                             "last_attempt_at": datetime.utcnow(),
                         },
                     )
@@ -805,7 +804,8 @@ class APITokenRepository(BaseRepository[APIToken]):
                             "elapsed_ms": elapsed_ms,
                             "attempt_count": self.session.execute(
                                 text(
-                                    "SELECT attempt_count FROM token_coordination WHERE tenant_id = :tenant_id AND api_provider = :api_provider"
+                                    "SELECT attempt_count FROM token_coordination WHERE tenant_id = :tenant_id AND "
+                                    "api_provider = :api_provider"
                                 ),
                                 {"tenant_id": tenant_id, "api_provider": self.api_provider},
                             ).scalar(),
@@ -876,10 +876,10 @@ class APITokenRepository(BaseRepository[APIToken]):
             updated_count = self.session.execute(
                 text(
                     """
-                    UPDATE token_coordination 
+                    UPDATE token_coordination
                     SET locked_by = '',
                         expires_at = '1970-01-01'
-                    WHERE tenant_id = :tenant_id 
+                    WHERE tenant_id = :tenant_id
                       AND api_provider = :api_provider
                       AND locked_by = :locked_by
                 """
@@ -1001,28 +1001,28 @@ class APITokenRepository(BaseRepository[APIToken]):
 
             # Get total attempt count from all coordination records (including expired)
             total_attempts = (
-                self.session.query(func.sum(TokenCoordination.attempt_count))
-                .filter(
-                    and_(
-                        TokenCoordination.tenant_id == tenant_id,
-                        TokenCoordination.api_provider == self.api_provider,
+                    self.session.query(func.sum(TokenCoordination.attempt_count))
+                    .filter(
+                        and_(
+                            TokenCoordination.tenant_id == tenant_id,
+                            TokenCoordination.api_provider == self.api_provider,
+                        )
                     )
-                )
-                .scalar()
-                or 0
+                    .scalar()
+                    or 0
             )
 
             # Get max attempt count (indicates hottest contention)
             max_attempts = (
-                self.session.query(func.max(TokenCoordination.attempt_count))
-                .filter(
-                    and_(
-                        TokenCoordination.tenant_id == tenant_id,
-                        TokenCoordination.api_provider == self.api_provider,
+                    self.session.query(func.max(TokenCoordination.attempt_count))
+                    .filter(
+                        and_(
+                            TokenCoordination.tenant_id == tenant_id,
+                            TokenCoordination.api_provider == self.api_provider,
+                        )
                     )
-                )
-                .scalar()
-                or 0
+                    .scalar()
+                    or 0
             )
 
             return {

@@ -5,14 +5,14 @@ This module provides business logic for managing tenants
 using SQLAlchemy directly - simple, explicit, and efficient.
 """
 
-import uuid
 import logging
+import uuid
 from datetime import datetime
 from typing import Any, List, Optional
 
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import exists
 from sqlalchemy.exc import IntegrityError
-from pydantic import ValidationError as PydanticValidationError
 
 from ..context.operation_context import operation
 from ..db.db_tenant_models import Tenant
@@ -29,7 +29,7 @@ from .base_service import SessionManagedService
 class TenantService(SessionManagedService):
     """
     Pythonic service for managing tenants with direct SQLAlchemy access.
-    
+
     Uses SQLAlchemy directly - simple, explicit, and efficient.
     """
 
@@ -59,16 +59,16 @@ class TenantService(SessionManagedService):
         """
         try:
             # Check if tenant_id already exists
-            if self.session.query(exists().where(
-                Tenant.tenant_id == tenant_data.tenant_id
-            )).scalar():
+            if self.session.query(
+                exists().where(Tenant.tenant_id == tenant_data.tenant_id)
+            ).scalar():
                 raise ServiceError(
                     f"Tenant already exists: {tenant_data.tenant_id}",
                     error_code=ErrorCode.DUPLICATE,
                     operation="create_tenant",
                     tenant_id=tenant_data.tenant_id,
                 )
-            
+
             # Create tenant using validated schema data
             tenant = Tenant(
                 id=str(uuid.uuid4()),
@@ -92,14 +92,12 @@ class TenantService(SessionManagedService):
 
             self.session.add(tenant)
             # Transaction managed by caller
-            
-            self.logger.info(
-                f"Created tenant: id={tenant.id}, tenant_id={tenant_data.tenant_id}"
-            )
-            
+
+            self.logger.info(f"Created tenant: id={tenant.id}, tenant_id={tenant_data.tenant_id}")
+
             # Return the created tenant as TenantRead
             return TenantRead.model_validate(tenant)
-            
+
         except PydanticValidationError as e:
             # Handle Pydantic validation errors
             raise ValidationError(
@@ -119,7 +117,7 @@ class TenantService(SessionManagedService):
                 ) from e
             else:
                 raise ServiceError(
-                    f"Tenant creation failed due to data integrity constraints",
+                    "Tenant creation failed due to data integrity constraints",
                     error_code=ErrorCode.INVALID_DATA,
                     operation="create_tenant",
                     tenant_id=tenant_data.tenant_id,
@@ -161,11 +159,7 @@ class TenantService(SessionManagedService):
         """
         try:
             # Query tenant directly with SQLAlchemy
-            tenant = (
-                self.session.query(Tenant)
-                .filter(Tenant.tenant_id == tenant_id)
-                .first()
-            )
+            tenant = self.session.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()
 
             if tenant is None:
                 raise ServiceError(
@@ -209,7 +203,7 @@ class TenantService(SessionManagedService):
 
             # Convert to TenantRead objects
             return [TenantRead.model_validate(tenant) for tenant in tenants]
-            
+
         except Exception as e:
             self._handle_service_exception("list_tenants", e)
 
@@ -230,14 +224,10 @@ class TenantService(SessionManagedService):
         try:
             # Get current tenant ID from context
             tenant_id = self._get_current_tenant_id()
-            
+
             # Get tenant for update
-            tenant = (
-                self.session.query(Tenant)
-                .filter(Tenant.tenant_id == tenant_id)
-                .first()
-            )
-            
+            tenant = self.session.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()
+
             if not tenant:
                 raise ServiceError(
                     f"Tenant not found: {tenant_id}",
@@ -268,12 +258,12 @@ class TenantService(SessionManagedService):
                 tenant.country = update_data.country
             if update_data.is_active is not None:
                 tenant.is_active = update_data.is_active
-                
+
             tenant.updated_at = datetime.utcnow()
             # Transaction managed by caller
-            
+
             self.logger.info(f"Updated tenant: tenant_id={tenant_id}")
-            
+
             # Return updated tenant
             return TenantRead.model_validate(tenant)
 
@@ -300,30 +290,26 @@ class TenantService(SessionManagedService):
         """
         try:
             tenant_id = self._get_current_tenant_id()
-            
+
             # Get current tenant
-            tenant = (
-                self.session.query(Tenant)
-                .filter(Tenant.tenant_id == tenant_id)
-                .first()
-            )
-            
+            tenant = self.session.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()
+
             if not tenant:
                 return False
 
             # Update tenant config
             if not tenant.tenant_config:
                 tenant.tenant_config = {}
-            
+
             tenant.tenant_config[key] = TenantConfigValue(value=value)
             tenant.updated_at = datetime.utcnow()
-            
+
             # Transaction managed by caller
-            
+
             self.logger.info(f"Updated tenant config: tenant_id={tenant_id}, key={key}")
-            
+
             return True
-            
+
         except Exception as e:
             # Transaction managed by caller
             if isinstance(e, ServiceError):
@@ -343,13 +329,9 @@ class TenantService(SessionManagedService):
         """
         try:
             tenant_id = self._get_current_tenant_id()
-            
-            tenant = (
-                self.session.query(Tenant)
-                .filter(Tenant.tenant_id == tenant_id)
-                .first()
-            )
-            
+
+            tenant = self.session.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()
+
             if not tenant:
                 raise ServiceError(
                     f"Tenant not found: {tenant_id}",
@@ -359,13 +341,13 @@ class TenantService(SessionManagedService):
 
             tenant.is_active = True
             tenant.updated_at = datetime.utcnow()
-            
+
             # Transaction managed by caller
-            
+
             self.logger.info(f"Activated tenant: tenant_id={tenant_id}")
-            
+
             return TenantRead.model_validate(tenant)
-            
+
         except Exception as e:
             # Transaction managed by caller
             if isinstance(e, ServiceError):
@@ -382,25 +364,21 @@ class TenantService(SessionManagedService):
         """
         try:
             tenant_id = self._get_current_tenant_id()
-            
-            tenant = (
-                self.session.query(Tenant)
-                .filter(Tenant.tenant_id == tenant_id)
-                .first()
-            )
-            
+
+            tenant = self.session.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()
+
             if not tenant:
                 return False
 
             tenant.is_active = True
             tenant.updated_at = datetime.utcnow()
-            
+
             # Transaction managed by caller
-            
+
             self.logger.info(f"Activated tenant: tenant_id={tenant_id}")
-            
+
             return True
-            
+
         except Exception as e:
             # Transaction managed by caller
             if isinstance(e, ServiceError):
@@ -420,13 +398,9 @@ class TenantService(SessionManagedService):
         """
         try:
             tenant_id = self._get_current_tenant_id()
-            
-            tenant = (
-                self.session.query(Tenant)
-                .filter(Tenant.tenant_id == tenant_id)
-                .first()
-            )
-            
+
+            tenant = self.session.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()
+
             if not tenant:
                 raise ServiceError(
                     f"Tenant not found: {tenant_id}",
@@ -436,13 +410,13 @@ class TenantService(SessionManagedService):
 
             tenant.is_active = False
             tenant.updated_at = datetime.utcnow()
-            
+
             # Transaction managed by caller
-            
+
             self.logger.info(f"Deactivated tenant: tenant_id={tenant_id}")
-            
+
             return TenantRead.model_validate(tenant)
-            
+
         except Exception as e:
             # Transaction managed by caller
             if isinstance(e, ServiceError):
@@ -459,25 +433,21 @@ class TenantService(SessionManagedService):
         """
         try:
             tenant_id = self._get_current_tenant_id()
-            
-            tenant = (
-                self.session.query(Tenant)
-                .filter(Tenant.tenant_id == tenant_id)
-                .first()
-            )
-            
+
+            tenant = self.session.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()
+
             if not tenant:
                 return False
 
             tenant.is_active = False
             tenant.updated_at = datetime.utcnow()
-            
+
             # Transaction managed by caller
-            
+
             self.logger.info(f"Deactivated tenant: tenant_id={tenant_id}")
-            
+
             return True
-            
+
         except Exception as e:
             # Transaction managed by caller
             if isinstance(e, ServiceError):
@@ -502,7 +472,7 @@ class TenantService(SessionManagedService):
             # Convert kwargs to TenantUpdate schema
             update_data = TenantUpdate(**kwargs)
             return self.update_tenant(update_data)
-            
+
         except Exception as e:
             if isinstance(e, ServiceError):
                 raise

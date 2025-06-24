@@ -20,8 +20,8 @@ from ..exceptions import (
     TenantIsolationViolationError,
     ValidationError,
 )
-from .base_repository import BaseRepository
 from ..utils.logger import get_logger
+from .base_repository import BaseRepository
 
 
 class CredentialRepository(BaseRepository[ExternalCredential]):

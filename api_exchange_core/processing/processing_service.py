@@ -5,23 +5,18 @@ This module provides the main service for orchestrating entity processing workfl
 including entity creation, versioning, duplicate detection, and attribute management.
 """
 
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
 from ..context.operation_context import operation
 from ..context.tenant_context import TenantContext, tenant_aware
-from ..db import EntityStateEnum
-from ..db import TransitionTypeEnum
+from ..db import EntityStateEnum, TransitionTypeEnum
 from ..exceptions import ErrorCode, ServiceError, ValidationError
+from ..utils.logger import get_logger
 from .duplicate_detection import DuplicateDetectionResult, DuplicateDetectionService
 from .entity_attributes import EntityAttributeBuilder
 from .processor_config import ProcessorConfig
-from ..utils.logger import get_logger
-
-if TYPE_CHECKING:
-    from ..services.logging_processing_error_service import LoggingProcessingErrorService
-    from ..services.logging_state_tracking_service import LoggingStateTrackingService
 
 
 class ProcessingResult(BaseModel):
@@ -56,18 +51,18 @@ class ProcessingService:
     def __init__(self, db_manager=None):
         """
         Initialize the processing service with shared session for all services.
-        
+
         All services share the same session to ensure transaction coordination.
-        
+
         Args:
             db_manager: Optional database manager. If provided, uses it to create session.
                        If None, creates from environment variables (for backward compatibility).
         """
         # Import here to avoid circular dependencies
         from ..services.entity_service import EntityService
-        from ..services.logging_state_tracking_service import LoggingStateTrackingService
         from ..services.logging_processing_error_service import LoggingProcessingErrorService
-        
+        from ..services.logging_state_tracking_service import LoggingStateTrackingService
+
         # Create shared session for all services
         if db_manager is not None:
             # Use provided database manager
@@ -75,12 +70,12 @@ class ProcessingService:
         else:
             # Backward compatibility: create from environment
             self.session = self._create_session()
-        
+
         # Create services - EntityService with session, logging services without
         self.entity_service = EntityService(session=self.session)
         self.state_tracking_service = LoggingStateTrackingService()
         self.error_service = LoggingProcessingErrorService()
-        
+
         # Keep existing services that don't need sessions
         self.duplicate_detection_service = DuplicateDetectionService()
         self.attribute_builder = EntityAttributeBuilder()
@@ -90,8 +85,9 @@ class ProcessingService:
         """Create a new database session using same pattern as SessionManagedService."""
         from sqlalchemy import create_engine
         from sqlalchemy.orm import sessionmaker
+
         from ..db.db_config import get_production_config
-        
+
         db_config = get_production_config()
         engine = create_engine(db_config.get_connection_string())
         Session = sessionmaker(bind=engine)
@@ -100,19 +96,19 @@ class ProcessingService:
     def close_services(self):
         """Close the shared session and clean up resources."""
         try:
-            if hasattr(self, 'session') and self.session:
+            if hasattr(self, "session") and self.session:
                 self.session.close()
         except Exception as e:
             self.logger.warning(f"Error closing session: {e}")
-        
+
         # Close individual services if they have cleanup methods
-        if hasattr(self.entity_service, 'close'):
+        if hasattr(self.entity_service, "close"):
             self.entity_service.close()
-        if hasattr(self.state_tracking_service, 'close'):
+        if hasattr(self.state_tracking_service, "close"):
             self.state_tracking_service.close()
-        if hasattr(self.error_service, 'close'):
+        if hasattr(self.error_service, "close"):
             self.error_service.close()
-        if hasattr(self.duplicate_detection_service, 'close'):
+        if hasattr(self.duplicate_detection_service, "close"):
             self.duplicate_detection_service.close()
 
     def __enter__(self):
@@ -122,7 +118,6 @@ class ProcessingService:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Auto-close services on exit."""
         self.close_services()
-
 
     def _get_current_tenant_id(self) -> Optional[str]:
         """Get current tenant ID from context."""
@@ -514,4 +509,3 @@ class ProcessingService:
             duplicate_detection_result=duplicate_result,
             processing_metadata={"processor": config.processor_name},
         )
-

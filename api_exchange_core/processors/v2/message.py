@@ -40,8 +40,8 @@ class Message(BaseModel):
 
     # The actual data being processed - accepts dicts or Pydantic models
     payload: Union[Dict[str, Any], BaseModel] = Field()
-    
-    @field_validator('payload', mode='before')
+
+    @field_validator("payload", mode="before")
     @classmethod
     def convert_payload(cls, v):
         """Convert Pydantic models to dicts for JSON serialization."""

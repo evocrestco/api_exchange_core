@@ -10,8 +10,8 @@ from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.orm import Session
 from sqlalchemy.types import TypeDecorator
 
-from .db_config import Base
 from ..utils.json_utils import dumps
+from .db_config import Base
 
 BaseModelT = TypeVar("BaseModelT", bound="BaseModel")
 
@@ -176,7 +176,3 @@ class EntityTypeEnum(enum.Enum):
 class RefTypeEnum(enum.Enum):
     SOURCE = "SOURCE"
     TARGET = "TARGET"
-
-
-# Import from centralized enums module to avoid circular imports
-from ..enums import TransitionTypeEnum

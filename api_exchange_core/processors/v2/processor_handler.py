@@ -14,10 +14,10 @@ from typing import Any, Dict, List, Optional
 
 from ...context.operation_context import operation
 from ...context.tenant_context import tenant_context
+from ...utils.logger import get_logger
 from ..processing_result import ProcessingResult, ProcessingStatus
 from .message import Message
 from .processor_interface import ProcessorContext, ProcessorInterface
-from ...utils.logger import get_logger
 
 
 class ProcessorHandler:
@@ -80,43 +80,45 @@ class ProcessorHandler:
             # Execute within tenant context
             with tenant_context(tenant_id):
                 return self._execute_with_tenant_context(message)
-                
+
         except Exception as e:
             import traceback
+
             self.logger.error(f"CRITICAL ERROR in ProcessorHandler.execute: {str(e)}")
             self.logger.error(f"Exception type: {type(e)}")
             self.logger.error(f"Message type: {type(message)}")
             self.logger.error(f"Message content: {message}")
             self.logger.error(f"Full traceback: {traceback.format_exc()}")
-            
+
             # Re-raise so the Azure Function can handle it
             raise
 
     def _execute_with_tenant_context(self, message: Message) -> ProcessingResult:
         """Execute processor within tenant context."""
         start_time = time.time()
-        
+
         # Create services - much simpler now with logging-based state/error tracking
         if self.db_manager:
             # Create ProcessingService with db_manager
             from ...processing import ProcessingService
+
             processing_service = ProcessingService(db_manager=self.db_manager)
-            
+
             # Create logging-based services (no sessions needed!)
-            from ...services.logging_state_tracking_service import LoggingStateTrackingService
             from ...services.logging_processing_error_service import LoggingProcessingErrorService
-            
+            from ...services.logging_state_tracking_service import LoggingStateTrackingService
+
             state_tracking_service = LoggingStateTrackingService()
             error_service = LoggingProcessingErrorService()
             entity_service = None  # ProcessingService handles entity operations
-            
+
             self.logger.debug(
                 "Created services with logging-based state tracking and error handling",
                 extra={
                     "processor_class": self.processor.__class__.__name__,
                     "state_tracking": "logging",
                     "error_handling": "logging",
-                }
+                },
             )
         else:
             # Fallback to the shared services (old behavior)
@@ -125,14 +127,14 @@ class ProcessorHandler:
                 "Consider providing db_manager to ProcessorHandler."
             )
             processing_service = self.processing_service
-            
+
             # Use logging services even in fallback mode
-            from ...services.logging_state_tracking_service import LoggingStateTrackingService
             from ...services.logging_processing_error_service import LoggingProcessingErrorService
-            
+            from ...services.logging_state_tracking_service import LoggingStateTrackingService
+
             state_tracking_service = LoggingStateTrackingService()
             error_service = LoggingProcessingErrorService()
-            entity_service = None
+            entity_service = None  # noqa: F841 - Placeholder for future fallback mode
 
         try:
             # Check if entity exists in message
@@ -141,8 +143,16 @@ class ProcessorHandler:
                     "Entity not persisted yet, will be handled by processor",
                     extra={
                         "processor_class": self.processor.__class__.__name__,
-                        "external_id": getattr(message.entity_reference, "external_id", "unknown") if message.entity_reference else "unknown",
-                        "canonical_type": getattr(message.entity_reference, "canonical_type", "unknown") if message.entity_reference else "unknown",
+                        "external_id": (
+                            getattr(message.entity_reference, "external_id", "unknown")
+                            if message.entity_reference
+                            else "unknown"
+                        ),
+                        "canonical_type": (
+                            getattr(message.entity_reference, "canonical_type", "unknown")
+                            if message.entity_reference
+                            else "unknown"
+                        ),
                     },
                 )
 
@@ -152,7 +162,11 @@ class ProcessorHandler:
                 extra={
                     "processor_class": self.processor.__class__.__name__,
                     "message_id": message.message_id,
-                    "external_id": getattr(message.entity_reference, "external_id", "unknown") if message.entity_reference else "unknown",
+                    "external_id": (
+                        getattr(message.entity_reference, "external_id", "unknown")
+                        if message.entity_reference
+                        else "unknown"
+                    ),
                 },
             )
 
@@ -170,7 +184,7 @@ class ProcessorHandler:
             context = self._create_enhanced_context(
                 processing_service=processing_service,
                 state_tracking_service=state_tracking_service,
-                error_service=error_service
+                error_service=error_service,
             )
 
             # Note: We don't create stub entities here anymore since processors
@@ -217,8 +231,17 @@ class ProcessorHandler:
 
                 # Record successful state transition if entity exists and state service available
                 if entity_id and state_tracking_service:
-                    external_id = message.entity_reference.external_id if message.entity_reference else None
-                    self._record_state_transition(entity_id, "processing", "completed", result, state_tracking_service, external_id)
+                    external_id = (
+                        message.entity_reference.external_id if message.entity_reference else None
+                    )
+                    self._record_state_transition(
+                        entity_id,
+                        "processing",
+                        "completed",
+                        result,
+                        state_tracking_service,
+                        external_id,
+                    )
 
                 # Legacy: Processing results now tracked via logging instead of database
 
@@ -233,8 +256,17 @@ class ProcessorHandler:
 
                 # Record failed state transition if entity exists and state service available
                 if entity_id and state_tracking_service:
-                    external_id = message.entity_reference.external_id if message.entity_reference else None
-                    self._record_state_transition(entity_id, "processing", "failed", result, state_tracking_service, external_id)
+                    external_id = (
+                        message.entity_reference.external_id if message.entity_reference else None
+                    )
+                    self._record_state_transition(
+                        entity_id,
+                        "processing",
+                        "failed",
+                        result,
+                        state_tracking_service,
+                        external_id,
+                    )
 
                 # Record processing error if entity exists and error service available
                 if entity_id and error_service:
@@ -280,12 +312,23 @@ class ProcessorHandler:
             )
 
             # Record processing result to entity even on unexpected error if entity exists
-            entity_id = getattr(message.entity_reference, "id", None) if message.entity_reference else None
+            entity_id = (
+                getattr(message.entity_reference, "id", None) if message.entity_reference else None
+            )
             if entity_id:
                 # Record failed state transition for unexpected errors
                 if state_tracking_service:
-                    external_id = message.entity_reference.external_id if message.entity_reference else None
-                    self._record_state_transition(entity_id, "processing", "error", result, state_tracking_service, external_id)
+                    external_id = (
+                        message.entity_reference.external_id if message.entity_reference else None
+                    )
+                    self._record_state_transition(
+                        entity_id,
+                        "processing",
+                        "error",
+                        result,
+                        state_tracking_service,
+                        external_id,
+                    )
 
                 # Record processing error for unexpected errors
                 if error_service:
@@ -300,7 +343,7 @@ class ProcessorHandler:
                 result.status = ProcessingStatus.DEAD_LETTERED
 
             return result
-        
+
         finally:
             # Clean up the ProcessingService session if we created a new one
             if self.db_manager and processing_service != self.processing_service:
@@ -311,7 +354,7 @@ class ProcessorHandler:
                         extra={
                             "processor_class": self.processor.__class__.__name__,
                             "session_id": id(processing_service.session),
-                        }
+                        },
                     )
                 except Exception as e:
                     self.logger.warning(
@@ -319,7 +362,7 @@ class ProcessorHandler:
                         extra={
                             "error": str(e),
                             "processor_class": self.processor.__class__.__name__,
-                        }
+                        },
                     )
 
     def _create_failure_result(
@@ -342,7 +385,11 @@ class ProcessorHandler:
             dead_letter_message = {
                 "original_message": {
                     "message_id": message.message_id,
-                    "external_id": getattr(message.entity_reference, "external_id", "unknown") if message.entity_reference else "unknown",
+                    "external_id": (
+                        getattr(message.entity_reference, "external_id", "unknown")
+                        if message.entity_reference
+                        else "unknown"
+                    ),
                     "payload": message.payload,
                 },
                 "failure_info": {
@@ -527,11 +574,17 @@ class ProcessorHandler:
         Returns:
             Entity ID if entity exists or was created, None otherwise
         """
-        if message.entity_reference and hasattr(message.entity_reference, "id") and message.entity_reference.id:
+        if (
+            message.entity_reference
+            and hasattr(message.entity_reference, "id")
+            and message.entity_reference.id
+        ):
             return message.entity_reference.id
 
         # For source processors, create stub entity
-        if hasattr(message.entity_reference, "external_id") and hasattr(message.entity_reference, "canonical_type"):
+        if hasattr(message.entity_reference, "external_id") and hasattr(
+            message.entity_reference, "canonical_type"
+        ):
             try:
                 entity_id = context.create_entity(
                     external_id=message.entity_reference.external_id,
@@ -561,7 +614,9 @@ class ProcessorHandler:
                     f"Failed to create stub entity: {str(e)}",
                     extra={
                         "external_id": getattr(message.entity_reference, "external_id", "unknown"),
-                        "canonical_type": getattr(message.entity_reference, "canonical_type", "unknown"),
+                        "canonical_type": getattr(
+                            message.entity_reference, "canonical_type", "unknown"
+                        ),
                         "processor_class": self.processor.__class__.__name__,
                         "error": str(e),
                     },
@@ -571,15 +626,17 @@ class ProcessorHandler:
 
         return None
 
-    def _create_enhanced_context(self, processing_service=None, state_tracking_service=None, error_service=None) -> ProcessorContext:
+    def _create_enhanced_context(
+        self, processing_service=None, state_tracking_service=None, error_service=None
+    ) -> ProcessorContext:
         """
         Create an enhanced ProcessorContext that includes send_output functionality.
-        
+
         Args:
             processing_service: Optional ProcessingService to use. If None, uses self.processing_service
             state_tracking_service: StateTrackingService to use (required)
             error_service: ProcessingErrorService to use (required)
-        
+
         Returns:
             ProcessorContext with send_output capability
         """
@@ -587,118 +644,122 @@ class ProcessorHandler:
         processing_service = processing_service or self.processing_service
         # state_tracking_service and error_service must be provided explicitly
         # (no more shared services that cause session conflicts)
-        
+
         # Create a custom ProcessorContext class that has access to this handler
         handler = self
-        
+
         class EnhancedProcessorContext(ProcessorContext):
             """ProcessorContext with send_output capability."""
-            
+
             def send_output(
                 self,
                 message: Message,
                 handler_type: str,
                 destinations: Optional[List[str]] = None,
-                **handler_params
+                **handler_params,
             ) -> Dict[str, Dict[str, Any]]:
                 """
                 Send a message to one or more outputs using the specified handler type.
-                
+
                 Implements the actual send_output functionality by accessing the
                 ProcessorHandler's output handlers.
                 """
                 from .output_handlers.queue_output import QueueOutputHandler
                 from .output_handlers.service_bus_output import ServiceBusOutputHandler
-                
+
                 results = {}
-                
+
                 # Handle queue output
-                if handler_type == 'queue':
+                if handler_type == "queue":
                     if not destinations:
                         raise ValueError("destinations required for queue handler")
-                    
+
                     # Send to each destination and track results
                     for destination in destinations:
                         try:
                             # Create handler for this destination
                             queue_handler = QueueOutputHandler(
-                                destination=destination,
-                                **handler_params
+                                destination=destination, **handler_params
                             )
-                            
+
                             # Execute handler
                             handler_result = queue_handler.handle(message)
-                            
+
                             results[destination] = {
-                                'success': handler_result.success,
-                                'status': handler_result.status,
-                                'message_id': handler_result.output_message_id,
+                                "success": handler_result.success,
+                                "status": handler_result.status,
+                                "message_id": handler_result.output_message_id,
                             }
-                            
+
                             if not handler_result.success:
-                                results[destination].update({
-                                    'error': handler_result.error_message,
-                                    'error_code': handler_result.error_code,
-                                })
-                                
+                                results[destination].update(
+                                    {
+                                        "error": handler_result.error_message,
+                                        "error_code": handler_result.error_code,
+                                    }
+                                )
+
                         except Exception as e:
                             results[destination] = {
-                                'success': False,
-                                'status': 'failed',
-                                'error': str(e),
-                                'error_code': 'HANDLER_EXCEPTION',
+                                "success": False,
+                                "status": "failed",
+                                "error": str(e),
+                                "error_code": "HANDLER_EXCEPTION",
                             }
-                
+
                 # Handle service bus output
-                elif handler_type == 'service_bus':
-                    topic = handler_params.get('topic')
+                elif handler_type == "service_bus":
+                    topic = handler_params.get("topic")
                     if not topic:
                         raise ValueError("topic required for service_bus handler")
-                    
+
                     try:
-                        sb_handler = ServiceBusOutputHandler(
-                            topic=topic,
-                            **handler_params
-                        )
-                        
+                        sb_handler = ServiceBusOutputHandler(topic=topic, **handler_params)
+
                         handler_result = sb_handler.handle(message)
-                        
+
                         results[topic] = {
-                            'success': handler_result.success,
-                            'status': handler_result.status,
-                            'message_id': handler_result.output_message_id,
+                            "success": handler_result.success,
+                            "status": handler_result.status,
+                            "message_id": handler_result.output_message_id,
                         }
-                        
+
                         if not handler_result.success:
-                            results[topic].update({
-                                'error': handler_result.error_message,
-                                'error_code': handler_result.error_code,
-                            })
-                            
+                            results[topic].update(
+                                {
+                                    "error": handler_result.error_message,
+                                    "error_code": handler_result.error_code,
+                                }
+                            )
+
                     except Exception as e:
                         results[topic] = {
-                            'success': False,
-                            'status': 'failed',
-                            'error': str(e),
-                            'error_code': 'HANDLER_EXCEPTION',
+                            "success": False,
+                            "status": "failed",
+                            "error": str(e),
+                            "error_code": "HANDLER_EXCEPTION",
                         }
-                
+
                 else:
                     raise ValueError(f"Unsupported handler type: {handler_type}")
-                
+
                 # Log output results
                 handler.logger.info(
-                    f"send_output completed",
+                    "send_output completed",
                     extra={
-                        'handler_type': handler_type,
-                        'destinations': destinations if handler_type == 'queue' else [handler_params.get('topic')],
-                        'success_count': sum(1 for r in results.values() if r['success']),
-                        'failure_count': sum(1 for r in results.values() if not r['success']),
-                    }
+                        "handler_type": handler_type,
+                        "destinations": (
+                            destinations
+                            if handler_type == "queue"
+                            else [handler_params.get("topic")]
+                        ),
+                        "success_count": sum(1 for r in results.values() if r["success"]),
+                        "failure_count": sum(1 for r in results.values() if not r["success"]),
+                    },
                 )
-                
+
                 return results
-        
+
         # Create and return enhanced context
         return EnhancedProcessorContext(
             processing_service=processing_service,
@@ -762,7 +823,13 @@ class ProcessorHandler:
             )
 
     def _record_state_transition(
-        self, entity_id: str, from_state: str, to_state: str, processing_result: "ProcessingResult", state_tracking_service=None, external_id: str = None
+        self,
+        entity_id: str,
+        from_state: str,
+        to_state: str,
+        processing_result: "ProcessingResult",
+        state_tracking_service=None,
+        external_id: str = None,
     ) -> None:
         """
         Record state transition for entity processing.
@@ -777,9 +844,11 @@ class ProcessorHandler:
         # Use provided service (required - no fallback to prevent session conflicts)
         service = state_tracking_service
         if not service:
-            self.logger.warning("No state tracking service provided - state transition not recorded")
+            self.logger.warning(
+                "No state tracking service provided - state transition not recorded"
+            )
             return
-        
+
         try:
             processor_data = {
                 "processor_name": self.processor.__class__.__name__,
@@ -788,11 +857,13 @@ class ProcessorHandler:
             }
 
             if not processing_result.success:
-                processor_data.update({
-                    "error_code": processing_result.error_code,
-                    "error_message": processing_result.error_message,
-                    "can_retry": processing_result.can_retry,
-                })
+                processor_data.update(
+                    {
+                        "error_code": processing_result.error_code,
+                        "error_message": processing_result.error_message,
+                        "can_retry": processing_result.can_retry,
+                    }
+                )
 
             service.record_transition(
                 entity_id=entity_id,
@@ -843,7 +914,7 @@ class ProcessorHandler:
         if not service:
             self.logger.warning("No error service provided - processing error not recorded")
             return
-        
+
         try:
             from ...schemas.processing_error_schema import ProcessingErrorCreate
 

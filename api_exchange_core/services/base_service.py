@@ -6,16 +6,16 @@ reduce duplication across service implementations.
 """
 
 import logging
-from typing import Any, Dict, Generic, List, NoReturn, Optional, Type, TypeVar
 from contextlib import contextmanager
+from typing import Any, Dict, Generic, List, NoReturn, Optional, Type, TypeVar
 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..context.operation_context import operation
+from ..db.db_config import get_production_config
 from ..exceptions import ErrorCode, RepositoryError, ServiceError
 from ..utils.logger import get_logger
-from ..db.db_config import get_production_config
 
 # Type variables for schema models
 TCreate = TypeVar("TCreate", bound=BaseModel)
@@ -165,11 +165,11 @@ class BaseService(Generic[TCreate, TRead, TUpdate, TFilter]):
 class SessionManagedService(BaseService[TCreate, TRead, TUpdate, TFilter]):
     """
     Service that owns and manages its own database session.
-    
+
     This is the new pattern where each service has its own session,
     eliminating the session conflicts we had with shared sessions.
     """
-    
+
     def __init__(
         self,
         repository_class: Optional[Type] = None,
@@ -179,7 +179,7 @@ class SessionManagedService(BaseService[TCreate, TRead, TUpdate, TFilter]):
     ):
         """
         Initialize service with its own session.
-        
+
         Args:
             repository_class: DEPRECATED - Repository class (for backward compatibility)
             read_schema_class: DEPRECATED - Pydantic schema class (for backward compatibility)
@@ -193,13 +193,13 @@ class SessionManagedService(BaseService[TCreate, TRead, TUpdate, TFilter]):
         else:
             self.session = self._create_session()
             self._owns_session = True
-            
+
         # Legacy repository support (DEPRECATED - use SQLAlchemy directly)
         if repository_class:
             repository = repository_class(self.session)
         else:
             repository = None
-        
+
         # Initialize base service if repository exists (for backward compatibility)
         if repository:
             super().__init__(repository, read_schema_class, logger)
@@ -207,21 +207,21 @@ class SessionManagedService(BaseService[TCreate, TRead, TUpdate, TFilter]):
             # For Pythonic services, initialize manually
             self.read_schema_class = read_schema_class
             self.logger = logger or get_logger()
-        
+
     def _create_session(self) -> Session:
         """Create a new database session."""
         from sqlalchemy import create_engine
-        
+
         db_config = get_production_config()
         engine = create_engine(db_config.get_connection_string())
         Session = sessionmaker(bind=engine)
         return Session()
-    
+
     @contextmanager
     def transaction(self):
         """
         Context manager for transactional operations.
-        
+
         Usage:
             with service.transaction():
                 service.create_something()
@@ -236,26 +236,26 @@ class SessionManagedService(BaseService[TCreate, TRead, TUpdate, TFilter]):
             if self._owns_session:
                 self.session.rollback()
             raise
-    
+
     def commit(self):
         """Manually commit the current transaction."""
         if self._owns_session:
             self.session.commit()
-    
+
     def rollback(self):
-        """Manually rollback the current transaction.""" 
+        """Manually rollback the current transaction."""
         if self._owns_session:
             self.session.rollback()
-    
+
     def close(self):
         """Close the session if we own it."""
         if self._owns_session and self.session:
             self.session.close()
-    
+
     def __enter__(self):
         """Support for 'with' statement."""
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Auto-close session on exit."""
         if exc_type:

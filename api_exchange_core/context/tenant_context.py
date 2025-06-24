@@ -20,7 +20,6 @@ if TYPE_CHECKING:
     from ..schemas.tenant_schema import TenantRead
 
 
-
 class TenantContext:
     """
     Manages tenant context throughout the application using thread-local storage.
@@ -102,8 +101,8 @@ class TenantContext:
         Returns:
             TenantRead schema object or None if not found
         """
-        from ..services.tenant_service import TenantService
         from ..exceptions import ServiceError
+        from ..services.tenant_service import TenantService
 
         if not TYPE_CHECKING:
             from ..schemas.tenant_schema import TenantRead  # noqa: F401

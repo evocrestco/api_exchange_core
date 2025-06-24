@@ -10,7 +10,7 @@ import enum
 
 class TransitionTypeEnum(enum.Enum):
     """Types of state transitions."""
-    
+
     NORMAL = "NORMAL"
     ERROR = "ERROR"
     RETRY = "RETRY"

@@ -9,8 +9,8 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 from ..context.operation_context import operation
-from .duplicate_detection import DuplicateDetectionResult
 from ..utils.logger import get_logger
+from .duplicate_detection import DuplicateDetectionResult
 
 
 class EntityAttributeBuilder:

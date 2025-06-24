@@ -32,7 +32,7 @@ from .queue_output import QueueOutputHandler
 
 # Import ServiceBusOutputHandler only if azure-servicebus is available
 try:
-    from .service_bus_output import ServiceBusOutputHandler
+    from .service_bus_output import ServiceBusOutputHandler  # noqa: F401
 
     __all__ = [
         "OutputHandler",

@@ -11,9 +11,9 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 
-from sqlalchemy import exists, and_
-from sqlalchemy.exc import IntegrityError
 from pydantic import ValidationError as PydanticValidationError
+from sqlalchemy import and_, exists
+from sqlalchemy.exc import IntegrityError
 
 from ..context.operation_context import OperationHandler, operation
 from ..context.tenant_context import tenant_aware
@@ -21,9 +21,9 @@ from ..db.db_entity_models import Entity
 from ..db.db_tenant_models import Tenant
 from ..exceptions import ErrorCode, ServiceError, ValidationError
 from ..schemas import EntityCreate, EntityFilter, EntityRead
-from .base_service import SessionManagedService
 from ..utils.hash_config import HashConfig
 from ..utils.hash_utils import calculate_entity_hash
+from .base_service import SessionManagedService
 
 
 class EntityService(SessionManagedService):
@@ -33,7 +33,7 @@ class EntityService(SessionManagedService):
     This service handles entity creation, retrieval, and versioning operations
     following the principle that entities are immutable and changes are
     represented by creating new versions rather than updating existing records.
-    
+
     Uses SQLAlchemy directly - simple, explicit, and efficient.
     """
 
@@ -55,7 +55,6 @@ class EntityService(SessionManagedService):
         if content is None:
             return None
         return calculate_entity_hash(data=content, config=hash_config)
-
 
     @tenant_aware
     @operation(name="entity_service_create")
@@ -170,7 +169,7 @@ class EntityService(SessionManagedService):
                 ) from e
             else:
                 raise ServiceError(
-                    f"Entity creation failed due to data integrity constraints",
+                    "Entity creation failed due to data integrity constraints",
                     error_code=ErrorCode.INVALID_DATA,
                     operation="create_entity",
                     entity_external_id=external_id,
@@ -214,7 +213,7 @@ class EntityService(SessionManagedService):
         """
         try:
             tenant_id = self._get_current_tenant_id()
-            
+
             # Get the current max version
             current_max_version = self.get_max_version(external_id, source)
             new_version = current_max_version + 1
@@ -237,9 +236,9 @@ class EntityService(SessionManagedService):
                     operation="create_new_version",
                     tenant_id=tenant_id,
                 )
-            
+
             canonical_type = latest_entity_read.canonical_type
-            
+
             # Calculate content hash
             content_hash = self._calculate_content_hash(content, hash_config)
 
@@ -299,10 +298,10 @@ class EntityService(SessionManagedService):
         """
         try:
             tenant_id = self._get_current_tenant_id()
-            
+
             # Query for the maximum version directly using SQL's MAX function
             from sqlalchemy import func
-            
+
             max_version = (
                 self.session.query(func.max(Entity.version))
                 .filter(
@@ -315,7 +314,7 @@ class EntityService(SessionManagedService):
 
             # If no entities found, return 0 (versions start at 1)
             return max_version or 0
-            
+
         except Exception as e:
             self._handle_service_exception("get_max_version", e)
 
@@ -336,7 +335,7 @@ class EntityService(SessionManagedService):
         """
         try:
             tenant_id = self._get_current_tenant_id()
-            
+
             # Query entity directly with SQLAlchemy
             entity = (
                 self.session.query(Entity)
@@ -391,7 +390,7 @@ class EntityService(SessionManagedService):
         """
         try:
             tenant_id = self._get_current_tenant_id()
-            
+
             # Base query with SQLAlchemy
             base_query = self.session.query(Entity).filter(
                 Entity.external_id == external_id,
@@ -431,7 +430,7 @@ class EntityService(SessionManagedService):
         """
         try:
             tenant_id = self._get_current_tenant_id()
-            
+
             entity = (
                 self.session.query(Entity)
                 .filter(
@@ -464,7 +463,7 @@ class EntityService(SessionManagedService):
         """
         try:
             tenant_id = self._get_current_tenant_id()
-            
+
             # Get entity for deletion
             entity = (
                 self.session.query(Entity)
@@ -474,16 +473,16 @@ class EntityService(SessionManagedService):
                 )
                 .first()
             )
-            
+
             if not entity:
                 return False
-                
+
             self.session.delete(entity)
             # Transaction managed by caller
-            
+
             self.logger.info(f"Deleted entity: id={entity_id}, tenant={tenant_id}")
             return True
-            
+
         except Exception as e:
             # Transaction managed by caller
             self._handle_service_exception("delete_entity", e, entity_id)
@@ -544,16 +543,16 @@ class EntityService(SessionManagedService):
 
             # Get total count before pagination
             total_count = query.count()
-            
+
             # Apply ordering and pagination
             query = query.order_by(Entity.updated_at.desc())
             query = query.offset(offset).limit(limit)
-            
+
             # Execute query
             entities = query.all()
-            
+
             entity_reads = [EntityRead.model_validate(entity) for entity in entities]
-            
+
             return entity_reads, total_count
 
         except Exception as e:
@@ -577,7 +576,7 @@ class EntityService(SessionManagedService):
         """
         try:
             tenant_id = self._get_current_tenant_id()
-            
+
             # Check if entity exists using exists() for efficiency
             exists_query = self.session.query(
                 exists().where(
@@ -588,9 +587,9 @@ class EntityService(SessionManagedService):
                     )
                 )
             ).scalar()
-            
+
             return exists_query
-            
+
         except Exception as e:
             self._handle_service_exception("check_entity_existence", e)
 
@@ -615,7 +614,7 @@ class EntityService(SessionManagedService):
         """
         try:
             tenant_id = self._get_current_tenant_id()
-            
+
             # Get entity for update
             entity = (
                 self.session.query(Entity)
@@ -625,7 +624,7 @@ class EntityService(SessionManagedService):
                 )
                 .first()
             )
-            
+
             if not entity:
                 raise ServiceError(
                     f"Entity not found: {entity_id}",
@@ -642,12 +641,13 @@ class EntityService(SessionManagedService):
             # Update attributes and mark as modified
             entity.attributes = updated_attributes
             entity.updated_at = datetime.utcnow()
-            
+
             # Flag the JSONB column as modified for SQLAlchemy
             from sqlalchemy.orm.attributes import flag_modified
+
             flag_modified(entity, "attributes")
             # Transaction managed by caller
-            
+
             self.logger.info(f"Updated attributes for entity {entity_id}")
             return True
 
@@ -718,7 +718,7 @@ class EntityService(SessionManagedService):
         """
         try:
             tenant_id = self._get_current_tenant_id()
-            
+
             # Get entity for update
             entity = (
                 self.session.query(Entity)
@@ -728,7 +728,7 @@ class EntityService(SessionManagedService):
                 )
                 .first()
             )
-            
+
             if not entity:
                 raise ServiceError(
                     f"Entity not found: {entity_id}",
@@ -750,14 +750,15 @@ class EntityService(SessionManagedService):
 
             # Flag the JSONB column as modified for SQLAlchemy
             from sqlalchemy.orm.attributes import flag_modified
+
             flag_modified(entity, "processing_results")
 
             # Update the entity's updated_at timestamp
             entity.updated_at = datetime.utcnow()
             # Transaction managed by caller
-            
+
             return True
-            
+
         except Exception as e:
             # Transaction managed by caller
             if isinstance(e, ServiceError):
@@ -781,7 +782,7 @@ class EntityService(SessionManagedService):
         """
         try:
             tenant_id = self._get_current_tenant_id()
-            
+
             # Get entity
             entity = (
                 self.session.query(Entity)
@@ -791,7 +792,7 @@ class EntityService(SessionManagedService):
                 )
                 .first()
             )
-            
+
             if not entity:
                 raise ServiceError(
                     f"Entity not found: {entity_id}",
@@ -844,7 +845,7 @@ class EntityService(SessionManagedService):
                 summary["processors_involved"] = sorted(list(processor_names))
 
             return summary
-            
+
         except Exception as e:
             if isinstance(e, ServiceError):
                 raise

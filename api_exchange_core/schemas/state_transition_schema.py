@@ -10,8 +10,8 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..enums import TransitionTypeEnum
-from .mixins import CoreEntityMixin, DateRangeFilterMixin
 from ..type_definitions import ProcessorData
+from .mixins import CoreEntityMixin, DateRangeFilterMixin
 
 
 class StateTransitionBase(BaseModel):

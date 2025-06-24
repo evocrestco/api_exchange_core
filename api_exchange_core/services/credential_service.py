@@ -8,6 +8,9 @@ proper tenant isolation, security validation, and comprehensive audit trails.
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
+from sqlalchemy import and_
+from sqlalchemy.orm import Session
+
 from ..context.operation_context import operation
 from ..context.tenant_context import TenantContext, tenant_aware
 from ..db.db_credential_models import ExternalCredential
@@ -19,10 +22,8 @@ from ..exceptions import (
     TokenNotAvailableError,
     ValidationError,
 )
-from sqlalchemy import and_
-from sqlalchemy.orm import Session
-from .api_token_service import APITokenService
 from ..utils.logger import get_logger
+from .api_token_service import APITokenService
 
 
 class CredentialService:
@@ -46,7 +47,7 @@ class CredentialService:
         self.session = session
         self.api_token_service = api_token_service
         self.logger = get_logger()
-    
+
     def _get_current_tenant_id(self) -> str:
         """Get the current tenant ID from context."""
         tenant_id = TenantContext.get_current_tenant_id()
@@ -242,10 +243,10 @@ class CredentialService:
                 expires_at=expires_at,
                 is_active="active",
             )
-            
+
             # Set credentials (triggers encryption)
             credential.set_credentials(credentials, self.session)
-            
+
             # Save to database
             self.session.add(credential)
             self.session.flush()  # Get the ID
@@ -315,19 +316,19 @@ class CredentialService:
             )
             .first()
         )
-        
+
         if not credential:
             raise CredentialNotFoundError(
                 f"No credential found for system '{system_name}' in tenant '{tenant_id}'"
             )
-            
+
         # Update credentials (triggers re-encryption)
         credential.set_credentials(credentials, self.session)
-        
+
         # Update expiration if provided
         if expires_at is not None:
             credential.expires_at = expires_at
-            
+
         self.session.flush()
 
         self.logger.info(
@@ -371,7 +372,7 @@ class CredentialService:
             )
             .first()
         )
-        
+
         deleted = False
         if credential:
             self.session.delete(credential)
@@ -514,9 +515,6 @@ class CredentialService:
                 return None
 
             token_value, token_id = result
-
-            # Get token details to check expiration with buffer
-            stats = self.api_token_service.get_token_statistics()
 
             # Note: This is a simplified implementation. In a full implementation,
             # we would need to check the specific token's expiration time against the buffer.

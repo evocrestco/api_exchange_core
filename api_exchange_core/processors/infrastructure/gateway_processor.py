@@ -30,11 +30,11 @@ import operator
 from datetime import UTC, datetime
 from typing import Any, Dict, Optional
 
+from ...utils.logger import get_logger
 from ..processing_result import ProcessingResult
 from ..v2.message import Message
 from ..v2.output_handlers.queue_output import QueueOutputHandler
 from ..v2.processor_interface import ProcessorContext, ProcessorInterface
-from ...utils.logger import get_logger
 
 
 class GatewayProcessor(ProcessorInterface):
@@ -119,7 +119,7 @@ class GatewayProcessor(ProcessorInterface):
             return ProcessingResult.create_failure(
                 error_message="No entity reference in message - gateway requires existing entity",
                 error_code="MISSING_ENTITY_REFERENCE",
-                can_retry=False
+                can_retry=False,
             )
 
         # Record state transition: processing started
@@ -131,8 +131,8 @@ class GatewayProcessor(ProcessorInterface):
                 "processor_name": "GatewayProcessor",
                 "operation": "route_message",
                 "message_id": message.message_id,
-                "rules_count": len(self.rules)
-            }
+                "rules_count": len(self.rules),
+            },
         )
 
         # Track routing decisions
@@ -207,21 +207,23 @@ class GatewayProcessor(ProcessorInterface):
                     "processor_name": "GatewayProcessor",
                     "operation": "route_completed",
                     "routing_summary": routing_metadata,
-                    "processing_time_ms": int((datetime.now(UTC) - start_time).total_seconds() * 1000)
-                }
+                    "processing_time_ms": int(
+                        (datetime.now(UTC) - start_time).total_seconds() * 1000
+                    ),
+                },
             )
         else:
             # No destinations found - routing failed
             context.track_state(
                 entity_id=entity_id,
-                from_state="GATEWAY_PROCESSING", 
+                from_state="GATEWAY_PROCESSING",
                 to_state="ROUTING_FAILED",
                 metadata={
                     "processor_name": "GatewayProcessor",
                     "operation": "route_failed",
                     "reason": "No rules matched and no default destination",
-                    "routing_summary": routing_metadata
-                }
+                    "routing_summary": routing_metadata,
+                },
             )
 
         # Log routing summary

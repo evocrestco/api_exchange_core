@@ -6,6 +6,6 @@ from .credential_repository import CredentialRepository
 
 __all__ = [
     "APITokenRepository",
-    "BaseRepository", 
+    "BaseRepository",
     "CredentialRepository",
 ]

@@ -68,11 +68,11 @@ def calculate_exponential_backoff(
 
         jitter_range = delay * 0.25
         jittered_delay = delay + random.uniform(-jitter_range, jitter_range)
-        
+
         # Ensure jitter doesn't reduce delay below the base calculation for this retry count
         min_delay_for_retry = base_delay * (multiplier ** max(0, retry_count))
         delay = max(jittered_delay, min_delay_for_retry)
-    
+
     # Return as integer, ensuring we don't go below base_delay
     return max(int(delay), base_delay)
 
@@ -112,7 +112,9 @@ class OutputHandlerError(Exception):
         self.error_details = error_details or {}
         self.original_exception = original_exception
 
-    def calculate_retry_delay(self, retry_count: int, base_delay: Optional[int] = None, jitter: bool = True) -> int:
+    def calculate_retry_delay(
+        self, retry_count: int, base_delay: Optional[int] = None, jitter: bool = True
+    ) -> int:
         """
         Calculate retry delay using exponential backoff.
 

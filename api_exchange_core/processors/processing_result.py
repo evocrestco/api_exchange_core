@@ -109,20 +109,22 @@ class ProcessingResult(BaseModel):
 
     can_retry: bool = Field(default=True, description="Whether this processing can be retried")
 
-    @field_serializer('output_handlers')
+    @field_serializer("output_handlers")
     def serialize_output_handlers(self, output_handlers: List[Any], _info) -> List[Dict[str, Any]]:
         """Serialize output handlers to their JSON-safe metadata representation."""
         serialized = []
         for handler in output_handlers:
-            if hasattr(handler, 'get_handler_info'):
+            if hasattr(handler, "get_handler_info"):
                 # Use the handler's own serialization method
                 serialized.append(handler.get_handler_info())
             else:
                 # Fallback for handlers without the method
-                serialized.append({
-                    'handler_type': handler.__class__.__name__,
-                    'destination': getattr(handler, 'destination', 'unknown')
-                })
+                serialized.append(
+                    {
+                        "handler_type": handler.__class__.__name__,
+                        "destination": getattr(handler, "destination", "unknown"),
+                    }
+                )
         return serialized
 
     @classmethod

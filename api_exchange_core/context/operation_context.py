@@ -10,10 +10,13 @@ import time
 import uuid
 from contextlib import contextmanager
 from functools import wraps
-from typing import Any, Callable, Dict, Optional, TypeVar, Union, cast
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, TypeVar, Union, cast
 
-from .tenant_context import TenantContext
+if TYPE_CHECKING:
+    from ..utils.logger import ContextAwareLogger
+
 from ..exceptions import BaseError, get_correlation_id, set_correlation_id
+from .tenant_context import TenantContext
 
 
 class OperationContext:
@@ -60,6 +63,7 @@ class OperationHandler:
     ):
         if logger is None:
             from ..utils.logger import get_logger
+
             logger = get_logger()
         self.logger = logger
 
@@ -103,8 +107,9 @@ class OperationHandler:
 
             try:
                 from ..config import get_config
+
                 app_config = get_config()
-                
+
                 # Only send metrics to queue if enabled
                 if app_config.features.enable_metrics_queue:
                     from ..schemas.metric_model import OperationMetric
@@ -153,8 +158,9 @@ class OperationHandler:
             # Send error metric
             try:
                 from ..config import get_config
+
                 app_config = get_config()
-                
+
                 # Only send metrics to queue if enabled
                 if app_config.features.enable_metrics_queue:
                     from ..schemas.metric_model import OperationMetric
@@ -226,6 +232,7 @@ def operation(name: Union[Optional[str], Callable] = None):
         @wraps(func)
         def wrapper(*args, **kwargs) -> Any:
             from ..utils.logger import get_logger
+
             logger = get_logger()
             # Generate operation name that includes class information if it's a method
             if name is not None:
