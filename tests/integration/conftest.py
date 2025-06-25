@@ -38,7 +38,6 @@ def setup_integration_environment():
     try:
         # Load integration test .env file
         env_file = Path(__file__).parent / ".env"
-        print(f"DEBUG: Loading integration .env from: {env_file}")
         
         if env_file.exists():
             # Manual .env loading to avoid dotenv dependency conflicts
@@ -48,16 +47,11 @@ def setup_integration_environment():
                     if line and not line.startswith('#') and '=' in line:
                         key, value = line.split('=', 1)
                         os.environ[key] = value
-                        print(f"DEBUG: Set {key}={value[:20]}...")  # Show first 20 chars
-        
-        print(f"DEBUG: Integration environment loaded - TENANT_ID={os.getenv('TENANT_ID')}")
-        print(f"DEBUG: Integration environment loaded - DB_NAME={os.getenv('DB_NAME')}")
         
         yield
         
     finally:
         # Restore original environment
-        print("DEBUG: Restoring original environment...")
         os.environ.clear()
         os.environ.update(original_env)
 
