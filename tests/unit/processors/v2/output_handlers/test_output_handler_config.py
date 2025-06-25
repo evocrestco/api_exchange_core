@@ -293,7 +293,8 @@ class TestOutputHandlerConfigFactory:
     
     def test_unsupported_handler_type(self):
         """Test error on unsupported handler type."""
-        with pytest.raises(ValueError) as exc_info:
+        from api_exchange_core.exceptions import ValidationError
+        with pytest.raises(ValidationError) as exc_info:
             OutputHandlerConfigFactory.create_config(
                 "unsupported",
                 "test"
@@ -386,10 +387,11 @@ class TestOutputHandlerConfigFactory:
     
     def test_register_invalid_config_class(self):
         """Test error when registering invalid config class."""
+        from api_exchange_core.exceptions import ValidationError
         class NotAConfig:
             pass
         
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ValidationError) as exc_info:
             OutputHandlerConfigFactory.register_handler_config(
                 "invalid",
                 NotAConfig

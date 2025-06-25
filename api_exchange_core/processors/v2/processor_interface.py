@@ -130,6 +130,7 @@ class ConfigurableProcessor(ProcessorInterface):
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Tuple
 
+from ...exceptions import ErrorCode, ServiceError
 from ..processing_result import ProcessingResult
 from .message import Message
 
@@ -215,7 +216,12 @@ class ProcessorContext:
         # Get entity details to build entity reference
         entity = self.processing_service.entity_service.get_entity(entity_id)
         if not entity:
-            raise ValueError(f"Entity not found: {entity_id}")
+            raise ServiceError(
+                f"Entity not found: {entity_id}",
+                error_code=ErrorCode.NOT_FOUND,
+                operation="create_message",
+                entity_id=entity_id
+            )
 
         from .message import EntityReference, Message, MessageType
 
@@ -318,8 +324,10 @@ class ProcessorContext:
             # }
         """
         # This will be implemented in ProcessorHandler since it has access to output handlers
-        raise NotImplementedError(
-            "send_output should be called through ProcessorHandler, not directly on ProcessorContext"
+        raise ServiceError(
+            "send_output should be called through ProcessorHandler, not directly on ProcessorContext",
+            error_code=ErrorCode.CONFIGURATION_ERROR,
+            operation="send_output"
         )
 
     def create_and_send_output(

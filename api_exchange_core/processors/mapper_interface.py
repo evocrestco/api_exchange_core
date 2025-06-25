@@ -8,6 +8,8 @@ transformation logic that can be composed into processors.
 from abc import ABC, abstractmethod
 from typing import Any, Dict
 
+from ..exceptions import ErrorCode, ValidationError
+
 
 class MapperInterface(ABC):
     """
@@ -193,7 +195,12 @@ class CompositeMapper(MapperInterface):
             mappers: List of mappers to chain together
         """
         if not mappers:
-            raise ValueError("CompositeMapper requires at least one mapper")
+            raise ValidationError(
+                "CompositeMapper requires at least one mapper",
+                error_code=ErrorCode.MISSING_REQUIRED,
+                field="mappers",
+                value=mappers
+            )
 
         self.mappers = mappers
 

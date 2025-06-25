@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING, Any, Callable, Generator, Optional, Union
 
 from sqlalchemy.orm import Session
 
+from ..exceptions import ErrorCode, ValidationError
+
 if TYPE_CHECKING:
     from ..schemas.tenant_schema import TenantRead
 
@@ -44,7 +46,12 @@ class TenantContext:
             ValueError: If tenant_id is empty or invalid
         """
         if not tenant_id or not isinstance(tenant_id, str) or not tenant_id.strip():
-            raise ValueError("tenant_id must be a non-empty string")
+            raise ValidationError(
+                "tenant_id must be a non-empty string",
+                error_code=ErrorCode.MISSING_REQUIRED,
+                field="tenant_id",
+                value=tenant_id
+            )
 
         cls._thread_local.tenant_id = tenant_id.strip()
         cls._logger.debug(f"Current tenant set to: {tenant_id}")
@@ -200,7 +207,11 @@ def tenant_aware(tenant_id: Union[Optional[str], Callable] = None):
                     return func(*args, **kwargs)
             else:
                 TenantContext._logger.warning("No tenant ID provided for tenant-aware function")
-                raise ValueError("No tenant ID provided for tenant-aware function")
+                raise ValidationError(
+                    "No tenant ID provided for tenant-aware function",
+                    error_code=ErrorCode.MISSING_REQUIRED,
+                    field="tenant_id"
+                )
 
         return wrapper
 

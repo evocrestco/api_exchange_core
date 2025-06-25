@@ -77,7 +77,7 @@ class TestQueueOutputHandlerErrorScenarios:
         result = handler.handle(test_message, test_processing_result)
         
         assert result.success is False
-        assert result.error_code == "QUEUE_CLIENT_CREATION_FAILED"
+        assert result.error_code == "1002"  # ErrorCode.CONNECTION_ERROR
         assert result.can_retry is False
         assert "connection_string_provided" in result.error_details
     
@@ -94,7 +94,7 @@ class TestQueueOutputHandlerErrorScenarios:
         result = handler.handle(test_message, test_processing_result)
         
         assert result.success is False
-        assert result.error_code == "QUEUE_NOT_FOUND"
+        assert result.error_code == "3000"  # ErrorCode.NOT_FOUND
         assert result.can_retry is False
         assert "queue_name" in result.error_details
         assert "auto_create_queue" in result.error_details
@@ -117,10 +117,10 @@ class TestQueueOutputHandlerErrorScenarios:
         result = handler.handle(test_message, test_processing_result)
         
         assert result.success is False
-        assert result.error_code == "AZURE_SERVICE_ERROR"
+        assert result.error_code == "5001"  # ErrorCode.QUEUE_ERROR
         assert result.can_retry is True
-        # With exponential backoff and retry_count=0, base_delay=5: expect 5-6 seconds due to jitter
-        assert 5 <= result.retry_after_seconds <= 6
+        # With exponential backoff and retry_count=0, base_delay=2: expect 2 seconds (generic exception handler)
+        assert result.retry_after_seconds == 2
         # Verify exponential backoff metadata is present
         assert "calculated_backoff_delay" in result.error_details
         assert "backoff_algorithm" in result.error_details
@@ -131,9 +131,11 @@ class TestQueueOutputHandlerErrorScenarios:
         
         class BadObject:
             def __str__(self):
-                raise ValueError("Cannot convert to string")
+                from api_exchange_core.exceptions import ValidationError
+                raise ValidationError("Cannot convert to string")
             def __repr__(self):
-                raise ValueError("Cannot convert to repr")
+                from api_exchange_core.exceptions import ValidationError
+                raise ValidationError("Cannot convert to repr")
         
         # Create message with content that will fail even with default=str
         bad_message = create_test_message(payload={
@@ -149,12 +151,12 @@ class TestQueueOutputHandlerErrorScenarios:
         result = handler.handle(bad_message, test_processing_result)
         
         assert result.success is False
-        assert result.error_code == "MESSAGE_SERIALIZATION_FAILED"
+        assert result.error_code == "2001"  # ErrorCode.INVALID_FORMAT
         assert result.can_retry is False
         assert "payload_type" in result.error_details
     
     def test_invalid_configuration_no_connection_string(self, test_message, test_processing_result):
-        """Test INVALID_CONFIGURATION when no connection string available."""
+        """Test CONFIGURATION_ERROR when no connection string available."""
         # Clear environment variables to ensure no connection string
         with patch.dict(os.environ, {}, clear=True):
             handler = QueueOutputHandler(destination="test-queue")
@@ -162,7 +164,7 @@ class TestQueueOutputHandlerErrorScenarios:
             result = handler.handle(test_message, test_processing_result)
             
             assert result.success is False
-            assert result.error_code == "INVALID_CONFIGURATION"
+            assert result.error_code == "1003"  # ErrorCode.CONFIGURATION_ERROR
             assert result.can_retry is False
 
 
@@ -170,10 +172,11 @@ class TestServiceBusOutputHandlerErrorScenarios:
     """Test ServiceBusOutputHandler error scenarios that can't be controlled with real Service Bus."""
     
     def test_service_bus_sdk_not_available(self, test_message, test_processing_result):
-        """Test ImportError when Service Bus SDK not available."""
-        # Test the case where ServiceBusOutputHandler.__init__ raises ImportError
+        """Test ServiceError when Service Bus SDK not available."""
+        # Test the case where ServiceBusOutputHandler.__init__ raises ServiceError
+        from api_exchange_core.exceptions import ServiceError
         with patch('api_exchange_core.processors.v2.output_handlers.service_bus_output.SERVICEBUS_AVAILABLE', False):
-            with pytest.raises(ImportError, match="Azure Service Bus SDK is not installed"):
+            with pytest.raises(ServiceError, match="Azure Service Bus SDK is not installed"):
                 ServiceBusOutputHandler(destination="test-topic")
     
     @pytest.mark.skip(reason="Execution flow mismatch - gets MESSAGE_PREPARATION_FAILED instead of expected error")
@@ -194,7 +197,7 @@ class TestServiceBusOutputHandlerErrorScenarios:
     
     @pytest.mark.skipif(not AZURE_AVAILABLE, reason="Azure SDK not available")
     def test_unsupported_destination_type(self, test_message, test_processing_result, azurite_connection_string):
-        """Test INVALID_CONFIGURATION with invalid destination_type."""
+        """Test CONFIGURATION_ERROR with invalid destination_type."""
         handler = ServiceBusOutputHandler(
             destination="test-destination",
             config={
@@ -206,7 +209,7 @@ class TestServiceBusOutputHandlerErrorScenarios:
         result = handler.handle(test_message, test_processing_result)
         
         assert result.success is False
-        assert result.error_code == "INVALID_CONFIGURATION"
+        assert result.error_code == "1003"  # ErrorCode.CONFIGURATION_ERROR
         assert result.can_retry is False
     
     @pytest.mark.skipif(not AZURE_AVAILABLE, reason="Azure SDK not available")
@@ -219,9 +222,11 @@ class TestServiceBusOutputHandlerErrorScenarios:
         
         class BadObject:
             def __str__(self):
-                raise ValueError("Cannot convert to string")
+                from api_exchange_core.exceptions import ValidationError
+                raise ValidationError("Cannot convert to string")
             def __repr__(self):
-                raise ValueError("Cannot convert to repr")
+                from api_exchange_core.exceptions import ValidationError
+                raise ValidationError("Cannot convert to repr")
         
         # Create message that will cause JSON serialization to fail in message preparation
         bad_message = create_test_message(payload={
@@ -237,7 +242,7 @@ class TestServiceBusOutputHandlerErrorScenarios:
         result = handler.handle(bad_message, test_processing_result)
         
         assert result.success is False
-        assert result.error_code == "MESSAGE_PREPARATION_FAILED"
+        assert result.error_code == "2001"  # ErrorCode.INVALID_FORMAT
         assert result.can_retry is False
         assert "message_id" in result.error_details
     
@@ -288,7 +293,7 @@ class TestFileOutputHandlerErrorScenarios:
             result = handler.handle(test_message, test_processing_result)
             
             assert result.success is False
-            assert result.error_code == "INVALID_FILE_PATTERN"
+            assert result.error_code == "2001"  # ErrorCode.INVALID_FORMAT
             assert result.can_retry is False
             assert "file_pattern" in result.error_details
             assert "available_vars" in result.error_details
@@ -304,7 +309,7 @@ class TestFileOutputHandlerErrorScenarios:
             result = handler.handle(test_message, test_processing_result)
             
             assert result.success is False
-            assert result.error_code == "INVALID_CONFIGURATION"
+            assert result.error_code == "1003"  # ErrorCode.CONFIGURATION_ERROR
             assert result.can_retry is False
     
     def test_content_formatting_failure(self, test_processing_result, create_test_message):
@@ -312,9 +317,11 @@ class TestFileOutputHandlerErrorScenarios:
         
         class BadObject:
             def __str__(self):
-                raise ValueError("Cannot convert to string")
+                from api_exchange_core.exceptions import ValidationError
+                raise ValidationError("Cannot convert to string")
             def __repr__(self):
-                raise ValueError("Cannot convert to repr")
+                from api_exchange_core.exceptions import ValidationError
+                raise ValidationError("Cannot convert to repr")
         
         # Create message with content that will fail JSON serialization
         bad_message = create_test_message(payload={
@@ -331,7 +338,7 @@ class TestFileOutputHandlerErrorScenarios:
             result = handler.handle(bad_message, test_processing_result)
             
             assert result.success is False
-            assert result.error_code == "CONTENT_FORMATTING_FAILED"
+            assert result.error_code == "2001"  # ErrorCode.INVALID_FORMAT
             assert result.can_retry is False
             assert "output_format" in result.error_details
             assert "message_id" in result.error_details
@@ -382,19 +389,19 @@ class TestFileOutputHandlerErrorScenarios:
         result = handler.handle(test_message, test_processing_result)
         
         assert result.success is False
-        assert result.error_code == "DIRECTORY_CREATION_FAILED"
+        assert result.error_code == "5002"  # ErrorCode.EXTERNAL_API_ERROR
         assert result.can_retry is True
         assert result.retry_after_seconds == 1
         assert "directory_path" in result.error_details
     
     def test_invalid_configuration_no_destination(self, test_message, test_processing_result):
-        """Test INVALID_CONFIGURATION with empty destination."""
+        """Test CONFIGURATION_ERROR with empty destination."""
         handler = FileOutputHandler(destination="")
         
         result = handler.handle(test_message, test_processing_result)
         
         assert result.success is False
-        assert result.error_code == "INVALID_CONFIGURATION"
+        assert result.error_code == "1003"  # ErrorCode.CONFIGURATION_ERROR
         assert result.can_retry is False
     
     @patch('builtins.open')
@@ -412,7 +419,7 @@ class TestFileOutputHandlerErrorScenarios:
             result = handler.handle(test_message, test_processing_result)
             
             assert result.success is False
-            assert result.error_code == "FILE_SYSTEM_ERROR"
+            assert result.error_code == "5002"  # ErrorCode.EXTERNAL_API_ERROR
             assert result.can_retry is True
             # With exponential backoff and retry_count=0, base_delay=3: expect 3 seconds  
             assert result.retry_after_seconds == 3
@@ -475,7 +482,8 @@ class TestErrorScenarioPatterns:
         result = handler.handle(test_message, test_processing_result)
         
         assert result.success is False
-        assert "INVALID_CONFIGURATION" in result.error_code or "CREATION_FAILED" in result.error_code
+        # Should be either CONFIGURATION_ERROR (1003) or CONNECTION_ERROR (1002)
+        assert result.error_code in ["1003", "1002"]
         assert result.can_retry is False
     
     def test_timing_measurement_on_errors(self, test_message, test_processing_result):

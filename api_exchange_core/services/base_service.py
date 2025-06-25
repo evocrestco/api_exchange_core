@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from ..context.operation_context import operation
 from ..db.db_config import get_production_config
-from ..exceptions import ErrorCode, RepositoryError, ServiceError
+from ..exceptions import ErrorCode, RepositoryError, ServiceError, ValidationError
 from ..utils.logger import get_logger
 
 # Type variables for schema models
@@ -51,7 +51,11 @@ class BaseService(Generic[TCreate, TRead, TUpdate, TFilter]):
 
         tenant_id = TenantContext.get_current_tenant_id()
         if not tenant_id:
-            raise ValueError("No tenant context set - ensure tenant_context is active")
+            raise ValidationError(
+                "No tenant context set - ensure tenant_context is active",
+                error_code=ErrorCode.MISSING_REQUIRED,
+                field="tenant_id"
+            )
         return tenant_id
 
     def _handle_service_exception(

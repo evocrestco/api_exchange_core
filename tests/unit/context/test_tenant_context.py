@@ -32,6 +32,7 @@ from api_exchange_core.context.tenant_context import (
     tenant_aware,
     tenant_context,
 )
+from api_exchange_core.exceptions import ValidationError
 from api_exchange_core.schemas.tenant_schema import TenantCreate
 
 
@@ -61,7 +62,7 @@ class TestTenantContextBasics:
     )
     def test_set_current_tenant_validation(self, invalid_tenant_id, expected_error):
         """Test tenant ID validation."""
-        with pytest.raises((ValueError, TypeError)) as exc_info:
+        with pytest.raises((ValidationError, TypeError)) as exc_info:
             TenantContext.set_current_tenant(invalid_tenant_id)
         # Just verify an exception was raised with some expected message pattern
         assert "tenant_id" in str(exc_info.value) or "string" in str(exc_info.value)
@@ -251,7 +252,7 @@ class TestTenantAwareDecorator:
 
         TenantContext.clear_current_tenant()
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ValidationError) as exc_info:
             test_function()
         assert "No tenant ID provided" in str(exc_info.value)
 

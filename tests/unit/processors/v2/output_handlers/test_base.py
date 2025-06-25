@@ -39,9 +39,10 @@ class ConcreteOutputHandler(OutputHandler):
         self.last_result = result
         
         if self.should_fail:
+            from api_exchange_core.exceptions import ErrorCode
             raise OutputHandlerError(
                 message=self.error_message,
-                error_code="TEST_ERROR",
+                error_code=ErrorCode.EXTERNAL_API_ERROR,
                 can_retry=True,
                 retry_after_seconds=60
             )
@@ -73,18 +74,22 @@ class TestOutputHandlerError:
         
         assert str(error) == "Something went wrong"
         assert error.message == "Something went wrong"
-        assert error.error_code == "OUTPUT_HANDLER_ERROR"
+        assert error.error_code.value == "5002"  # EXTERNAL_API_ERROR code
         assert error.can_retry is False
         assert error.retry_after_seconds is None
-        assert error.error_details == {}
-        assert error.original_exception is None
+        # BaseError always adds error_id to context
+        assert "error_id" in error.context
+        assert len(error.context) >= 1  # At least error_id
+        assert error.cause is None  # BaseError uses 'cause' not 'original_exception'
     
     def test_full_error_creation(self):
         """Test creating an error with all parameters."""
+        from api_exchange_core.exceptions import ErrorCode
+        
         original_exc = ValueError("Original error")
         error = OutputHandlerError(
             message="Failed to send message",
-            error_code="QUEUE_SEND_FAILED",
+            error_code=ErrorCode.EXTERNAL_API_ERROR,
             can_retry=True,
             retry_after_seconds=30,
             error_details={"queue": "test-queue", "attempt": 1},
@@ -92,10 +97,14 @@ class TestOutputHandlerError:
         )
         
         assert error.message == "Failed to send message"
-        assert error.error_code == "QUEUE_SEND_FAILED"
+        assert error.error_code == ErrorCode.EXTERNAL_API_ERROR
         assert error.can_retry is True
         assert error.retry_after_seconds == 30
-        assert error.error_details == {"queue": "test-queue", "attempt": 1}
+        # BaseError adds extra context like error_id and cause details
+        assert "queue" in error.context
+        assert "attempt" in error.context
+        assert error.context["queue"] == "test-queue"
+        assert error.context["attempt"] == 1
         assert error.original_exception is original_exc
 
 
@@ -344,9 +353,10 @@ class TestOutputHandler:
         with pytest.raises(OutputHandlerError) as exc_info:
             handler.handle(mock_message, mock_result)
         
+        from api_exchange_core.exceptions import ErrorCode
         error = exc_info.value
         assert error.message == "Simulated failure"
-        assert error.error_code == "TEST_ERROR"
+        assert error.error_code == ErrorCode.EXTERNAL_API_ERROR
         assert error.can_retry is True
         assert error.retry_after_seconds == 60
 

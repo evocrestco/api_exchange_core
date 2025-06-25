@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 from azure.core.exceptions import ResourceNotFoundError, ServiceRequestError
 from azure.storage.queue import QueueClient, QueueServiceClient
 
+from ....exceptions import ErrorCode
 from .base import OutputHandler, OutputHandlerError, OutputHandlerResult
 from .config import OutputHandlerConfigFactory, QueueOutputHandlerConfig
 
@@ -136,7 +137,7 @@ class QueueOutputHandler(OutputHandler):
             except Exception as e:
                 raise OutputHandlerError(
                     f"Failed to create QueueClient for {self.destination}",
-                    error_code="QUEUE_CLIENT_CREATION_FAILED",
+                    error_code=ErrorCode.CONNECTION_ERROR,
                     can_retry=False,
                     error_details={"connection_string_provided": bool(self.connection_string)},
                     original_exception=e,
@@ -156,7 +157,7 @@ class QueueOutputHandler(OutputHandler):
             except Exception as e:
                 raise OutputHandlerError(
                     "Failed to create QueueServiceClient",
-                    error_code="QUEUE_SERVICE_CLIENT_CREATION_FAILED",
+                    error_code=ErrorCode.CONNECTION_ERROR,
                     can_retry=False,
                     error_details={"connection_string_provided": bool(self.connection_string)},
                     original_exception=e,
@@ -178,7 +179,7 @@ class QueueOutputHandler(OutputHandler):
             if not self.auto_create_queue:
                 raise OutputHandlerError(
                     f"Queue {self.destination} does not exist and auto_create_queue is disabled",
-                    error_code="QUEUE_NOT_FOUND",
+                    error_code=ErrorCode.NOT_FOUND,
                     can_retry=False,
                     error_details={
                         "queue_name": self.destination,
@@ -202,7 +203,7 @@ class QueueOutputHandler(OutputHandler):
             except Exception as verify_error:
                 raise OutputHandlerError(
                     f"Failed to create or verify queue {self.destination}",
-                    error_code="QUEUE_CREATION_FAILED",
+                    error_code=ErrorCode.EXTERNAL_API_ERROR,
                     can_retry=True,
                     retry_after_seconds=2,  # Base delay for exponential backoff
                     error_details={
@@ -245,7 +246,7 @@ class QueueOutputHandler(OutputHandler):
         except Exception as e:
             raise OutputHandlerError(
                 "Failed to serialize message for queue delivery",
-                error_code="MESSAGE_SERIALIZATION_FAILED",
+                error_code=ErrorCode.INVALID_FORMAT,
                 can_retry=False,
                 error_details={
                     "message_id": message.message_id,
@@ -271,7 +272,7 @@ class QueueOutputHandler(OutputHandler):
             if not self.validate_configuration():
                 raise OutputHandlerError(
                     "Invalid queue handler configuration",
-                    error_code="INVALID_CONFIGURATION",
+                    error_code=ErrorCode.CONFIGURATION_ERROR,
                     can_retry=False,
                 )
 
@@ -323,7 +324,7 @@ class QueueOutputHandler(OutputHandler):
                 # Azure service errors (network, authentication, etc.)
                 raise OutputHandlerError(
                     f"Azure Storage service error when sending to queue {self.destination}",
-                    error_code="AZURE_SERVICE_ERROR",
+                    error_code=ErrorCode.EXTERNAL_API_ERROR,
                     can_retry=True,
                     retry_after_seconds=5,  # Base delay for exponential backoff
                     error_details={
@@ -338,7 +339,7 @@ class QueueOutputHandler(OutputHandler):
                 # Other unexpected errors
                 raise OutputHandlerError(
                     f"Unexpected error when sending to queue {self.destination}",
-                    error_code="QUEUE_SEND_FAILED",
+                    error_code=ErrorCode.QUEUE_ERROR,
                     can_retry=True,
                     retry_after_seconds=2,  # Base delay for exponential backoff
                     error_details={
@@ -368,7 +369,7 @@ class QueueOutputHandler(OutputHandler):
                     retry_count=message.retry_count,
                     error_code=e.error_code,
                     base_delay=e.retry_after_seconds,
-                    error_details=e.error_details,
+                    error_details=e.context,
                 )
             else:
                 return self._create_failure_result(
@@ -377,7 +378,7 @@ class QueueOutputHandler(OutputHandler):
                     error_code=e.error_code,
                     can_retry=e.can_retry,
                     retry_after_seconds=e.retry_after_seconds,
-                    error_details=e.error_details,
+                    error_details=e.context,
                 )
 
         except Exception as e:
@@ -399,7 +400,7 @@ class QueueOutputHandler(OutputHandler):
                 execution_duration_ms=duration_ms,
                 error_message=f"Unexpected error: {str(e)}",
                 retry_count=message.retry_count,
-                error_code="QUEUE_SEND_FAILED",
+                error_code=ErrorCode.QUEUE_ERROR,
                 base_delay=2,  # Base delay for exponential backoff
                 error_details={"error_type": type(e).__name__, "message_id": message.message_id},
             )

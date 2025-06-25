@@ -1,0 +1,10 @@
+# Custom flake8 rules for API Exchange Core
+
+# Pattern to detect generic Python exceptions
+# This will help enforce the use of framework exceptions
+
+[flake8:local-plugins]
+extension =
+    EXC001 = check_generic_exceptions:GenericExceptionChecker
+
+paths = ./custom_flake8_rules.py

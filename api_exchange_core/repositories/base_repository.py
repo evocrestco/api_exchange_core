@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from ..context.tenant_context import TenantContext
 from ..db import BaseModel
-from ..exceptions import ErrorCode, RepositoryError, duplicate
+from ..exceptions import ErrorCode, RepositoryError, ValidationError, duplicate
 
 # Type variable for entity models
 T = TypeVar("T", bound=BaseModel)
@@ -47,7 +47,11 @@ class BaseRepository(Generic[T]):
         """Get current tenant ID from context."""
         tenant_id = TenantContext.get_current_tenant_id()
         if not tenant_id:
-            raise ValueError("No tenant context set - ensure tenant_context is active")
+            raise ValidationError(
+                "No tenant context set - ensure tenant_context is active",
+                error_code=ErrorCode.MISSING_REQUIRED,
+                field="tenant_id"
+            )
         return tenant_id
 
     def _handle_db_error(
@@ -71,7 +75,7 @@ class BaseRepository(Generic[T]):
         """
         # If it's already a RepositoryError, just re-raise it to preserve the error code
         if isinstance(e, RepositoryError):
-            raise e
+            raise
 
         # Get current tenant if available
         tenant_id = context.get("tenant_id") or TenantContext.get_current_tenant_id()

@@ -6,6 +6,8 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, declarative_base, scoped_session, sessionmaker
 
+from ..exceptions import ErrorCode, ServiceError, ValidationError
+
 # Base class for all SQLAlchemy models
 Base: Any = declarative_base()
 
@@ -26,14 +28,24 @@ class DatabaseConfig(BaseModel):
     def get_connection_string(self) -> str:
         if self.db_type.lower() == "postgres":
             if not all([self.host, self.database, self.username, self.password]):
-                raise ValueError("Missing required Postgres configuration parameters")
+                raise ValidationError(
+                    "Missing required Postgres configuration parameters",
+                    error_code=ErrorCode.MISSING_REQUIRED,
+                    field="database_config",
+                    value={"host": self.host, "database": self.database, "username": self.username}
+                )
             return (
                 f"postgresql://{self.username}:{self.password}@"
                 f"{self.host}:{self.port}/{self.database}"
             )
         elif self.db_type.lower() == "sqlite":
             return f"sqlite:///{self.database}"
-        raise ValueError(f"Unsupported database type: {self.db_type}")
+        raise ValidationError(
+            f"Unsupported database type: {self.db_type}",
+            error_code=ErrorCode.INVALID_FORMAT,
+            field="db_type",
+            value=self.db_type
+        )
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -83,7 +95,12 @@ class DatabaseManager:
         if self.config.development_mode:
             Base.metadata.drop_all(self.engine)
         else:
-            raise RuntimeError("Cannot drop tables: not in development mode")
+            raise ServiceError(
+                "Cannot drop tables: not in development mode",
+                error_code=ErrorCode.CONFIGURATION_ERROR,
+                operation="drop_tables",
+                development_mode=self.config.development_mode
+            )
 
     def get_session(self) -> Session:
         return self.scoped_session()

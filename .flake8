@@ -11,3 +11,5 @@ exclude =
     dist
 per-file-ignores = 
     tests/*:E402
+# Enable our custom exception checker
+enable-extensions = EXC001

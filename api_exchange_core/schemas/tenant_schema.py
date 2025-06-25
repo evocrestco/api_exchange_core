@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from ..exceptions import ErrorCode, ValidationError
 from .mixins import DateRangeFilterMixin, IdMixin, TimestampMixin
 
 
@@ -66,7 +67,12 @@ class TenantCreate(BaseModel):
         Basic email validation.
         """
         if v and "@" not in v:
-            raise ValueError("Invalid email address")
+            raise ValidationError(
+                "Invalid email address",
+                error_code=ErrorCode.INVALID_FORMAT,
+                field="primary_contact_email",
+                value=v
+            )
         return v
 
 
@@ -103,7 +109,12 @@ class TenantUpdate(BaseModel):
         Basic email validation.
         """
         if v and "@" not in v:
-            raise ValueError("Invalid email address")
+            raise ValidationError(
+                "Invalid email address",
+                error_code=ErrorCode.INVALID_FORMAT,
+                field="primary_contact_email",
+                value=v
+            )
         return v
 
 
@@ -135,7 +146,12 @@ class TokenManagementConfig(BaseModel):
         """Ensure cleanup age is greater than refresh buffer."""
         refresh_buffer = info.data.get("refresh_buffer_minutes", 20)
         if v <= refresh_buffer:
-            raise ValueError("cleanup_age_minutes must be greater than refresh_buffer_minutes")
+            raise ValidationError(
+                "cleanup_age_minutes must be greater than refresh_buffer_minutes",
+                error_code=ErrorCode.CONSTRAINT_VIOLATION,
+                field="cleanup_age_minutes",
+                value=v
+            )
         return v
 
 

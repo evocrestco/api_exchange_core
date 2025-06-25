@@ -13,6 +13,8 @@ from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from .exceptions import ErrorCode, ValidationError
+
 from .constants import EnvironmentVariable, LogLevel
 
 
@@ -63,7 +65,12 @@ class LoggingConfig(BaseModel):
         """Validate log level is valid."""
         valid_levels = {level.value for level in LogLevel}
         if v.upper() not in valid_levels:
-            raise ValueError(f"Invalid log level: {v}. Must be one of {valid_levels}")
+            raise ValidationError(
+                f"Invalid log level: {v}. Must be one of {valid_levels}",
+                error_code=ErrorCode.INVALID_FORMAT,
+                field="level",
+                value=v
+            )
         return v.upper()
 
 

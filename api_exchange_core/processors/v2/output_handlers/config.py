@@ -11,6 +11,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Union
 
+from ....exceptions import ErrorCode, ValidationError
 from ....utils.logger import get_logger
 
 logger = get_logger()
@@ -216,9 +217,12 @@ class OutputHandlerConfigFactory:
             ValueError: If handler_type is not supported
         """
         if handler_type not in cls._handler_configs:
-            raise ValueError(
+            raise ValidationError(
                 f"Unsupported handler type: {handler_type}. "
-                f"Supported types: {list(cls._handler_configs.keys())}"
+                f"Supported types: {list(cls._handler_configs.keys())}",
+                error_code=ErrorCode.INVALID_FORMAT,
+                field="handler_type",
+                value=handler_type
             )
 
         config_class = cls._handler_configs[handler_type]
@@ -348,8 +352,11 @@ class OutputHandlerConfigFactory:
             config_class: Configuration class (must inherit from OutputHandlerConfigBase)
         """
         if not issubclass(config_class, OutputHandlerConfigBase):
-            raise ValueError(
-                f"Config class must inherit from OutputHandlerConfigBase, got {config_class}"
+            raise ValidationError(
+                f"Config class must inherit from OutputHandlerConfigBase, got {config_class}",
+                error_code=ErrorCode.TYPE_MISMATCH,
+                field="config_class",
+                value=str(config_class)
             )
 
         cls._handler_configs[handler_type] = config_class

@@ -179,8 +179,9 @@ class TestCalculateEntityHash:
         assert len(hash_result) == 64  # SHA-256 hex digest length
 
     def test_calculate_hash_with_none_data(self):
-        """Test hash calculation with None data raises TypeError."""
-        with pytest.raises(TypeError) as excinfo:
+        """Test hash calculation with None data raises ValidationError."""
+        from api_exchange_core.exceptions import ValidationError
+        with pytest.raises(ValidationError) as excinfo:
             calculate_entity_hash(None)
 
         assert "Cannot calculate hash for None data" in str(excinfo.value)

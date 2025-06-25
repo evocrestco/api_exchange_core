@@ -45,6 +45,9 @@ dev = [
     "flake8>=6.0.0",
     "bandit>=1.8.0",
     "autoflake>=2.3.0",
+    "semgrep>=1.0.0",
+    "detect-secrets>=1.0.0",
+    "safety>=3.0.0",
     "fastapi>=0.115.0",
     "uvicorn>=0.34.0",
     "matplotlib>=3.10.0",
@@ -62,6 +65,9 @@ e2e = [
 
 [tool.setuptools]
 packages = {find = {exclude = ["tests*"]}}
+
+[project.entry-points."flake8.extension"]
+EXC001 = "api_exchange_core.custom_flake8_rules:FrameworkExceptionChecker"
 
 [tool.black]
 line-length = 100

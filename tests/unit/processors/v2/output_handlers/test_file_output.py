@@ -200,7 +200,7 @@ class TestFileOutputHandler:
             handler._generate_file_path(message, result)
         
         error = exc_info.value
-        assert error.error_code == "INVALID_FILE_PATTERN"
+        assert error.error_code.value == "2001"  # ErrorCode.INVALID_FORMAT
         assert error.can_retry is False
         assert "invalid_variable" in str(error)
     
@@ -330,7 +330,7 @@ class TestFileOutputHandler:
         
         error = exc_info.value
         # Implementation follows standard pattern: specific errors wrapped by outer except Exception
-        assert error.error_code == "CONTENT_FORMATTING_FAILED"
+        assert error.error_code.value == "2001"  # ErrorCode.INVALID_FORMAT
         assert error.can_retry is False
     
     def test_ensure_directory_exists_creates_dirs(self, temp_dir):
@@ -523,7 +523,7 @@ class TestFileOutputHandler:
         # Verify failure
         assert handler_result.success is False
         assert handler_result.status == OutputHandlerStatus.FAILED
-        assert handler_result.error_code == "INVALID_CONFIGURATION"
+        assert handler_result.error_code == "1003"  # ErrorCode.CONFIGURATION_ERROR
         assert handler_result.can_retry is False
     
     def test_handle_permission_validation_failure(self, temp_dir, create_test_message):
@@ -564,7 +564,7 @@ class TestFileOutputHandler:
             # Verify failure
             assert handler_result.success is False
             assert handler_result.status == OutputHandlerStatus.FAILED
-            assert handler_result.error_code == "INVALID_CONFIGURATION"
+            assert handler_result.error_code == "1003"  # ErrorCode.CONFIGURATION_ERROR
             assert handler_result.can_retry is False
         finally:
             # Restore permissions for cleanup
@@ -606,7 +606,7 @@ class TestFileOutputHandler:
             # Verify failure
             assert handler_result.success is False
             assert handler_result.status == OutputHandlerStatus.FAILED
-            assert handler_result.error_code == "FILE_PERMISSION_DENIED"
+            assert handler_result.error_code == "4003"  # ErrorCode.PERMISSION_DENIED
             assert handler_result.can_retry is False
             assert "Permission denied" in handler_result.error_message
         finally:
@@ -645,7 +645,7 @@ class TestFileOutputHandler:
         # Verify failure
         assert handler_result.success is False
         assert handler_result.status == OutputHandlerStatus.RETRYABLE_ERROR
-        assert handler_result.error_code == "DIRECTORY_CREATION_FAILED"
+        assert handler_result.error_code == "5002"  # ErrorCode.EXTERNAL_API_ERROR
         assert handler_result.can_retry is True
         assert handler_result.retry_after_seconds == 1
     

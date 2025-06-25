@@ -9,6 +9,7 @@ import hashlib
 import logging
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from ..exceptions import ErrorCode, ValidationError
 from .hash_config import HashConfig
 from .json_utils import dumps
 
@@ -113,7 +114,12 @@ def calculate_entity_hash(
     """
     # Check for None data
     if data is None:
-        raise TypeError("Cannot calculate hash for None data")
+        raise ValidationError(
+            "Cannot calculate hash for None data",
+            error_code=ErrorCode.TYPE_MISMATCH,
+            field="data",
+            value=data
+        )
 
     # Apply configuration
     key_fields, ignore_fields, sort_keys = _apply_config(

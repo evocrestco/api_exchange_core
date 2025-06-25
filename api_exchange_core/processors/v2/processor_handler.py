@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 
 from ...context.operation_context import operation
 from ...context.tenant_context import tenant_context
+from ...exceptions import ErrorCode, ValidationError
 from ...utils.logger import get_logger
 from ..processing_result import ProcessingResult, ProcessingStatus
 from .message import Message
@@ -672,7 +673,11 @@ class ProcessorHandler:
                 # Handle queue output
                 if handler_type == "queue":
                     if not destinations:
-                        raise ValueError("destinations required for queue handler")
+                        raise ValidationError(
+                            "destinations required for queue handler",
+                            error_code=ErrorCode.MISSING_REQUIRED,
+                            field="destinations"
+                        )
 
                     # Send to each destination and track results
                     for destination in destinations:
@@ -711,7 +716,11 @@ class ProcessorHandler:
                 elif handler_type == "service_bus":
                     topic = handler_params.get("topic")
                     if not topic:
-                        raise ValueError("topic required for service_bus handler")
+                        raise ValidationError(
+                            "topic required for service_bus handler",
+                            error_code=ErrorCode.MISSING_REQUIRED,
+                            field="topic"
+                        )
 
                     try:
                         sb_handler = ServiceBusOutputHandler(topic=topic, **handler_params)
@@ -741,7 +750,12 @@ class ProcessorHandler:
                         }
 
                 else:
-                    raise ValueError(f"Unsupported handler type: {handler_type}")
+                    raise ValidationError(
+                        f"Unsupported handler type: {handler_type}",
+                        error_code=ErrorCode.INVALID_FORMAT,
+                        field="handler_type",
+                        value=handler_type
+                    )
 
                 # Log output results
                 handler.logger.info(

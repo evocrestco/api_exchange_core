@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
+from ....exceptions import BaseError, ErrorCode
 from ....utils.logger import get_logger
 
 if TYPE_CHECKING:
@@ -87,7 +88,7 @@ class OutputHandlerStatus(str, Enum):
     PARTIAL_SUCCESS = "partial_success"  # Some outputs succeeded, some failed
 
 
-class OutputHandlerError(Exception):
+class OutputHandlerError(BaseError):
     """
     Exception raised by output handlers for processing errors.
 
@@ -98,18 +99,24 @@ class OutputHandlerError(Exception):
     def __init__(
         self,
         message: str,
-        error_code: Optional[str] = None,
+        error_code: ErrorCode = ErrorCode.EXTERNAL_API_ERROR,
         can_retry: bool = False,
         retry_after_seconds: Optional[int] = None,
         error_details: Optional[Dict[str, Any]] = None,
         original_exception: Optional[Exception] = None,
     ):
-        super().__init__(message)
-        self.message = message
-        self.error_code = error_code or "OUTPUT_HANDLER_ERROR"
+        # Call BaseError constructor with proper parameters
+        super().__init__(
+            message=message,
+            error_code=error_code,
+            status_code=502,  # Bad Gateway for external service errors
+            cause=original_exception,
+            **(error_details or {})
+        )
+        
+        # Store output handler specific attributes
         self.can_retry = can_retry
         self.retry_after_seconds = retry_after_seconds
-        self.error_details = error_details or {}
         self.original_exception = original_exception
 
     def calculate_retry_delay(
@@ -347,7 +354,8 @@ class OutputHandler(ABC):
             return result, duration_ms
         except Exception as e:
             duration_ms = (time.time() - start_time) * 1000
-            raise e
+            # Re-raise the original exception to preserve stack trace
+            raise
 
     def _create_success_result(
         self, execution_duration_ms: float, metadata: Optional[Dict[str, Any]] = None

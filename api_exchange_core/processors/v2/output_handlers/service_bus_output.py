@@ -19,6 +19,7 @@ except ImportError:
     ServiceBusClient = None
     ServiceBusMessage = None
 
+from ....exceptions import ErrorCode, ServiceError
 from .base import OutputHandler, OutputHandlerError, OutputHandlerResult
 from .config import OutputHandlerConfigFactory, ServiceBusOutputHandlerConfig
 
@@ -68,9 +69,11 @@ class ServiceBusOutputHandler(OutputHandler):
             config: Configuration dictionary, ServiceBusOutputHandlerConfig object, or None
         """
         if not SERVICEBUS_AVAILABLE:
-            raise ImportError(
+            raise ServiceError(
                 "Azure Service Bus SDK is not installed. "
-                "Install it with: pip install azure-servicebus"
+                "Install it with: pip install azure-servicebus",
+                error_code=ErrorCode.CONFIGURATION_ERROR,
+                operation="__init__"
             )
 
         # Handle configuration
@@ -172,7 +175,7 @@ class ServiceBusOutputHandler(OutputHandler):
             except Exception as e:
                 raise OutputHandlerError(
                     "Failed to create ServiceBusClient",
-                    error_code="SERVICE_BUS_CLIENT_CREATION_FAILED",
+                    error_code=ErrorCode.CONNECTION_ERROR,
                     can_retry=False,
                     error_details={"connection_string_provided": bool(self.connection_string)},
                     original_exception=e,
@@ -270,7 +273,7 @@ class ServiceBusOutputHandler(OutputHandler):
         except Exception as e:
             raise OutputHandlerError(
                 "Failed to prepare Service Bus message",
-                error_code="MESSAGE_PREPARATION_FAILED",
+                error_code=ErrorCode.INVALID_FORMAT,
                 can_retry=False,
                 error_details={
                     "message_id": message.message_id,
@@ -296,7 +299,7 @@ class ServiceBusOutputHandler(OutputHandler):
             if not self.validate_configuration():
                 raise OutputHandlerError(
                     "Invalid Service Bus handler configuration",
-                    error_code="INVALID_CONFIGURATION",
+                    error_code=ErrorCode.CONFIGURATION_ERROR,
                     can_retry=False,
                 )
 
@@ -316,7 +319,7 @@ class ServiceBusOutputHandler(OutputHandler):
                 else:
                     raise OutputHandlerError(
                         f"Unsupported destination type: {self.destination_type}",
-                        error_code="UNSUPPORTED_DESTINATION_TYPE",
+                        error_code=ErrorCode.CONFIGURATION_ERROR,
                         can_retry=False,
                     )
 
@@ -347,7 +350,7 @@ class ServiceBusOutputHandler(OutputHandler):
                 # Service Bus service errors (network, authentication, etc.)
                 raise OutputHandlerError(
                     f"Service Bus service error when sending to {self.destination_type} {self.destination}",
-                    error_code="SERVICE_BUS_SERVICE_ERROR",
+                    error_code=ErrorCode.EXTERNAL_API_ERROR,
                     can_retry=True,
                     retry_after_seconds=5,  # Base delay for exponential backoff
                     error_details={
@@ -363,7 +366,7 @@ class ServiceBusOutputHandler(OutputHandler):
                 # Other unexpected errors
                 raise OutputHandlerError(
                     f"Unexpected error when sending to {self.destination_type} {self.destination}",
-                    error_code="SERVICE_BUS_SEND_FAILED",
+                    error_code=ErrorCode.QUEUE_ERROR,
                     can_retry=True,
                     retry_after_seconds=2,  # Base delay for exponential backoff
                     error_details={
@@ -394,7 +397,7 @@ class ServiceBusOutputHandler(OutputHandler):
                     retry_count=message.retry_count,
                     error_code=e.error_code,
                     base_delay=e.retry_after_seconds,
-                    error_details=e.error_details,
+                    error_details=e.context,
                 )
             else:
                 return self._create_failure_result(
@@ -403,7 +406,7 @@ class ServiceBusOutputHandler(OutputHandler):
                     error_code=e.error_code,
                     can_retry=e.can_retry,
                     retry_after_seconds=e.retry_after_seconds,
-                    error_details=e.error_details,
+                    error_details=e.context,
                 )
 
         except Exception as e:
@@ -426,7 +429,7 @@ class ServiceBusOutputHandler(OutputHandler):
                 execution_duration_ms=duration_ms,
                 error_message=f"Unexpected error: {str(e)}",
                 retry_count=message.retry_count,
-                error_code="UNEXPECTED_ERROR",
+                error_code=ErrorCode.INTERNAL_ERROR,
                 base_delay=2,  # Base delay for exponential backoff
                 error_details={"error_type": type(e).__name__, "message_id": message.message_id},
             )

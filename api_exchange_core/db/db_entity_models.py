@@ -7,6 +7,7 @@ from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Uni
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm.attributes import flag_modified
 
+from ..exceptions import ErrorCode, ValidationError
 from .db_base import Base, utc_now
 
 
@@ -64,13 +65,33 @@ class Entity(Base):
         Factory method to create a new Entity with validated parameters.
         """
         if not tenant_id:
-            raise ValueError("tenant_id is required")
+            raise ValidationError(
+                "tenant_id is required",
+                error_code=ErrorCode.MISSING_REQUIRED,
+                field="tenant_id",
+                value=tenant_id
+            )
         if not external_id:
-            raise ValueError("external_id is required")
+            raise ValidationError(
+                "external_id is required",
+                error_code=ErrorCode.MISSING_REQUIRED,
+                field="external_id",
+                value=external_id
+            )
         if not canonical_type:
-            raise ValueError("canonical_type is required")
+            raise ValidationError(
+                "canonical_type is required",
+                error_code=ErrorCode.MISSING_REQUIRED,
+                field="canonical_type",
+                value=canonical_type
+            )
         if not source:
-            raise ValueError("source is required")
+            raise ValidationError(
+                "source is required",
+                error_code=ErrorCode.MISSING_REQUIRED,
+                field="source",
+                value=source
+            )
 
         return cls(
             id=str(uuid.uuid4()),

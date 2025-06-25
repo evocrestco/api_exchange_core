@@ -18,6 +18,7 @@ from api_exchange_core.config import (
     set_config,
 )
 from api_exchange_core.constants import LogLevel
+from api_exchange_core.exceptions import ValidationError
 
 
 class TestDatabaseConfig:
@@ -80,7 +81,7 @@ class TestLoggingConfig:
         assert config.level == "DEBUG"
 
         # Invalid log level
-        with pytest.raises(ValueError, match="Invalid log level"):
+        with pytest.raises(ValidationError, match="Invalid log level"):
             LoggingConfig(level="INVALID")
 
 

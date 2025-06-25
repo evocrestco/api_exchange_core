@@ -151,10 +151,11 @@ class TestTenantServiceRead:
 
     def test_get_tenant_not_found(self, tenant_service):
         """Test getting tenant when no tenant context is set."""
+        from api_exchange_core.exceptions import ValidationError
         service = tenant_service
 
         # Test fails when no tenant context is set
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ValidationError) as exc_info:
             service.get_current_tenant()
         assert "No tenant context set" in str(exc_info.value)
 

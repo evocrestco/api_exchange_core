@@ -10,9 +10,10 @@ Key improvements from v1:
 import os
 from typing import Any, Dict, Optional
 
-from pydantic import ValidationError
+from pydantic import ValidationError as PydanticValidationError
 
 from ...db.db_config import DatabaseConfig, DatabaseManager, init_db
+from ...exceptions import ErrorCode, ServiceError, ValidationError
 from ...processing.processing_service import ProcessingService
 from ...utils.logger import get_logger
 from .processor_handler import ProcessorHandler
@@ -40,7 +41,7 @@ def create_db_manager() -> DatabaseManager:
         )
         return DatabaseManager(db_config)
 
-    except ValidationError as e:
+    except PydanticValidationError as e:
         # Extract missing fields for clear error message
         missing_fields = []
         for error in e.errors():
@@ -50,13 +51,21 @@ def create_db_manager() -> DatabaseManager:
                 missing_fields.append(f"{field_name} (env: {env_var_name})")
 
         if missing_fields:
-            raise ValueError(
+            raise ServiceError(
                 f"Cannot create database manager. Missing required environment variables for fields: "
-                f"{', '.join(missing_fields)}. Please set these environment variables."
-            ) from e
+                f"{', '.join(missing_fields)}. Please set these environment variables.",
+                error_code=ErrorCode.CONFIGURATION_ERROR,
+                operation="create_db_manager",
+                cause=e
+            )
         else:
             # Re-raise if it's not a missing field error
-            raise ValueError(f"Database configuration validation failed: {e}") from e
+            raise ServiceError(
+                f"Database configuration validation failed: {e}",
+                error_code=ErrorCode.CONFIGURATION_ERROR,
+                operation="create_db_manager",
+                cause=e
+            )
 
 
 def create_processor_handler(

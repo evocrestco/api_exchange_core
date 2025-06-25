@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 
+from ....exceptions import ErrorCode
 from .base import OutputHandler, OutputHandlerError, OutputHandlerResult
 from .config import FileOutputHandlerConfig, OutputHandlerConfigFactory
 
@@ -166,7 +167,7 @@ class FileOutputHandler(OutputHandler):
         except KeyError as e:
             raise OutputHandlerError(
                 f"Invalid variable in file_pattern: {e}",
-                error_code="INVALID_FILE_PATTERN",
+                error_code=ErrorCode.INVALID_FORMAT,
                 can_retry=False,
                 error_details={
                     "file_pattern": self.file_pattern,
@@ -273,14 +274,14 @@ class FileOutputHandler(OutputHandler):
             else:
                 raise OutputHandlerError(
                     f"Unsupported output format: {self.output_format}",
-                    error_code="UNSUPPORTED_OUTPUT_FORMAT",
+                    error_code=ErrorCode.CONFIGURATION_ERROR,
                     can_retry=False,
                 )
 
         except Exception as e:
             raise OutputHandlerError(
                 f"Failed to format content for output format {self.output_format}",
-                error_code="CONTENT_FORMATTING_FAILED",
+                error_code=ErrorCode.INVALID_FORMAT,
                 can_retry=False,
                 error_details={
                     "output_format": self.output_format,
@@ -302,7 +303,7 @@ class FileOutputHandler(OutputHandler):
             except Exception as e:
                 raise OutputHandlerError(
                     f"Failed to create directory: {parent_dir}",
-                    error_code="DIRECTORY_CREATION_FAILED",
+                    error_code=ErrorCode.EXTERNAL_API_ERROR,
                     can_retry=True,
                     retry_after_seconds=1,  # Base delay for exponential backoff
                     error_details={"directory_path": str(parent_dir)},
@@ -326,7 +327,7 @@ class FileOutputHandler(OutputHandler):
             if not self.validate_configuration():
                 raise OutputHandlerError(
                     "Invalid file handler configuration",
-                    error_code="INVALID_CONFIGURATION",
+                    error_code=ErrorCode.CONFIGURATION_ERROR,
                     can_retry=False,
                 )
 
@@ -382,7 +383,7 @@ class FileOutputHandler(OutputHandler):
             except PermissionError as e:
                 raise OutputHandlerError(
                     f"Permission denied when writing to file: {file_path}",
-                    error_code="FILE_PERMISSION_DENIED",
+                    error_code=ErrorCode.PERMISSION_DENIED,
                     can_retry=False,
                     error_details={
                         "file_path": str(file_path),
@@ -396,7 +397,7 @@ class FileOutputHandler(OutputHandler):
                 # Disk space, file system errors, etc.
                 raise OutputHandlerError(
                     f"OS error when writing to file: {file_path}",
-                    error_code="FILE_SYSTEM_ERROR",
+                    error_code=ErrorCode.EXTERNAL_API_ERROR,
                     can_retry=True,
                     retry_after_seconds=3,  # Base delay for exponential backoff
                     error_details={
@@ -412,7 +413,7 @@ class FileOutputHandler(OutputHandler):
                 # Other unexpected errors
                 raise OutputHandlerError(
                     f"Unexpected error when writing to file: {file_path}",
-                    error_code="FILE_WRITE_FAILED",
+                    error_code=ErrorCode.EXTERNAL_API_ERROR,
                     can_retry=True,
                     retry_after_seconds=1,  # Base delay for exponential backoff
                     error_details={
@@ -443,7 +444,7 @@ class FileOutputHandler(OutputHandler):
                     retry_count=message.retry_count,
                     error_code=e.error_code,
                     base_delay=e.retry_after_seconds,
-                    error_details=e.error_details,
+                    error_details=e.context,
                 )
             else:
                 return self._create_failure_result(
@@ -452,7 +453,7 @@ class FileOutputHandler(OutputHandler):
                     error_code=e.error_code,
                     can_retry=e.can_retry,
                     retry_after_seconds=e.retry_after_seconds,
-                    error_details=e.error_details,
+                    error_details=e.context,
                 )
 
         except Exception as e:
@@ -474,7 +475,7 @@ class FileOutputHandler(OutputHandler):
                 execution_duration_ms=duration_ms,
                 error_message=f"Unexpected error: {str(e)}",
                 retry_count=message.retry_count,
-                error_code="UNEXPECTED_ERROR",
+                error_code=ErrorCode.INTERNAL_ERROR,
                 base_delay=1,  # Base delay for exponential backoff
                 error_details={"error_type": type(e).__name__, "message_id": message.message_id},
             )

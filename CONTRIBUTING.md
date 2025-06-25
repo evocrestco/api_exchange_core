@@ -31,10 +31,14 @@ Pull requests are the best way to propose changes to the codebase. We actively w
 Before submitting your PR, ensure:
 
 - [ ] All tests pass (`pytest tests/`)
-- [ ] Code is formatted (`black src/ tests/ --check`)
-- [ ] Imports are sorted (`isort src/ tests/ --check`)
-- [ ] Linting passes (`flake8 src/ tests/`)
-- [ ] Type checking passes (`mypy src/`)
+- [ ] Code is formatted (`black api_exchange_core/ tests/ --check`)
+- [ ] Imports are sorted (`isort api_exchange_core/ tests/ --check`)
+- [ ] Linting passes (`flake8 api_exchange_core/ tests/`)
+- [ ] Type checking passes (`mypy api_exchange_core/`)
+- [ ] Security scanning passes (`bandit -r api_exchange_core/`)
+- [ ] No dependency vulnerabilities (`safety check`)
+- [ ] Static analysis passes (`semgrep --config=auto api_exchange_core/`)
+- [ ] No secrets detected (`detect-secrets scan --all-files`)
 - [ ] Coverage hasn't decreased significantly
 - [ ] Documentation is updated if needed
 - [ ] Commits are signed (DCO requirement)
@@ -142,8 +146,7 @@ python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Install dependencies
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
+pip install -e ".[dev]"
 
 # Install pre-commit hooks
 pre-commit install
@@ -162,13 +165,14 @@ We enforce consistent code style across the project:
 
 ### Code Style Guidelines
 
-1. **Imports**: Always use absolute imports from `src`
+1. **Imports**: Use relative imports within the package for internal modules
    ```python
-   # Good
-   from services.entity_service import EntityService
-   
-   # Bad
+   # Good - relative imports for internal modules
    from ..services.entity_service import EntityService
+   from ...utils.logger import get_logger
+   
+   # Bad - absolute imports for internal modules
+   from api_exchange_core.services.entity_service import EntityService
    ```
 
 2. **Type Hints**: Every function must have type hints
@@ -189,30 +193,66 @@ We enforce consistent code style across the project:
    - Document why if you must use `# type: ignore` for non-SQLAlchemy issues
 
 3. **Error Handling**: Use the centralized exception system
-   ```python
-   from exceptions import ValidationError, ErrorCode
    
+   **IMPORTANT**: Never use generic Python exceptions. We have a custom flake8 rule (EXC001) that enforces this.
+   
+   ```python
+   # ❌ BAD - Never use generic exceptions
+   raise ValueError("Invalid input")
+   raise RuntimeError("Something went wrong")
+   raise Exception("Error occurred")
+   raise TypeError("Wrong type")
+   raise KeyError("Key not found")
+   
+   # ✅ GOOD - Always use framework exceptions
+   from ..exceptions import ValidationError, ServiceError, ErrorCode
+   
+   # For validation errors
    raise ValidationError(
        "Invalid entity data",
        error_code=ErrorCode.VALIDATION_FAILED,
-       details={"field": "email"}
+       field="email",
+       value=email
+   )
+   
+   # For service/business logic errors
+   raise ServiceError(
+       "Failed to process entity",
+       error_code=ErrorCode.INTERNAL_ERROR,
+       operation="process_entity",
+       entity_id=entity_id
    )
    ```
+   
+   **Exception Mapping Guide**:
+   - `ValueError` → Use `ValidationError`
+   - `RuntimeError` → Use `ServiceError`
+   - `TypeError` → Use `ValidationError`
+   - `KeyError` → Use `ValidationError` with field information
+   - `NotImplementedError` → Use `ServiceError` with `ErrorCode.CONFIGURATION_ERROR`
+   - `IOError`/`OSError` → Use `ExternalServiceError`
+   - Generic `Exception` → Use `BaseError` or more specific exception
 
 ### Running Code Quality Tools
 
 ```bash
 # Format code
-black src/ tests/ --line-length 100
+black api_exchange_core/ tests/ --line-length 100
 
 # Sort imports
-isort src/ tests/
+isort api_exchange_core/ tests/
 
 # Check code quality
-flake8 src/ tests/
+flake8 api_exchange_core/ tests/
 
 # Type checking
-mypy src/
+mypy api_exchange_core/
+
+# Security scanning
+bandit -r api_exchange_core/
+safety check
+semgrep --config=auto api_exchange_core/
+detect-secrets scan --all-files
 
 # Run all checks at once
 pre-commit run --all-files
@@ -259,7 +299,7 @@ pytest tests/
 pytest tests/unit/services/test_entity_service.py
 
 # Run with coverage
-pytest --cov=src --cov-report=html --cov-report=term
+pytest --cov=api_exchange_core --cov-report=html --cov-report=term
 
 # Run with verbose output
 pytest -vvs

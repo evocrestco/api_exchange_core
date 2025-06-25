@@ -7,6 +7,7 @@ use exponential backoff correctly for retry logic.
 
 import pytest
 
+from api_exchange_core.exceptions import ErrorCode
 from api_exchange_core.processors.v2.output_handlers.base import OutputHandlerError, calculate_exponential_backoff
 
 
@@ -127,7 +128,7 @@ class TestOutputHandlerErrorRetryDelay:
         """Test OutputHandlerError calculate_retry_delay method."""
         error = OutputHandlerError(
             "Test error",
-            error_code="TEST_ERROR",
+            error_code=ErrorCode.EXTERNAL_API_ERROR,
             can_retry=True,
             retry_after_seconds=3
         )
@@ -142,7 +143,7 @@ class TestOutputHandlerErrorRetryDelay:
         """Test calculate_retry_delay with base_delay override."""
         error = OutputHandlerError(
             "Test error",
-            error_code="TEST_ERROR",
+            error_code=ErrorCode.EXTERNAL_API_ERROR,
             can_retry=True,
             retry_after_seconds=5
         )
@@ -159,7 +160,7 @@ class TestOutputHandlerErrorRetryDelay:
         """Test calculate_retry_delay when retry_after_seconds is None."""
         error = OutputHandlerError(
             "Test error",
-            error_code="TEST_ERROR",
+            error_code=ErrorCode.EXTERNAL_API_ERROR,
             can_retry=True,
             retry_after_seconds=None
         )
