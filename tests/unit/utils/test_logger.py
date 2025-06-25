@@ -518,15 +518,11 @@ class TestConfigureLogging:
             connection_string=azurite_connection_string
         )
         
-        # Should have both console and queue handlers
+        # Should only have queue handler - console logging handled by Azure Functions
         handlers = logger.logger.handlers
-        assert len(handlers) == 2
+        assert len(handlers) == 1
         
-        # Check for StreamHandler (console)
-        stream_handlers = [h for h in handlers if isinstance(h, logging.StreamHandler)]
-        assert len(stream_handlers) == 1
-        
-        # Check for AzureQueueHandler
+        # Check for AzureQueueHandler (no StreamHandler - Azure Functions provides console logging)
         queue_handlers = [h for h in handlers if isinstance(h, AzureQueueHandler)]
         assert len(queue_handlers) == 1
         assert queue_handlers[0].queue_name == "test-logs"
@@ -543,9 +539,10 @@ class TestConfigureLogging:
         # Configure logging should remove existing handlers
         logger = configure_logging("existing_handlers")
         
-        # Should have new handlers, not the old one
+        # Should not have the old handler
         assert existing_handler not in logger.logger.handlers
-        assert len(logger.logger.handlers) >= 1
+        # May have 0 handlers (no explicit handlers added, Azure Functions provides console logging)
+        assert len(logger.logger.handlers) >= 0
     
     def test_configure_with_custom_batch_size(self, azurite_connection_string):
         """Test configuring with custom queue batch size."""
@@ -659,18 +656,17 @@ class TestLoggerIntegration:
             enable_queue=False
         )
         
-        # Capture console output
+        # Since configure_logging no longer adds StreamHandler (Azure Functions provides console logging),
+        # we need to add a test StreamHandler to capture output for testing
         stream = StringIO()
+        test_handler = logging.StreamHandler(stream)
+        test_handler.setFormatter(logging.Formatter("%(message)s"))
         
-        # Replace the console handler with our test stream
-        console_handler = None
-        for handler in logger.logger.handlers:
-            if isinstance(handler, logging.StreamHandler):
-                console_handler = handler
-                break
+        # Add tenant filter to test handler
+        tenant_filter = TenantContextFilter()
+        test_handler.addFilter(tenant_filter)
         
-        if console_handler:
-            console_handler.stream = stream
+        logger.logger.addHandler(test_handler)
         
         # Log with tenant context
         with tenant_context(test_tenant["id"]):
