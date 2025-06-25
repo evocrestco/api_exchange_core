@@ -341,21 +341,16 @@ def configure_logging(
     logger = logging.getLogger(logger_name)
     logger.setLevel(log_level)
 
-    # Remove existing handlers
+    # Remove existing handlers to avoid conflicts with Azure Functions built-in handlers
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
 
-    # Create console handler
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(log_level)
-    console_handler.setFormatter(logging.Formatter("%(message)s"))  # Simple format
-
-    # Add tenant context filter
+    # Note: Azure Functions automatically provides console logging
+    # We don't need to add our own StreamHandler as it causes duplicates
+    
+    # Add tenant context filter to the logger itself (will apply to Azure's built-in handler)
     tenant_filter = TenantContextFilter()
-    console_handler.addFilter(tenant_filter)
-
-    # Add handler to function logger
-    logger.addHandler(console_handler)
+    logger.addFilter(tenant_filter)
 
     # Add Azure Queue handler if enabled
     if enable_queue:
