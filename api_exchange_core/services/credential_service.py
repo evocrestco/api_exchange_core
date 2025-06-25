@@ -99,37 +99,31 @@ class CredentialService:
             .first()
         )
         if not credential:
-            self.logger.warning(
-                "Credential not found", extra={"tenant_id": tenant_id, "system_name": system_name}
+            # CredentialNotFoundError will automatically log via BaseError.__init__
+            raise CredentialNotFoundError(
+                f"No credentials found for system '{system_name}'",
+                tenant_id=tenant_id,
+                system_name=system_name,
             )
-            raise CredentialNotFoundError(f"No credentials found for system '{system_name}'")
 
         # Check if credential is expired
         if credential.is_expired():
-            self.logger.warning(
-                "Attempted access to expired credential",
-                extra={
-                    "credential_id": credential.id,
-                    "system_name": system_name,
-                    "expires_at": (
-                        credential.expires_at.isoformat() if credential.expires_at else None
-                    ),
-                },
+            # CredentialExpiredError will automatically log via BaseError.__init__
+            raise CredentialExpiredError(
+                f"Credentials for system '{system_name}' have expired",
+                credential_id=credential.id,
+                system_name=system_name,
+                expires_at=credential.expires_at.isoformat() if credential.expires_at else None,
             )
-            raise CredentialExpiredError(f"Credentials for system '{system_name}' have expired")
 
         # Check if credential is active
         if credential.is_active != "active":
-            self.logger.warning(
-                "Attempted access to inactive credential",
-                extra={
-                    "credential_id": credential.id,
-                    "system_name": system_name,
-                    "status": credential.is_active,
-                },
-            )
+            # CredentialExpiredError will automatically log via BaseError.__init__
             raise CredentialExpiredError(
-                f"Credentials for system '{system_name}' are not active (status: {credential.is_active})"
+                f"Credentials for system '{system_name}' are not active (status: {credential.is_active})",
+                credential_id=credential.id,
+                system_name=system_name,
+                status=credential.is_active,
             )
 
         # Log successful access
@@ -146,14 +140,12 @@ class CredentialService:
         # Get decrypted credentials
         credentials = credential.get_credentials(self.session)
         if not credentials:
-            self.logger.error(
-                "Failed to decrypt credential data",
-                extra={"credential_id": credential.id, "system_name": system_name},
-            )
+            # ServiceError will automatically log via BaseError.__init__
             raise ServiceError(
                 message="Failed to decrypt credential data",
                 error_code=ErrorCode.INTEGRATION_ERROR,
-                details={"system_name": system_name},
+                credential_id=credential.id,
+                system_name=system_name,
             )
 
         return credentials
@@ -219,18 +211,13 @@ class CredentialService:
             .first()
         )
         if existing:
-            self.logger.warning(
-                "Attempted to store credential for existing system",
-                extra={
-                    "tenant_id": tenant_id,
-                    "system_name": system_name,
-                    "existing_credential_id": existing.id,
-                },
-            )
+            # ValidationError will automatically log via BaseError.__init__
             raise ValidationError(
                 message=f"Credentials for system '{system_name}' already exist. Use update_credentials instead.",
                 error_code=ErrorCode.DUPLICATE,
-                details={"system_name": system_name},
+                tenant_id=tenant_id,
+                system_name=system_name,
+                existing_credential_id=existing.id,
             )
 
         # Create new credential
@@ -264,17 +251,17 @@ class CredentialService:
             return credential.id
 
         except Exception as e:
-            self.logger.error(
-                "Failed to store credentials",
-                extra={
-                    "tenant_id": tenant_id,
-                    "system_name": system_name,
-                    "auth_type": auth_type,
-                    "error": str(e),
-                    "error_type": type(e).__name__,
-                },
-            )
-            raise
+            # Convert to ServiceError which will automatically log via BaseError.__init__
+            raise ServiceError(
+                message="Failed to store credentials",
+                error_code=ErrorCode.INTEGRATION_ERROR,
+                tenant_id=tenant_id,
+                system_name=system_name,
+                auth_type=auth_type,
+                error=str(e),
+                error_type=type(e).__name__,
+                cause=e,
+            ) from e
 
     @tenant_aware
     @operation()
@@ -448,19 +435,14 @@ class CredentialService:
             return token_id
 
         except Exception as e:
-            self.logger.error(
-                "Failed to store access token",
-                extra={
-                    "tenant_id": tenant_id,
-                    "system_name": system_name,
-                    "error": str(e),
-                    "error_type": type(e).__name__,
-                },
-            )
+            # ServiceError will automatically log via BaseError.__init__
             raise ServiceError(
                 message=f"Failed to store access token for {system_name}",
                 error_code=ErrorCode.INTEGRATION_ERROR,
-                details={"system_name": system_name, "error": str(e)},
+                tenant_id=tenant_id,
+                system_name=system_name,
+                error=str(e),
+                error_type=type(e).__name__,
                 cause=e,
             ) from e
 
@@ -535,18 +517,13 @@ class CredentialService:
             )
             return None
         except Exception as e:
-            self.logger.error(
-                "Failed to retrieve valid access token",
-                extra={
-                    "tenant_id": tenant_id,
-                    "system_name": system_name,
-                    "error": str(e),
-                    "error_type": type(e).__name__,
-                },
-            )
+            # ServiceError will automatically log via BaseError.__init__
             raise ServiceError(
                 message=f"Failed to retrieve access token for {system_name}",
                 error_code=ErrorCode.INTEGRATION_ERROR,
-                details={"system_name": system_name, "error": str(e)},
+                tenant_id=tenant_id,
+                system_name=system_name,
+                error=str(e),
+                error_type=type(e).__name__,
                 cause=e,
             ) from e

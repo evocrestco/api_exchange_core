@@ -53,18 +53,14 @@ class CredentialRepository(BaseRepository[ExternalCredential]):
             TenantIsolationViolationError: If tenant isolation is violated
         """
         if credential.tenant_id != expected_tenant_id:
-            self.logger.error(
-                "SECURITY VIOLATION: Credential tenant mismatch detected",
-                extra={
-                    "expected_tenant_id": expected_tenant_id,
-                    "actual_tenant_id": credential.tenant_id,
-                    "credential_id": credential.id,
-                    "system_name": credential.system_name,
-                },
-            )
+            # TenantIsolationViolationError will automatically log via BaseError.__init__
             raise TenantIsolationViolationError(
                 f"Credential belongs to tenant {credential.tenant_id}, "
-                f"but operation requested for tenant {expected_tenant_id}"
+                f"but operation requested for tenant {expected_tenant_id}",
+                expected_tenant_id=expected_tenant_id,
+                actual_tenant_id=credential.tenant_id,
+                credential_id=credential.id,
+                system_name=credential.system_name,
             )
 
     @tenant_aware
@@ -128,14 +124,13 @@ class CredentialRepository(BaseRepository[ExternalCredential]):
         except TenantIsolationViolationError:
             raise
         except Exception as e:
-            self.logger.error(
-                "Failed to get credential by system name",
-                extra={"system_name": system_name, "error": str(e), "error_type": type(e).__name__},
-            )
+            # RepositoryError will automatically log via BaseError.__init__
             raise RepositoryError(
                 message="Failed to retrieve credential",
                 error_code=ErrorCode.DATABASE_ERROR,
-                details={"system_name": system_name, "error": str(e)},
+                system_name=system_name,
+                error=str(e),
+                error_type=type(e).__name__,
                 cause=e,
             ) from e
 
@@ -229,19 +224,14 @@ class CredentialRepository(BaseRepository[ExternalCredential]):
         except (ValidationError, TenantIsolationViolationError):
             raise
         except Exception as e:
-            self.logger.error(
-                "Failed to create credential",
-                extra={
-                    "system_name": system_name,
-                    "auth_type": auth_type,
-                    "error": str(e),
-                    "error_type": type(e).__name__,
-                },
-            )
+            # RepositoryError will automatically log via BaseError.__init__
             raise RepositoryError(
                 message="Failed to create credential",
                 error_code=ErrorCode.DATABASE_ERROR,
-                details={"system_name": system_name, "auth_type": auth_type, "error": str(e)},
+                system_name=system_name,
+                auth_type=auth_type,
+                error=str(e),
+                error_type=type(e).__name__,
                 cause=e,
             ) from e
 
@@ -305,14 +295,13 @@ class CredentialRepository(BaseRepository[ExternalCredential]):
         except (CredentialNotFoundError, TenantIsolationViolationError):
             raise
         except Exception as e:
-            self.logger.error(
-                "Failed to update credential",
-                extra={"system_name": system_name, "error": str(e), "error_type": type(e).__name__},
-            )
+            # RepositoryError will automatically log via BaseError.__init__
             raise RepositoryError(
                 message="Failed to update credential",
                 error_code=ErrorCode.DATABASE_ERROR,
-                details={"system_name": system_name, "error": str(e)},
+                system_name=system_name,
+                error=str(e),
+                error_type=type(e).__name__,
                 cause=e,
             ) from e
 
@@ -367,18 +356,13 @@ class CredentialRepository(BaseRepository[ExternalCredential]):
         except TenantIsolationViolationError:
             raise
         except Exception as e:
-            self.logger.error(
-                "Failed to list credentials",
-                extra={
-                    "include_expired": include_expired,
-                    "error": str(e),
-                    "error_type": type(e).__name__,
-                },
-            )
+            # RepositoryError will automatically log via BaseError.__init__
             raise RepositoryError(
                 message="Failed to list credentials",
                 error_code=ErrorCode.DATABASE_ERROR,
-                details={"error": str(e)},
+                include_expired=include_expired,
+                error=str(e),
+                error_type=type(e).__name__,
                 cause=e,
             ) from e
 
@@ -424,14 +408,13 @@ class CredentialRepository(BaseRepository[ExternalCredential]):
         except TenantIsolationViolationError:
             raise
         except Exception as e:
-            self.logger.error(
-                "Failed to delete credential",
-                extra={"system_name": system_name, "error": str(e), "error_type": type(e).__name__},
-            )
+            # RepositoryError will automatically log via BaseError.__init__
             raise RepositoryError(
                 message="Failed to delete credential",
                 error_code=ErrorCode.DATABASE_ERROR,
-                details={"system_name": system_name, "error": str(e)},
+                system_name=system_name,
+                error=str(e),
+                error_type=type(e).__name__,
                 cause=e,
             ) from e
 
@@ -484,13 +467,12 @@ class CredentialRepository(BaseRepository[ExternalCredential]):
         except TenantIsolationViolationError:
             raise
         except Exception as e:
-            self.logger.error(
-                "Failed to get expiring credentials",
-                extra={"minutes_ahead": minutes_ahead, "error": str(e)},
-            )
+            # RepositoryError will automatically log via BaseError.__init__
             raise RepositoryError(
                 message="Failed to get expiring credentials",
                 error_code=ErrorCode.DATABASE_ERROR,
-                details={"error": str(e)},
+                minutes_ahead=minutes_ahead,
+                error=str(e),
+                error_type=type(e).__name__,
                 cause=e,
             ) from e

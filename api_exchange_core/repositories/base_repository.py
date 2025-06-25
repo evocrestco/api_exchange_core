@@ -5,7 +5,6 @@ This module provides a base class with shared methods and patterns to
 reduce duplication across repository implementations.
 """
 
-import logging
 from contextlib import contextmanager
 from typing import Any, Dict, Generic, List, NoReturn, Optional, Tuple, Type, TypeVar
 
@@ -16,6 +15,7 @@ from sqlalchemy.orm import Session
 from ..context.tenant_context import TenantContext
 from ..db import BaseModel
 from ..exceptions import ErrorCode, RepositoryError, ValidationError, duplicate
+from ..utils.logger import get_logger
 
 # Type variable for entity models
 T = TypeVar("T", bound=BaseModel)
@@ -28,7 +28,7 @@ class BaseRepository(Generic[T]):
         self,
         session: Session,
         entity_class: Type[T],
-        logger: Optional[logging.Logger] = None,
+        logger = None,
     ):
         """
         Initialize the base repository.
@@ -40,7 +40,7 @@ class BaseRepository(Generic[T]):
         """
         self.session = session
         self.entity_class = entity_class
-        self.logger = logger or logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        self.logger = logger or get_logger()
         self.entity_name = entity_class.__name__
 
     def _get_current_tenant_id(self) -> str:

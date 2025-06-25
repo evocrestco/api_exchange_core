@@ -62,7 +62,7 @@ class BaseService(Generic[TCreate, TRead, TUpdate, TFilter]):
         self, operation: str, exception: Exception, entity_id: Optional[str] = None  # noqa
     ) -> NoReturn:
         """
-        Handle and log service exceptions consistently.
+        Handle service exceptions consistently by wrapping them in ServiceError.
 
         Args:
             operation: Operation being performed
@@ -70,19 +70,11 @@ class BaseService(Generic[TCreate, TRead, TUpdate, TFilter]):
             entity_id: Optional ID of the entity involved
 
         Raises:
-            The original exception after logging
+            ServiceError: Wrapped exception with operation context (auto-logged)
         """
         if isinstance(exception, RepositoryError) and exception.error_code == ErrorCode.NOT_FOUND:
             # Convert NOT_FOUND RepositoryError to ServiceError
-            self.logger.warning(
-                f"Entity not found in {operation}",
-                extra={
-                    "operation": operation,
-                    "entity_id": entity_id,
-                    "error_type": type(exception).__name__,
-                    "error_details": str(exception),
-                },
-            )
+            # Note: ServiceError will automatically log via BaseError.__init__
             raise ServiceError(
                 str(exception),
                 error_code=ErrorCode.NOT_FOUND,
@@ -92,17 +84,8 @@ class BaseService(Generic[TCreate, TRead, TUpdate, TFilter]):
             )
         else:
             # Wrap other exceptions in ServiceError
+            # Note: ServiceError will automatically log via BaseError.__init__
             error_msg = f"Error in {operation}: {str(exception)}"
-            self.logger.error(
-                error_msg,
-                extra={
-                    "operation": operation,
-                    "entity_id": entity_id,
-                    "error_type": type(exception).__name__,
-                    "error_details": str(exception),
-                },
-                exc_info=True,
-            )
             raise ServiceError(
                 error_msg,
                 error_code=ErrorCode.INTERNAL_ERROR,

@@ -63,7 +63,7 @@ class TestProcessMetrics:
         process_metrics([])
 
     @patch("api_exchange_core.utils.azure_queue_utils.QueueClient")
-    @patch("api_exchange_core.utils.azure_queue_utils.logging.getLogger")
+    @patch("api_exchange_core.utils.azure_queue_utils.get_logger")
     def test_process_metrics_send_failure(self, mock_get_logger, mock_queue_client_class):
         """Test handling of send failures."""
         # Setup mock logger
@@ -84,7 +84,7 @@ class TestProcessMetrics:
         mock_logger.error.assert_called()
 
     @patch("api_exchange_core.utils.azure_queue_utils.QueueClient")
-    @patch("api_exchange_core.utils.azure_queue_utils.logging.getLogger")
+    @patch("api_exchange_core.utils.azure_queue_utils.get_logger")
     def test_process_metrics_queue_init_failure(self, mock_get_logger, mock_queue_client_class):
         """Test handling of queue initialization failures."""
         # Setup mock logger
@@ -111,7 +111,7 @@ class TestProcessMetrics:
         assert "METRIC: test" in str(mock_logger.warning.call_args_list[0])
 
     @patch("api_exchange_core.utils.azure_queue_utils.QueueClient")
-    @patch("api_exchange_core.utils.azure_queue_utils.logging.getLogger")
+    @patch("api_exchange_core.utils.azure_queue_utils.get_logger")
     def test_process_metrics_queue_not_found_creates_queue(self, mock_get_logger, mock_queue_client_class):
         """Test that queue is created when QueueNotFound error occurs."""
         # Setup mock logger
@@ -138,7 +138,7 @@ class TestProcessMetrics:
         assert mock_queue_client.send_message.call_count == 2
 
     @patch("api_exchange_core.utils.azure_queue_utils.QueueClient")
-    @patch("api_exchange_core.utils.azure_queue_utils.logging.getLogger")
+    @patch("api_exchange_core.utils.azure_queue_utils.get_logger")
     def test_process_metrics_queue_creation_fails(self, mock_get_logger, mock_queue_client_class):
         """Test handling when queue creation fails."""
         # Setup mock logger

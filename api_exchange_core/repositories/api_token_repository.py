@@ -154,24 +154,15 @@ class APITokenRepository(BaseRepository[APIToken]):
             return (token_value, token.id)
 
         except Exception as e:
-            self.logger.error(
-                "Failed to get valid token",
-                extra={
-                    "api_provider": self.api_provider,
-                    "tenant_id": tenant_id,
-                    "operation": operation,
-                    "error": str(e),
-                    "error_type": type(e).__name__,
-                },
-            )
+            # RepositoryError will automatically log via BaseError.__init__
             raise RepositoryError(
                 message="Failed to retrieve valid token",
                 error_code=ErrorCode.DATABASE_ERROR,
-                details={
-                    "api_provider": self.api_provider,
-                    "operation": operation,
-                    "error": str(e),
-                },
+                api_provider=self.api_provider,
+                tenant_id=tenant_id,
+                operation=operation,
+                error=str(e),
+                error_type=type(e).__name__,
                 cause=e,
             ) from e
 
@@ -225,23 +216,14 @@ class APITokenRepository(BaseRepository[APIToken]):
             )
 
             if active_count >= self.max_tokens:
-                self.logger.warning(
-                    "Token limit reached, cannot store new token",
-                    extra={
-                        "api_provider": self.api_provider,
-                        "tenant_id": tenant_id,
-                        "active_count": active_count,
-                        "limit": self.max_tokens,
-                    },
-                )
+                # ValidationError will automatically log via BaseError.__init__
                 raise ValidationError(
                     message=f"Token limit reached ({active_count}/{self.max_tokens})",
                     error_code=ErrorCode.LIMIT_EXCEEDED,
-                    details={
-                        "api_provider": self.api_provider,
-                        "active_count": active_count,
-                        "limit": self.max_tokens,
-                    },
+                    api_provider=self.api_provider,
+                    tenant_id=tenant_id,
+                    active_count=active_count,
+                    limit=self.max_tokens,
                 )
 
             # Create new token record
@@ -285,40 +267,25 @@ class APITokenRepository(BaseRepository[APIToken]):
         except (ValidationError, TenantIsolationViolationError):
             raise
         except IntegrityError as e:
-            # Handle race condition where token was created by another process
-            self.logger.warning(
-                "Token creation race condition detected",
-                extra={
-                    "api_provider": self.api_provider,
-                    "tenant_id": tenant_id,
-                    "generated_by": generated_by,
-                    "error": str(e),
-                },
-            )
+            # ValidationError will automatically log via BaseError.__init__
             raise ValidationError(
                 message="Token already exists (race condition)",
                 error_code=ErrorCode.DUPLICATE,
-                details={"error": str(e)},
+                api_provider=self.api_provider,
+                tenant_id=tenant_id,
+                generated_by=generated_by,
+                error=str(e),
             ) from e
         except Exception as e:
-            self.logger.error(
-                "Failed to store new token",
-                extra={
-                    "api_provider": self.api_provider,
-                    "tenant_id": tenant_id,
-                    "generated_by": generated_by,
-                    "error": str(e),
-                    "error_type": type(e).__name__,
-                },
-            )
+            # RepositoryError will automatically log via BaseError.__init__
             raise RepositoryError(
                 message="Failed to store token",
                 error_code=ErrorCode.DATABASE_ERROR,
-                details={
-                    "api_provider": self.api_provider,
-                    "generated_by": generated_by,
-                    "error": str(e),
-                },
+                api_provider=self.api_provider,
+                tenant_id=tenant_id,
+                generated_by=generated_by,
+                error=str(e),
+                error_type=type(e).__name__,
                 cause=e,
             ) from e
 
@@ -557,19 +524,14 @@ class APITokenRepository(BaseRepository[APIToken]):
             return count
 
         except Exception as e:
-            self.logger.error(
-                "Failed to cleanup expired tokens",
-                extra={
-                    "api_provider": self.api_provider,
-                    "tenant_id": tenant_id,
-                    "error": str(e),
-                    "error_type": type(e).__name__,
-                },
-            )
+            # RepositoryError will automatically log via BaseError.__init__
             raise RepositoryError(
                 message="Failed to cleanup expired tokens",
                 error_code=ErrorCode.DATABASE_ERROR,
-                details={"api_provider": self.api_provider, "error": str(e)},
+                api_provider=self.api_provider,
+                tenant_id=tenant_id,
+                error=str(e),
+                error_type=type(e).__name__,
                 cause=e,
             ) from e
 

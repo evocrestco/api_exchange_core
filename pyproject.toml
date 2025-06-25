@@ -68,6 +68,7 @@ packages = {find = {exclude = ["tests*"]}}
 
 [project.entry-points."flake8.extension"]
 EXC001 = "api_exchange_core.custom_flake8_rules:FrameworkExceptionChecker"
+LOG001 = "api_exchange_core.custom_flake8_rules:LoggingStandardsChecker"
 
 [tool.black]
 line-length = 100

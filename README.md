@@ -115,6 +115,7 @@ Check out the [examples](examples/) directory for complete working examples.
 
 - [Developer Guide](DEVELOPER_GUIDE.md) - Comprehensive guide for developers
 - [Technical Architecture](TECHNICAL.md) - Detailed technical documentation
+- [Logging Standards](docs/logging_standards.md) - Framework logging practices and correlation ID usage
 - [Examples](examples/) - Working examples to get you started
 - [Testing Guide](tests/README_TESTING.md) - How to test your pipelines
 - [Contributing](CONTRIBUTING.md) - How to contribute to the project

@@ -8,7 +8,6 @@ IMPORTANT: Always import this module as 'src.context.tenant_context' to avoid
 multiple module instances which would break tenant isolation.
 """
 
-import logging
 import threading
 from contextlib import contextmanager
 from functools import wraps
@@ -17,6 +16,7 @@ from typing import TYPE_CHECKING, Any, Callable, Generator, Optional, Union
 from sqlalchemy.orm import Session
 
 from ..exceptions import ErrorCode, ValidationError
+from ..utils.logger import get_logger
 
 if TYPE_CHECKING:
     from ..schemas.tenant_schema import TenantRead
@@ -32,7 +32,7 @@ class TenantContext:
 
     # Use thread-local storage for tenant context
     _thread_local = threading.local()
-    _logger = logging.getLogger(__name__)
+    _logger = get_logger()
 
     @classmethod
     def set_current_tenant(cls, tenant_id: str) -> None:
@@ -206,7 +206,7 @@ def tenant_aware(tenant_id: Union[Optional[str], Callable] = None):
                 with tenant_context(effective_tenant_id):
                     return func(*args, **kwargs)
             else:
-                TenantContext._logger.warning("No tenant ID provided for tenant-aware function")
+                # ValidationError will automatically log via BaseError.__init__
                 raise ValidationError(
                     "No tenant ID provided for tenant-aware function",
                     error_code=ErrorCode.MISSING_REQUIRED,

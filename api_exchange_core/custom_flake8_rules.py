@@ -1,8 +1,9 @@
 """
-Custom flake8 rules for enforcing exception usage patterns.
+Custom flake8 rules for enforcing framework patterns.
 
-This module provides a flake8 plugin that checks for usage of exceptions
-that don't inherit from our BaseError class.
+This module provides flake8 plugins that check for:
+1. Usage of exceptions that don't inherit from our BaseError class
+2. Usage of logging.getLogger() instead of our custom get_logger()
 """
 
 import ast
@@ -115,3 +116,97 @@ class FrameworkExceptionVisitor(ast.NodeVisitor):
         }
         
         return suggestions.get(exc_name, 'Use a framework exception from ..exceptions instead')
+
+
+class LoggingStandardsChecker:
+    """Check that code uses get_logger() instead of logging.getLogger()."""
+    
+    name = 'logging-standards-checker'
+    version = '0.1.0'
+    
+    def __init__(self, tree: ast.AST, filename: str = '') -> None:
+        self.tree = tree
+        self.filename = filename
+    
+    def run(self) -> Generator[Tuple[int, int, str, Type[Any]], None, None]:
+        """Run the checker on the AST."""
+        visitor = LoggingStandardsVisitor(self.filename)
+        visitor.visit(self.tree)
+        
+        for line, col, msg in visitor.errors:
+            yield line, col, msg, type(self)
+
+
+class LoggingStandardsVisitor(ast.NodeVisitor):
+    """AST visitor to find logging.getLogger() usage instead of get_logger()."""
+    
+    def __init__(self, filename: str) -> None:
+        self.errors = []
+        self.filename = filename
+        self.has_get_logger_import = False
+        self.has_logging_import = False
+    
+    def _is_exempt_file(self) -> bool:
+        """Check if current file is exempt from logging rules."""
+        exempt_patterns = [
+            'exceptions.py',           # Framework exception logging
+            'logger.py',              # Logging system implementation
+            'test_',                  # Test files
+            'conftest.py',           # Test configuration
+            'function_app.py',       # Azure Functions entry point
+        ]
+        
+        for pattern in exempt_patterns:
+            if pattern in self.filename:
+                return True
+        return False
+    
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        """Track imports to see if get_logger is imported."""
+        if (node.module in ["utils.logger", "api_exchange_core.utils.logger", "..utils.logger"] 
+            and any(alias.name == "get_logger" for alias in node.names)):
+            self.has_get_logger_import = True
+        self.generic_visit(node)
+    
+    def visit_Import(self, node: ast.Import) -> None:
+        """Track logging import."""
+        for alias in node.names:
+            if alias.name == "logging":
+                self.has_logging_import = True
+        self.generic_visit(node)
+    
+    def visit_Call(self, node: ast.Call) -> None:
+        """Check for logging.getLogger() calls."""
+        if self._is_exempt_file():
+            self.generic_visit(node)
+            return
+        
+        # Check for logging.getLogger() calls
+        if self._is_logging_get_logger_call(node):
+            msg = 'LOG001 Use get_logger() from utils.logger instead of logging.getLogger()'
+            self.errors.append((node.lineno, node.col_offset, msg))
+        
+        # Check for direct Logger creation
+        elif self._is_direct_logger_creation(node):
+            msg = 'LOG002 Do not create Logger instances directly, use get_logger() instead'
+            self.errors.append((node.lineno, node.col_offset, msg))
+        
+        self.generic_visit(node)
+    
+    def _is_logging_get_logger_call(self, node: ast.Call) -> bool:
+        """Check if node is a logging.getLogger() call."""
+        return (
+            isinstance(node.func, ast.Attribute) and
+            isinstance(node.func.value, ast.Name) and
+            node.func.value.id == "logging" and
+            node.func.attr == "getLogger"
+        )
+    
+    def _is_direct_logger_creation(self, node: ast.Call) -> bool:
+        """Check if node creates a Logger directly."""
+        return (
+            isinstance(node.func, ast.Attribute) and
+            isinstance(node.func.value, ast.Name) and
+            node.func.value.id == "logging" and
+            node.func.attr == "Logger"
+        )

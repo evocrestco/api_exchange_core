@@ -6,14 +6,14 @@ to enable duplicate detection and comparison.
 """
 
 import hashlib
-import logging
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ..exceptions import ErrorCode, ValidationError
 from .hash_config import HashConfig
 from .json_utils import dumps
+from .logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger()
 
 
 def _apply_config(

@@ -1,4 +1,3 @@
-import logging
 import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -9,13 +8,13 @@ from azure.storage.queue import QueueClient
 from ..constants import EnvironmentVariable, QueueName, QueueOperation
 from ..schemas.metric_model import Metric, QueueMetric
 from .json_utils import dumps
+from .logger import get_logger
 
 
 def process_metrics(
     metrics: List[Metric],
     queue_name: Optional[str] = None,
     connection_string: Optional[str] = None,
-    logger: Optional[logging.Logger] = None,
 ) -> None:
     """
     Send a list of metrics to an Azure Storage Queue using the SDK.
@@ -24,10 +23,9 @@ def process_metrics(
         metrics: List of metrics to process
         queue_name: Name of the Azure Storage Queue (defaults to QueueName.METRICS)
         connection_string: Azure Storage connection string
-        logger: Optional logger instance
     """
     queue_name = queue_name or QueueName.METRICS.value
-    log = logger or logging.getLogger("queue_operations")
+    log = get_logger()
     connection_string = connection_string or os.getenv(
         EnvironmentVariable.AZURE_STORAGE_CONNECTION.value
     )
@@ -90,7 +88,6 @@ def send_queue_message(
     output_binding: func.Out[str],
     message: Dict[str, Any],
     queue_name: str = "",
-    logger: Optional[logging.Logger] = None,
 ) -> None:
     """
     Send a message to a queue and record the metric in a metrics queue.
@@ -99,7 +96,6 @@ def send_queue_message(
         output_binding: Azure Functions output binding for the target queue
         message: Message to send (will be JSON serialized)
         queue_name: Name of the queue being sent to
-        logger: Optional logger instance
     """
     # Send the message using the binding
     output_binding.set(dumps(message))
@@ -116,7 +112,6 @@ def send_queue_message(
 def track_message_receive(
     msg: func.QueueMessage,
     queue_name: str = "",
-    logger: Optional[logging.Logger] = None,
 ) -> func.QueueMessage:
     """
     Track metrics for a received queue message and return the original message.
@@ -124,7 +119,6 @@ def track_message_receive(
     Args:
         msg: The queue message being processed
         queue_name: Name of the queue the message was received from
-        logger: Optional logger instance
 
     Returns:
         The original message object for further processing
