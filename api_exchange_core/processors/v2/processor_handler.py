@@ -109,7 +109,7 @@ class ProcessorHandler:
             from ...services.logging_processing_error_service import LoggingProcessingErrorService
             from ...services.logging_state_tracking_service import LoggingStateTrackingService
 
-            state_tracking_service = LoggingStateTrackingService()
+            state_tracking_service = LoggingStateTrackingService(db_manager=self.db_manager)
             error_service = LoggingProcessingErrorService()
             entity_service = None  # ProcessingService handles entity operations
 
@@ -133,7 +133,7 @@ class ProcessorHandler:
             from ...services.logging_processing_error_service import LoggingProcessingErrorService
             from ...services.logging_state_tracking_service import LoggingStateTrackingService
 
-            state_tracking_service = LoggingStateTrackingService()
+            state_tracking_service = LoggingStateTrackingService(db_manager=self.db_manager)
             error_service = LoggingProcessingErrorService()
             entity_service = None  # noqa: F841 - Placeholder for future fallback mode
 
@@ -676,7 +676,7 @@ class ProcessorHandler:
                         raise ValidationError(
                             "destinations required for queue handler",
                             error_code=ErrorCode.MISSING_REQUIRED,
-                            field="destinations"
+                            field="destinations",
                         )
 
                     # Send to each destination and track results
@@ -719,7 +719,7 @@ class ProcessorHandler:
                         raise ValidationError(
                             "topic required for service_bus handler",
                             error_code=ErrorCode.MISSING_REQUIRED,
-                            field="topic"
+                            field="topic",
                         )
 
                     try:
@@ -754,7 +754,7 @@ class ProcessorHandler:
                         f"Unsupported handler type: {handler_type}",
                         error_code=ErrorCode.INVALID_FORMAT,
                         field="handler_type",
-                        value=handler_type
+                        value=handler_type,
                     )
 
                 # Log output results
@@ -879,7 +879,9 @@ class ProcessorHandler:
                     }
                 )
 
-            service.record_transition(
+            from ...schemas import PipelineStateTransitionCreate
+
+            transition_data = PipelineStateTransitionCreate(
                 entity_id=entity_id,
                 from_state=from_state,
                 to_state=to_state,
@@ -887,6 +889,7 @@ class ProcessorHandler:
                 processor_data=processor_data,
                 external_id=external_id,
             )
+            service.record_transition(transition_data)
 
             self.logger.debug(
                 f"Recorded state transition for entity {entity_id}: {from_state} -> {to_state}",

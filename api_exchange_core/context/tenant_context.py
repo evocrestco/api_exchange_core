@@ -50,7 +50,7 @@ class TenantContext:
                 "tenant_id must be a non-empty string",
                 error_code=ErrorCode.MISSING_REQUIRED,
                 field="tenant_id",
-                value=tenant_id
+                value=tenant_id,
             )
 
         cls._thread_local.tenant_id = tenant_id.strip()
@@ -210,7 +210,7 @@ def tenant_aware(tenant_id: Union[Optional[str], Callable] = None):
                 raise ValidationError(
                     "No tenant ID provided for tenant-aware function",
                     error_code=ErrorCode.MISSING_REQUIRED,
-                    field="tenant_id"
+                    field="tenant_id",
                 )
 
         return wrapper

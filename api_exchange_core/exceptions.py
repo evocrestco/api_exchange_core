@@ -14,7 +14,8 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 # Thread-local storage for correlation ID
-correlation_id_var: ContextVar[Optional[str]] = ContextVar("correlation_id", default=None)
+import threading
+_thread_local = threading.local()
 
 
 class ErrorCode(str, Enum):
@@ -87,7 +88,7 @@ class BaseError(Exception):
         self.context = context
 
         # Add correlation ID if available
-        correlation_id = correlation_id_var.get()
+        correlation_id = get_correlation_id()
         if correlation_id:
             self.context["correlation_id"] = correlation_id
 
@@ -374,18 +375,19 @@ def permission_denied(
 
 # Correlation ID management
 def set_correlation_id(correlation_id: str) -> None:
-    """Set the correlation ID for the current context."""
-    correlation_id_var.set(correlation_id)
+    """Set the correlation ID for the current thread."""
+    _thread_local.correlation_id = correlation_id
 
 
 def get_correlation_id() -> Optional[str]:
-    """Get the current correlation ID."""
-    return correlation_id_var.get()
+    """Get the current thread's correlation ID."""
+    return getattr(_thread_local, 'correlation_id', None)
 
 
 def clear_correlation_id() -> None:
-    """Clear the current correlation ID."""
-    correlation_id_var.set(None)
+    """Clear the current thread's correlation ID."""
+    if hasattr(_thread_local, 'correlation_id'):
+        delattr(_thread_local, 'correlation_id')
 
 
 # Telemetry integration (optional)

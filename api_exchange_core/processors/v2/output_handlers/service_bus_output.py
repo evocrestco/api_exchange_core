@@ -73,7 +73,7 @@ class ServiceBusOutputHandler(OutputHandler):
                 "Azure Service Bus SDK is not installed. "
                 "Install it with: pip install azure-servicebus",
                 error_code=ErrorCode.CONFIGURATION_ERROR,
-                operation="__init__"
+                operation="__init__",
             )
 
         # Handle configuration

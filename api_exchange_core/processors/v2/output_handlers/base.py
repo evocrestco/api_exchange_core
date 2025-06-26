@@ -111,9 +111,9 @@ class OutputHandlerError(BaseError):
             error_code=error_code,
             status_code=502,  # Bad Gateway for external service errors
             cause=original_exception,
-            **(error_details or {})
+            **(error_details or {}),
         )
-        
+
         # Store output handler specific attributes
         self.can_retry = can_retry
         self.retry_after_seconds = retry_after_seconds

@@ -199,7 +199,7 @@ class CompositeMapper(MapperInterface):
                 "CompositeMapper requires at least one mapper",
                 error_code=ErrorCode.MISSING_REQUIRED,
                 field="mappers",
-                value=mappers
+                value=mappers,
             )
 
         self.mappers = mappers

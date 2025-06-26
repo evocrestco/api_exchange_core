@@ -222,7 +222,7 @@ class OutputHandlerConfigFactory:
                 f"Supported types: {list(cls._handler_configs.keys())}",
                 error_code=ErrorCode.INVALID_FORMAT,
                 field="handler_type",
-                value=handler_type
+                value=handler_type,
             )
 
         config_class = cls._handler_configs[handler_type]
@@ -356,7 +356,7 @@ class OutputHandlerConfigFactory:
                 f"Config class must inherit from OutputHandlerConfigBase, got {config_class}",
                 error_code=ErrorCode.TYPE_MISMATCH,
                 field="config_class",
-                value=str(config_class)
+                value=str(config_class),
             )
 
         cls._handler_configs[handler_type] = config_class

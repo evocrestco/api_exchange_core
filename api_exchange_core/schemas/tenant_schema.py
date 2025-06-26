@@ -71,7 +71,7 @@ class TenantCreate(BaseModel):
                 "Invalid email address",
                 error_code=ErrorCode.INVALID_FORMAT,
                 field="primary_contact_email",
-                value=v
+                value=v,
             )
         return v
 
@@ -113,7 +113,7 @@ class TenantUpdate(BaseModel):
                 "Invalid email address",
                 error_code=ErrorCode.INVALID_FORMAT,
                 field="primary_contact_email",
-                value=v
+                value=v,
             )
         return v
 
@@ -150,7 +150,7 @@ class TokenManagementConfig(BaseModel):
                 "cleanup_age_minutes must be greater than refresh_buffer_minutes",
                 error_code=ErrorCode.CONSTRAINT_VIOLATION,
                 field="cleanup_age_minutes",
-                value=v
+                value=v,
             )
         return v
 

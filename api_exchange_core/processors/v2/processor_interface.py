@@ -131,6 +131,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Tuple
 
 from ...exceptions import ErrorCode, ServiceError
+from ...schemas import PipelineStateTransitionCreate
 from ..processing_result import ProcessingResult
 from .message import Message
 
@@ -220,7 +221,7 @@ class ProcessorContext:
                 f"Entity not found: {entity_id}",
                 error_code=ErrorCode.NOT_FOUND,
                 operation="create_message",
-                entity_id=entity_id
+                entity_id=entity_id,
             )
 
         from .message import EntityReference, Message, MessageType
@@ -327,7 +328,7 @@ class ProcessorContext:
         raise ServiceError(
             "send_output should be called through ProcessorHandler, not directly on ProcessorContext",
             error_code=ErrorCode.CONFIGURATION_ERROR,
-            operation="send_output"
+            operation="send_output",
         )
 
     def create_and_send_output(
@@ -413,13 +414,14 @@ class ProcessorContext:
     ):
         """Track state transition if service is available."""
         if self.state_tracking_service:
-            self.state_tracking_service.record_transition(
+            transition_data = PipelineStateTransitionCreate(
                 entity_id=entity_id,
                 from_state=from_state,
                 to_state=to_state,
                 actor="processor",
                 processor_data=metadata or {},
             )
+            self.state_tracking_service.record_transition(transition_data)
 
     def log_error(self, error_message: str, error_code: str, can_retry: bool = False):
         """Log error if service is available."""
@@ -456,13 +458,14 @@ class ProcessorContext:
             if metadata:
                 processor_data.update(metadata)
 
-            self.state_tracking_service.record_transition(
+            transition_data = PipelineStateTransitionCreate(
                 entity_id=entity_id,
-                from_state=from_state,
-                to_state=to_state,
+                from_state=from_state.value if hasattr(from_state, "value") else from_state,
+                to_state=to_state.value if hasattr(to_state, "value") else to_state,
                 actor=processor_name,
                 processor_data=processor_data,
             )
+            self.state_tracking_service.record_transition(transition_data)
 
     def get_entity_state_history(self, entity_id: str) -> Optional[Any]:
         """Get entity state history if service is available."""

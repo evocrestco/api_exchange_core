@@ -1,76 +1,62 @@
 """
-Logging-based state tracking service.
+Hybrid state tracking service.
 
-Replaces database-based StateTrackingService with structured logging that can be
-consumed by Loki/ELK for monitoring and analysis. Much simpler and more reliable.
+Records state transitions as both structured log events and database records.
+Logs provide immediate monitoring via Loki/ELK, while database records enable
+efficient querying for GUI and analytics.
+All inputs are validated using Pydantic schemas.
 """
 
 import uuid
 from datetime import UTC, datetime
-from typing import Union
+from typing import Optional, Union
+
+from sqlalchemy.exc import IntegrityError
 
 from ..context.operation_context import operation
 from ..context.tenant_context import tenant_aware
-from ..db import EntityStateEnum
+from ..db import EntityStateEnum, PipelineStateHistory
 from ..enums import TransitionTypeEnum
+from ..schemas import PipelineStateTransitionCreate, PipelineStateTransitionRead
 from ..type_definitions import ProcessorData
 from ..utils.logger import get_logger
 
 
 class LoggingStateTrackingService:
     """
-    Logging-based state tracking service.
+    Hybrid state tracking service.
 
-    Records state transitions as structured log events instead of database records.
-    Can be consumed by Loki/ELK for monitoring, alerting, and analysis.
+    Records state transitions as both structured log events and database records.
+    Logs provide immediate monitoring via Loki/ELK, while database records enable
+    efficient querying for GUI and analytics.
     """
 
-    def __init__(self):
-        """Initialize the logging state tracking service."""
+    def __init__(self, db_manager=None):
+        """
+        Initialize the hybrid state tracking service.
+
+        Args:
+            db_manager: Optional database manager for writing state records.
+                       If None, only logging will be performed (backward compatibility).
+        """
         self.logger = get_logger()
+        self.db_manager = db_manager
 
     @tenant_aware
     @operation(name="log_state_transition")
     def record_transition(
-        self,
-        entity_id: str,
-        from_state: Union[str, EntityStateEnum],
-        to_state: Union[str, EntityStateEnum],
-        actor: str,
-        transition_type: Union[str, TransitionTypeEnum] = TransitionTypeEnum.NORMAL,
-        processor_data: ProcessorData = None,
-        queue_source: str = None,
-        queue_destination: str = None,
-        notes: str = None,
-        transition_duration: int = None,
-        external_id: str = None,
-    ) -> str:
+        self, transition_data: PipelineStateTransitionCreate
+    ) -> PipelineStateTransitionRead:
         """
         Record a state transition as a structured log event.
 
         Args:
-            entity_id: ID of the entity
-            from_state: Previous state
-            to_state: New state
-            actor: Actor (processor or user) making the transition
-            transition_type: Type of transition (NORMAL, ERROR, etc.)
-            processor_data: Additional data related to the transition
-            queue_source: Queue from which the message was received
-            queue_destination: Queue to which the message was sent
-            notes: Additional notes about the transition
-            transition_duration: Duration in ms of the previous state
+            transition_data: PipelineStateTransitionCreate with validated transition data
 
         Returns:
-            ID of the logged state transition (for compatibility)
+            PipelineStateTransitionRead with the recorded transition information
         """
-        # Convert enum values to strings if needed
-        from_state_val = from_state.value if hasattr(from_state, "value") else from_state
-        to_state_val = to_state.value if hasattr(to_state, "value") else to_state
-        transition_type_val = (
-            transition_type.value if hasattr(transition_type, "value") else transition_type
-        )
-
-        # Generate ID for compatibility with existing code
+        # Generate ID for the transition
         transition_id = str(uuid.uuid4())
 
         # Get tenant context
@@ -78,38 +64,149 @@ class LoggingStateTrackingService:
 
         tenant_id = TenantContext.get_current_tenant_id()
 
-        # Get correlation ID from context
-        from ..exceptions import get_correlation_id
-
-        correlation_id = get_correlation_id()
+        # Remove correlation_id - use entity_id for tracing instead
+        correlation_id = None
+        timestamp = datetime.now(UTC)
 
         # Create structured log event
         log_data = {
             "event_type": "state_transition",
             "transition_id": transition_id,
-            "entity_id": entity_id,
-            "external_id": external_id,
+            "entity_id": transition_data.entity_id,
+            "external_id": transition_data.external_id,
             "tenant_id": tenant_id,
             "correlation_id": correlation_id,
-            "from_state": from_state_val,
-            "to_state": to_state_val,
-            "actor": actor,
-            "transition_type": transition_type_val,
-            "timestamp": datetime.now(UTC).isoformat(),
-            "processor_data": processor_data,
-            "queue_source": queue_source,
-            "queue_destination": queue_destination,
-            "notes": notes,
-            "transition_duration_ms": transition_duration,
+            "from_state": transition_data.from_state,
+            "to_state": transition_data.to_state,
+            "actor": transition_data.actor,
+            "transition_type": transition_data.transition_type,
+            "timestamp": timestamp.isoformat(),
+            "processor_data": transition_data.processor_data,
+            "queue_source": transition_data.queue_source,
+            "queue_destination": transition_data.queue_destination,
+            "notes": transition_data.notes,
+            "transition_duration_ms": transition_data.transition_duration,
         }
 
         # Remove None values to keep logs clean
         log_data = {k: v for k, v in log_data.items() if v is not None}
 
         # Log the state transition event
-        self.logger.info(f"State transition: {from_state_val} → {to_state_val}", extra=log_data)
+        self.logger.info(
+            f"State transition: {transition_data.from_state} → {transition_data.to_state}",
+            extra=log_data,
+        )
 
-        return transition_id
+        # Also write to database if db_manager is available
+        if self.db_manager:
+            self._write_to_database(
+                transition_id=transition_id,
+                entity_id=transition_data.entity_id,
+                external_id=transition_data.external_id,
+                tenant_id=tenant_id,
+                processor_name=transition_data.actor,
+                status=transition_data.to_state,
+                log_timestamp=timestamp,
+                source_queue=transition_data.queue_source,
+                destination_queue=transition_data.queue_destination,
+                processing_duration_ms=transition_data.transition_duration,
+                processor_data=transition_data.processor_data,
+                transition_type=transition_data.transition_type,
+                notes=transition_data.notes,
+            )
+
+        # Return properly typed response
+        return PipelineStateTransitionRead(
+            transition_id=transition_id,
+            entity_id=transition_data.entity_id,
+            tenant_id=tenant_id,
+            correlation_id=correlation_id,
+            from_state=transition_data.from_state,
+            to_state=transition_data.to_state,
+            actor=transition_data.actor,
+            transition_type=transition_data.transition_type,
+            timestamp=timestamp,
+            external_id=transition_data.external_id,
+            queue_source=transition_data.queue_source,
+            queue_destination=transition_data.queue_destination,
+            notes=transition_data.notes,
+            transition_duration=transition_data.transition_duration,
+            processor_data=transition_data.processor_data,
+        )
+
+    def _write_to_database(
+        self,
+        transition_id: str,
+        entity_id: str,
+        tenant_id: str,
+        processor_name: str,
+        status: str,
+        log_timestamp: datetime,
+        external_id: Optional[str] = None,
+        source_queue: Optional[str] = None,
+        destination_queue: Optional[str] = None,
+        processing_duration_ms: Optional[int] = None,
+        processor_data: Optional[dict] = None,
+        transition_type: Optional[str] = None,
+        notes: Optional[str] = None,
+    ) -> None:
+        """
+        Write state transition to database.
+
+        This method creates a PipelineStateHistory record in addition to logging.
+        Failures are logged but don't interrupt processing to maintain reliability.
+        """
+        try:
+            # Map transition types to status values for the GUI
+            status_mapping = {
+                "NORMAL": status,
+                "ERROR": "FAILED",
+                "RECOVERY": "RETRYING",
+                "MANUAL": status,
+                "TIMEOUT": "FAILED",
+                "RETRY": "RETRYING",
+            }
+
+            mapped_status = status_mapping.get(transition_type, status)
+
+            # Create state history record
+            state_record = PipelineStateHistory.create(
+                tenant_id=tenant_id,
+                processor_name=processor_name,
+                status=mapped_status,
+                log_timestamp=log_timestamp,
+                entity_id=entity_id,
+                external_id=external_id,
+                source_queue=source_queue,
+                destination_queue=destination_queue,
+                processing_duration_ms=processing_duration_ms,
+                error_message=notes if mapped_status == "FAILED" else None,
+            )
+
+            # Use the transition_id as the record ID for consistency
+            state_record.id = transition_id
+
+            # Save to database
+            session = self.db_manager.get_session()
+            try:
+                session.add(state_record)
+                session.commit()
+                self.logger.debug(
+                    f"Wrote state record to database: {entity_id} | {processor_name} | {mapped_status}"
+                )
+
+            except IntegrityError:
+                session.rollback()
+                self.logger.debug(
+                    f"Duplicate state record, skipping database write: {transition_id}"
+                )
+
+            finally:
+                session.close()
+
+        except Exception as e:
+            # Log but don't raise - database issues shouldn't break processing
+            self.logger.warning(f"Failed to write state to database: {e}", exc_info=True)
 
     def get_entity_state_history(self, entity_id: str):
         """

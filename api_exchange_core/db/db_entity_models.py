@@ -69,28 +69,28 @@ class Entity(Base):
                 "tenant_id is required",
                 error_code=ErrorCode.MISSING_REQUIRED,
                 field="tenant_id",
-                value=tenant_id
+                value=tenant_id,
             )
         if not external_id:
             raise ValidationError(
                 "external_id is required",
                 error_code=ErrorCode.MISSING_REQUIRED,
                 field="external_id",
-                value=external_id
+                value=external_id,
             )
         if not canonical_type:
             raise ValidationError(
                 "canonical_type is required",
                 error_code=ErrorCode.MISSING_REQUIRED,
                 field="canonical_type",
-                value=canonical_type
+                value=canonical_type,
             )
         if not source:
             raise ValidationError(
                 "source is required",
                 error_code=ErrorCode.MISSING_REQUIRED,
                 field="source",
-                value=source
+                value=source,
             )
 
         return cls(

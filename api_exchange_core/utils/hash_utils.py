@@ -118,7 +118,7 @@ def calculate_entity_hash(
             "Cannot calculate hash for None data",
             error_code=ErrorCode.TYPE_MISMATCH,
             field="data",
-            value=data
+            value=data,
         )
 
     # Apply configuration

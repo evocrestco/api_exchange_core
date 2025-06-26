@@ -38,6 +38,20 @@ from .metric_model import (
     Metric,
     QueueMetric,
 )
+from .pipeline_state_schema import (
+    EntityQuery,
+    PipelineHistoryResponse,
+    PipelineStateHistoryCreate,
+    PipelineStateHistoryRead,
+    PipelineStateQuery,
+    ProcessorMetricsRead,
+    ProcessorMetricsResponse,
+)
+from .pipeline_state_schema import StateTransitionCreate as PipelineStateTransitionCreate
+from .pipeline_state_schema import StateTransitionRead as PipelineStateTransitionRead
+from .pipeline_state_schema import (
+    StatusSummaryRead,
+)
 from .processing_error_schema import (
     ProcessingErrorBase,
     ProcessingErrorCreate,
@@ -106,4 +120,15 @@ __all__ = [
     "create_processing_error",
     "create_system_error",
     "error_from_exception",
+    # Pipeline state schemas
+    "EntityQuery",
+    "PipelineHistoryResponse",
+    "PipelineStateHistoryCreate",
+    "PipelineStateHistoryRead",
+    "PipelineStateQuery",
+    "ProcessorMetricsRead",
+    "ProcessorMetricsResponse",
+    "PipelineStateTransitionCreate",
+    "PipelineStateTransitionRead",
+    "StatusSummaryRead",
 ]

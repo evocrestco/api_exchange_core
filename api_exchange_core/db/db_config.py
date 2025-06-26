@@ -32,7 +32,7 @@ class DatabaseConfig(BaseModel):
                     "Missing required Postgres configuration parameters",
                     error_code=ErrorCode.MISSING_REQUIRED,
                     field="database_config",
-                    value={"host": self.host, "database": self.database, "username": self.username}
+                    value={"host": self.host, "database": self.database, "username": self.username},
                 )
             return (
                 f"postgresql://{self.username}:{self.password}@"
@@ -44,7 +44,7 @@ class DatabaseConfig(BaseModel):
             f"Unsupported database type: {self.db_type}",
             error_code=ErrorCode.INVALID_FORMAT,
             field="db_type",
-            value=self.db_type
+            value=self.db_type,
         )
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -99,7 +99,7 @@ class DatabaseManager:
                 "Cannot drop tables: not in development mode",
                 error_code=ErrorCode.CONFIGURATION_ERROR,
                 operation="drop_tables",
-                development_mode=self.config.development_mode
+                development_mode=self.config.development_mode,
             )
 
     def get_session(self) -> Session:
@@ -156,6 +156,7 @@ def import_all_models():
     from .db_api_token_models import APIToken, APITokenUsageLog, TokenCoordination  # noqa
     from .db_credential_models import ExternalCredential  # noqa
     from .db_entity_models import Entity  # noqa
+    from .db_pipeline_state_models import PipelineStateHistory  # noqa
     from .db_tenant_models import Tenant  # noqa
 
     configure_mappers()

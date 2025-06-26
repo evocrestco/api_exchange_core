@@ -54,7 +54,7 @@ class BaseService(Generic[TCreate, TRead, TUpdate, TFilter]):
             raise ValidationError(
                 "No tenant context set - ensure tenant_context is active",
                 error_code=ErrorCode.MISSING_REQUIRED,
-                field="tenant_id"
+                field="tenant_id",
             )
         return tenant_id
 

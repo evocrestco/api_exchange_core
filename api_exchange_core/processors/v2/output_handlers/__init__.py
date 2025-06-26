@@ -12,7 +12,7 @@ Available output handlers:
 - NoOpOutputHandler: No-operation handler for processors with no output
 
 Usage:
-    from src.processors.v2.output_handlers import QueueOutputHandler
+    from api_exchange_core.processors.v2.output_handlers import QueueOutputHandler
 
     # In processor.process() method:
     result = ProcessingResult.create_success()

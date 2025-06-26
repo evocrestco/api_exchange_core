@@ -56,7 +56,7 @@ def create_db_manager() -> DatabaseManager:
                 f"{', '.join(missing_fields)}. Please set these environment variables.",
                 error_code=ErrorCode.CONFIGURATION_ERROR,
                 operation="create_db_manager",
-                cause=e
+                cause=e,
             )
         else:
             # Re-raise if it's not a missing field error
@@ -64,7 +64,7 @@ def create_db_manager() -> DatabaseManager:
                 f"Database configuration validation failed: {e}",
                 error_code=ErrorCode.CONFIGURATION_ERROR,
                 operation="create_db_manager",
-                cause=e
+                cause=e,
             )
 
 

@@ -11,7 +11,7 @@ from alembic import context
 load_dotenv()
 
 # Import our models and database config
-from db import Base, get_production_config, get_development_config
+from api_exchange_core.db import Base, get_production_config, get_development_config
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -23,7 +23,7 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Import all models so they're registered with SQLAlchemy
-from db import import_all_models
+from api_exchange_core.db import import_all_models
 import_all_models()
 
 # Set target metadata from our Base

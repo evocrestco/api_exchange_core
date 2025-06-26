@@ -13,6 +13,7 @@ from ..context.operation_context import operation
 from ..context.tenant_context import TenantContext, tenant_aware
 from ..db import EntityStateEnum, TransitionTypeEnum
 from ..exceptions import ErrorCode, ServiceError, ValidationError
+from ..schemas import PipelineStateTransitionCreate
 from ..utils.logger import get_logger
 from .duplicate_detection import DuplicateDetectionResult, DuplicateDetectionService
 from .entity_attributes import EntityAttributeBuilder
@@ -63,6 +64,9 @@ class ProcessingService:
         from ..services.logging_processing_error_service import LoggingProcessingErrorService
         from ..services.logging_state_tracking_service import LoggingStateTrackingService
 
+        # Store db_manager for service initialization
+        self.db_manager = db_manager
+        
         # Create shared session for all services
         if db_manager is not None:
             # Use provided database manager
@@ -71,9 +75,9 @@ class ProcessingService:
             # Backward compatibility: create from environment
             self.session = self._create_session()
 
-        # Create services - EntityService with session, logging services without
+        # Create services - EntityService with session, logging services with db_manager
         self.entity_service = EntityService(session=self.session)
-        self.state_tracking_service = LoggingStateTrackingService()
+        self.state_tracking_service = LoggingStateTrackingService(db_manager=self.db_manager)
         self.error_service = LoggingProcessingErrorService()
 
         # Keep existing services that don't need sessions
@@ -168,15 +172,20 @@ class ProcessingService:
                 f"{'New entity' if is_new_entity else 'Entity'} {action} by {config.processor_name}"
             )
 
-            self.state_tracking_service.record_transition(
+            transition_data = PipelineStateTransitionCreate(
                 entity_id=entity_id,
-                from_state=from_state,
-                to_state=to_state,
+                from_state=from_state.value if hasattr(from_state, "value") else from_state,
+                to_state=to_state.value if hasattr(to_state, "value") else to_state,
                 actor=config.processor_name,
-                transition_type=TransitionTypeEnum.NORMAL,
+                transition_type=(
+                    TransitionTypeEnum.NORMAL.value
+                    if hasattr(TransitionTypeEnum.NORMAL, "value")
+                    else "NORMAL"
+                ),
                 processor_data=processor_data,
                 notes=notes,
             )
+            self.state_tracking_service.record_transition(transition_data)
             # Note: No commit here - ProcessorHandler manages the shared session transaction
         except Exception as e:
             entity_type = "new entity" if is_new_entity else "version update"

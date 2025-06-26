@@ -23,9 +23,17 @@ from .db_base import (
 )
 
 # Import configuration
-from .db_config import Base, DatabaseConfig, DatabaseManager, import_all_models
+from .db_config import (
+    Base,
+    DatabaseConfig,
+    DatabaseManager,
+    get_development_config,
+    get_production_config,
+    import_all_models,
+)
 from .db_credential_models import ExternalCredential
 from .db_entity_models import Entity
+from .db_pipeline_state_models import PipelineStateHistory
 from .db_tenant_models import Tenant, TenantNotFoundError
 
 # Re-export all models for easy access
@@ -44,12 +52,15 @@ __all__ = [
     "DatabaseConfig",
     "DatabaseManager",
     "import_all_models",
+    "get_production_config",
+    "get_development_config",
     # Models
     "APIToken",
     "APITokenUsageLog",
     "TokenCoordination",
     "ExternalCredential",
     "Entity",
+    "PipelineStateHistory",
     "Tenant",
     "TenantNotFoundError",
 ]

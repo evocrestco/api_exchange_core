@@ -28,7 +28,7 @@ class BaseRepository(Generic[T]):
         self,
         session: Session,
         entity_class: Type[T],
-        logger = None,
+        logger=None,
     ):
         """
         Initialize the base repository.
@@ -50,7 +50,7 @@ class BaseRepository(Generic[T]):
             raise ValidationError(
                 "No tenant context set - ensure tenant_context is active",
                 error_code=ErrorCode.MISSING_REQUIRED,
-                field="tenant_id"
+                field="tenant_id",
             )
         return tenant_id
 

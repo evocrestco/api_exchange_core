@@ -347,7 +347,7 @@ def configure_logging(
 
     # Note: Azure Functions automatically provides console logging
     # We don't need to add our own StreamHandler as it causes duplicates
-    
+
     # Add tenant context filter to the logger itself (will apply to Azure's built-in handler)
     tenant_filter = TenantContextFilter()
     logger.addFilter(tenant_filter)
