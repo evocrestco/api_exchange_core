@@ -33,6 +33,7 @@ class Message(BaseModel):
     # Message identification
     message_id: str = Field(default_factory=lambda: str(uuid4()))
     correlation_id: str = Field(default_factory=lambda: str(uuid4()))
+    pipeline_id: str = Field(default_factory=lambda: str(uuid4()))
     message_type: MessageType = Field(default=MessageType.ENTITY_PROCESSING)
 
     # Entity reference (not full entity) - for lightweight transport
@@ -47,6 +48,14 @@ class Message(BaseModel):
         """Convert Pydantic models to dicts for JSON serialization."""
         if isinstance(v, BaseModel):
             return v.model_dump()
+        return v
+
+    @field_validator("pipeline_id", mode="before")
+    @classmethod
+    def validate_pipeline_id(cls, v):
+        """Generate UUID for pipeline_id if None is provided."""
+        if v is None:
+            return str(uuid4())
         return v
 
     # Optional metadata for routing/processing hints
@@ -68,11 +77,13 @@ class Message(BaseModel):
         entity_reference: EntityReference,
         payload: Dict[str, Any],
         correlation_id: Optional[str] = None,
+        pipeline_id: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> "Message":
         """Create message for entity processing."""
         return cls(
             correlation_id=correlation_id or str(uuid4()),
+            pipeline_id=pipeline_id or str(uuid4()),
             entity_reference=entity_reference,
             payload=payload,
             metadata=metadata or {},
@@ -84,6 +95,7 @@ class Message(BaseModel):
         entity: Any,
         payload: Dict[str, Any],
         correlation_id: Optional[str] = None,
+        pipeline_id: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> "Message":
         """Create message from an entity object (backward compatibility)."""
@@ -92,5 +104,6 @@ class Message(BaseModel):
             entity_reference=entity_ref,
             payload=payload,
             correlation_id=correlation_id,
+            pipeline_id=pipeline_id,
             metadata=metadata,
         )

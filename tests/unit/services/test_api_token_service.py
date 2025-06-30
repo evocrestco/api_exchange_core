@@ -17,20 +17,18 @@ class TestAPITokenService:
     """Test APITokenService functionality with real implementations."""
     
     @pytest.fixture
-    def test_api_provider_repo(self, db_session):
+    def test_api_provider_repo(self, db_manager):
         """Create real repository for test API provider testing."""
         return APITokenRepository(
-            session=db_session,
             api_provider="test_api_provider", 
             max_tokens=25,
             token_validity_hours=1
         )
     
     @pytest.fixture
-    def small_limit_repo(self, db_session):
+    def small_limit_repo(self, db_manager):
         """Create real repository with small token limit for testing."""
         return APITokenRepository(
-            session=db_session,
             api_provider="test_api",
             max_tokens=3,  # Small limit for testing
             token_validity_hours=1
@@ -245,14 +243,13 @@ class TestAPITokenService:
             token_value, _ = token_service.get_valid_token("test_op")
             assert token_value == "fresh_token"
     
-    def test_multi_tenant_isolation(self, db_session, multi_tenant_context, mock_token_generator):
+    def test_multi_tenant_isolation(self, db_manager, multi_tenant_context, mock_token_generator):
         """Test that tokens are isolated between tenants."""
         tenant1 = multi_tenant_context[0]
         tenant2 = multi_tenant_context[1]
         
-        # Create repository using db_session
+        # Create repository using global db_manager
         test_api_provider_repo = APITokenRepository(
-            session=db_session,
             api_provider="test_api_provider", 
             max_tokens=25,
             token_validity_hours=1

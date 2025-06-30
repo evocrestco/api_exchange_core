@@ -37,15 +37,14 @@ class EntityService(SessionManagedService):
     Uses SQLAlchemy directly - simple, explicit, and efficient.
     """
 
-    def __init__(self, session=None, logger=None):
+    def __init__(self, logger=None):
         """
-        Initialize the service with its own session.
+        Initialize the service with global database manager.
 
         Args:
-            session: Optional existing session (for testing or coordination)
             logger: Optional logger instance
         """
-        super().__init__(session=session, logger=logger)
+        super().__init__(logger=logger)
         self.handler = OperationHandler(logger=self.logger)
 
     def _calculate_content_hash(

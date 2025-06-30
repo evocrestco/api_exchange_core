@@ -39,7 +39,6 @@ class APITokenRepository(BaseRepository[APIToken]):
 
     def __init__(
         self,
-        session: Session,
         api_provider: str,
         max_tokens: int = 25,
         token_validity_hours: int = 1,
@@ -49,13 +48,12 @@ class APITokenRepository(BaseRepository[APIToken]):
         Initialize repository for specific API provider.
 
         Args:
-            session: Database session
             api_provider: API provider identifier (e.g., "api_provider_a", "shopify")
             max_tokens: Maximum tokens allowed per tenant (default: 25)
             token_validity_hours: Token validity in hours (default: 1)
             tokens_reusable: Whether tokens can be reused until expiry (default: False)
         """
-        super().__init__(session, APIToken)
+        super().__init__(APIToken)
         self.logger = get_logger()
         self.api_provider = api_provider
         self.max_tokens = max_tokens

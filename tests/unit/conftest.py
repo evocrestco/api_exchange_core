@@ -24,15 +24,15 @@ from api_exchange_core.services.tenant_service import TenantService
 
 
 @pytest.fixture(scope="function")
-def entity_service(db_session):
-    """Entity service with test session."""
-    return EntityService(session=db_session)
+def entity_service(db_manager):
+    """Entity service with global db_manager from test."""
+    return EntityService()
 
 
 @pytest.fixture(scope="function")
-def tenant_service(db_session):
-    """Tenant service with test session."""
-    return TenantService(session=db_session)
+def tenant_service(db_manager):
+    """Tenant service with global db_manager from test."""
+    return TenantService()
 
 
 @pytest.fixture(scope="function")
@@ -48,30 +48,11 @@ def processing_error_service():
 
 
 @pytest.fixture(scope="function")
-def processing_service(db_session):
-    """Processing service with session-per-service pattern."""
+def processing_service(db_manager):
+    """Processing service with global db_manager from test."""
     from api_exchange_core.processing import ProcessingService
-    from api_exchange_core.processing.entity_attributes import EntityAttributeBuilder
-    from api_exchange_core.processing.duplicate_detection import DuplicateDetectionService
-    from api_exchange_core.services.entity_service import EntityService
-    from api_exchange_core.utils.logger import get_logger
     
-    # Create ProcessingService manually without using constructor
-    processing_service = object.__new__(ProcessingService)
-    
-    # Set up services with test session
-    processing_service.entity_service = EntityService(session=db_session)
-    processing_service.duplicate_detection_service = DuplicateDetectionService(
-        entity_service=EntityService(session=db_session)
-    )
-    processing_service.attribute_builder = EntityAttributeBuilder()
-    processing_service.logger = get_logger()
-    
-    # Optional services (not initialized by default)
-    processing_service.state_tracking_service = None
-    processing_service.error_service = None
-    
-    return processing_service
+    return ProcessingService()
 
 
 @pytest.fixture(scope="function")

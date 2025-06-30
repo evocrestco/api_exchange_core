@@ -116,12 +116,14 @@ def db_session(test_engine):
 @pytest.fixture(scope="function")
 def db_manager(db_session):
     """
-    Create test database manager.
+    Create test database manager and set as global for the test.
 
     Provides the same interface as production DatabaseManager
-    but uses the test session for isolation.
+    but uses the test session for isolation. Sets up global db_manager
+    for services to use during the test.
     """
-
+    from api_exchange_core.db.db_config import set_db_manager, get_db_manager
+    
     class TestDatabaseManager(DatabaseManager):
         def __init__(self, session):
             self._session = session
@@ -133,7 +135,20 @@ def db_manager(db_session):
             # Don't actually close in tests - handled by fixture cleanup
             pass
 
-    return TestDatabaseManager(db_session)
+    test_db_manager = TestDatabaseManager(db_session)
+    
+    # Set as global db_manager for this test
+    set_db_manager(test_db_manager)
+    
+    yield test_db_manager
+    
+    # Clean up - reset global db_manager
+    try:
+        # Try to clear the global db_manager (if there's a way to do it)
+        # For now, we just let it be overwritten by the next test
+        pass
+    except Exception:
+        pass
 
 
 # ==================== TENANT FIXTURES ====================

@@ -12,9 +12,10 @@ from api_exchange_core.context.tenant_context import tenant_context
 class TestAPIToken:
     """Test APIToken model functionality."""
     
-    def test_token_creation(self, db_session, test_tenant):
+    def test_token_creation(self, db_manager, test_tenant):
         """Test basic token creation."""
         with tenant_context(test_tenant["id"]):
+            session = db_manager.get_session()
             token = APIToken(
                 tenant_id=test_tenant["id"],
                 api_provider="test_api",
@@ -22,10 +23,10 @@ class TestAPIToken:
                 expires_at=datetime.utcnow() + timedelta(hours=1)
             )
             
-            token.set_token("test_token_123", db_session)
+            token.set_token("test_token_123", session)
             
-            db_session.add(token)
-            db_session.flush()
+            session.add(token)
+            session.flush()
             
             assert token.id is not None
             assert token.tenant_id == test_tenant["id"]
@@ -34,7 +35,7 @@ class TestAPIToken:
             assert token.usage_count == 0
             
             # Test token retrieval
-            retrieved_token = token.get_token(db_session)
+            retrieved_token = token.get_token(session)
             assert retrieved_token == "test_token_123"
     
     def test_token_hash_uniqueness(self):
@@ -51,9 +52,10 @@ class TestAPIToken:
         assert hash1 == hash3  # Same tokens have same hashes
         assert len(hash1) == 64  # SHA256 hash length
     
-    def test_token_expiration_check(self, db_session, test_tenant):
+    def test_token_expiration_check(self, db_manager, test_tenant):
         """Test token expiration logic."""
         with tenant_context(test_tenant["id"]):
+            session = db_manager.get_session()
             # Create expired token
             expired_token = APIToken(
                 tenant_id=test_tenant["id"],
@@ -62,7 +64,7 @@ class TestAPIToken:
                 expires_at=datetime.utcnow() - timedelta(hours=1),  # Expired 1 hour ago
                 is_active="active"
             )
-            expired_token.set_token("expired_token", db_session)
+            expired_token.set_token("expired_token", session)
             
             # Create valid token
             valid_token = APIToken(
@@ -72,7 +74,7 @@ class TestAPIToken:
                 expires_at=datetime.utcnow() + timedelta(hours=1),  # Expires in 1 hour
                 is_active="active"
             )
-            valid_token.set_token("valid_token", db_session)
+            valid_token.set_token("valid_token", session)
             
             assert expired_token.is_expired() is True
             assert expired_token.is_valid() is False
@@ -80,19 +82,20 @@ class TestAPIToken:
             assert valid_token.is_expired() is False
             assert valid_token.is_valid() is True
     
-    def test_token_usage_tracking(self, db_session, test_tenant):
+    def test_token_usage_tracking(self, db_manager, test_tenant):
         """Test token usage counting and timestamp updates."""
         with tenant_context(test_tenant["id"]):
+            session = db_manager.get_session()
             token = APIToken(
                 tenant_id=test_tenant["id"],
                 api_provider="test_api",
                 token_hash=APIToken.create_token_hash("usage_token"),
                 expires_at=datetime.utcnow() + timedelta(hours=1)
             )
-            token.set_token("usage_token", db_session)
+            token.set_token("usage_token", session)
             
-            db_session.add(token)
-            db_session.flush()
+            session.add(token)
+            session.flush()
             
             # Initial state
             assert token.usage_count == 0
@@ -100,7 +103,7 @@ class TestAPIToken:
             
             # Mark as used
             before_use = datetime.utcnow()
-            token.mark_used(db_session)
+            token.mark_used(session)
             after_use = datetime.utcnow()
             
             assert token.usage_count == 1
@@ -108,43 +111,45 @@ class TestAPIToken:
             assert before_use <= token.last_used_at <= after_use
             
             # Use again
-            token.mark_used(db_session)
+            token.mark_used(session)
             assert token.usage_count == 2
     
-    def test_token_deactivation(self, db_session, test_tenant):
+    def test_token_deactivation(self, db_manager, test_tenant):
         """Test token deactivation (soft delete)."""
         with tenant_context(test_tenant["id"]):
+            session = db_manager.get_session()
             token = APIToken(
                 tenant_id=test_tenant["id"],
                 api_provider="test_api",
                 token_hash=APIToken.create_token_hash("deactivate_token"),
                 expires_at=datetime.utcnow() + timedelta(hours=1)
             )
-            token.set_token("deactivate_token", db_session)
+            token.set_token("deactivate_token", session)
             
-            db_session.add(token)
-            db_session.flush()
+            session.add(token)
+            session.flush()
             
             # Initially active
             assert token.is_active == "active"
             assert token.is_valid() is True
             
             # Deactivate
-            token.deactivate(db_session)
+            token.deactivate(session)
             
             assert token.is_active == "inactive"
             assert token.is_valid() is False  # Not valid even if not expired
     
-    def test_generation_context(self, db_session, test_tenant):
+    def test_generation_context(self, db_manager, test_tenant):
         """Test token generation context metadata."""
         with tenant_context(test_tenant["id"]):
+            session = db_manager.get_session()
             token = APIToken(
                 tenant_id=test_tenant["id"],
                 api_provider="test_api",
                 token_hash=APIToken.create_token_hash("context_token"),
                 expires_at=datetime.utcnow() + timedelta(hours=1)
             )
-            token.set_token("context_token", db_session)
+            token.set_token("context_token", session)
             
             # Set generation context
             context = {
@@ -154,8 +159,8 @@ class TestAPIToken:
             }
             token.set_generation_context(context)
             
-            db_session.add(token)
-            db_session.flush()
+            session.add(token)
+            session.flush()
             
             # Retrieve context
             retrieved_context = token.get_generation_context()
@@ -186,9 +191,10 @@ class TestAPIToken:
 class TestAPITokenUsageLog:
     """Test APITokenUsageLog model functionality."""
     
-    def test_usage_log_creation(self, db_session, test_tenant):
+    def test_usage_log_creation(self, db_manager, test_tenant):
         """Test basic usage log creation."""
         with tenant_context(test_tenant["id"]):
+            session = db_manager.get_session()
             usage_log = APITokenUsageLog.create_usage_record(
                 tenant_id=test_tenant["id"],
                 api_provider="test_api",
@@ -200,8 +206,8 @@ class TestAPITokenUsageLog:
                 success="success"
             )
             
-            db_session.add(usage_log)
-            db_session.flush()
+            session.add(usage_log)
+            session.flush()
             
             assert usage_log.id is not None
             assert usage_log.tenant_id == test_tenant["id"]
@@ -211,9 +217,10 @@ class TestAPITokenUsageLog:
             assert usage_log.response_status == 200
             assert usage_log.success == "success"
     
-    def test_usage_context_metadata(self, db_session, test_tenant):
+    def test_usage_context_metadata(self, db_manager, test_tenant):
         """Test usage context metadata handling."""
         with tenant_context(test_tenant["id"]):
+            session = db_manager.get_session()
             usage_log = APITokenUsageLog.create_usage_record(
                 tenant_id=test_tenant["id"],
                 api_provider="test_api", 
@@ -231,8 +238,8 @@ class TestAPITokenUsageLog:
             }
             usage_log.set_usage_context(context)
             
-            db_session.add(usage_log)
-            db_session.flush()
+            session.add(usage_log)
+            session.flush()
             
             # Retrieve context
             retrieved_context = usage_log.get_usage_context()
@@ -240,9 +247,10 @@ class TestAPITokenUsageLog:
             assert retrieved_context["function_name"] == "process_order"
             assert retrieved_context["custom_metadata"]["order_id"] == "ord_456"
     
-    def test_usage_log_empty_context(self, db_session, test_tenant):
+    def test_usage_log_empty_context(self, db_manager, test_tenant):
         """Test usage log with no context."""
         with tenant_context(test_tenant["id"]):
+            session = db_manager.get_session()
             usage_log = APITokenUsageLog.create_usage_record(
                 tenant_id=test_tenant["id"],
                 api_provider="test_api",
@@ -255,9 +263,10 @@ class TestAPITokenUsageLog:
             context = usage_log.get_usage_context()
             assert context == {}
     
-    def test_usage_log_performance_tracking(self, db_session, test_tenant):
+    def test_usage_log_performance_tracking(self, db_manager, test_tenant):
         """Test performance tracking fields."""
         with tenant_context(test_tenant["id"]):
+            session = db_manager.get_session()
             usage_log = APITokenUsageLog.create_usage_record(
                 tenant_id=test_tenant["id"],
                 api_provider="test_api",
@@ -270,8 +279,8 @@ class TestAPITokenUsageLog:
                 correlation_id="perf_test_123"
             )
             
-            db_session.add(usage_log)
-            db_session.flush()
+            session.add(usage_log)
+            session.flush()
             
             assert usage_log.request_duration_ms == 1500
             assert usage_log.response_status == 200

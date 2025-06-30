@@ -12,7 +12,7 @@ from typing import Any, Dict, Optional
 
 from pydantic import ValidationError as PydanticValidationError
 
-from ...db.db_config import DatabaseConfig, DatabaseManager, init_db
+from ...db.db_config import DatabaseConfig, DatabaseManager, init_db, initialize_db, set_db_manager
 from ...exceptions import ErrorCode, ServiceError, ValidationError
 from ...processing.processing_service import ProcessingService
 from ...utils.logger import get_logger
@@ -70,16 +70,16 @@ def create_db_manager() -> DatabaseManager:
 
 def create_processor_handler(
     processor: ProcessorInterface,
-    db_manager: Optional[DatabaseManager] = None,
     config: Optional[Dict[str, Any]] = None,
     dead_letter_queue_client=None,
 ) -> ProcessorHandler:
     """
     Create a processor handler with all required services.
 
+    The processor framework handles all infrastructure setup including database initialization.
+
     Args:
         processor: The processor implementation
-        db_manager: Optional database manager. If not provided, will create from environment
         config: Optional configuration dict
         dead_letter_queue_client: Optional DLQ client
 
@@ -87,36 +87,64 @@ def create_processor_handler(
         Configured ProcessorHandler
 
     Raises:
-        ValueError: If db_manager is None and required environment variables are missing
+        ValueError: If global db_manager is not initialized and required environment variables are missing
     """
     logger = get_logger()
 
-    # Create db_manager from environment if not provided
-    if db_manager is None:
-        db_manager = create_db_manager()
-        logger.info(f"Created database manager from environment: {db_manager.config}")
-
+    # Initialize global db_manager if not already done, or if connection is closed
+    try:
+        from ...db.db_config import get_db_manager
+        existing_db_manager = get_db_manager()
+        
+        # Check if the connection is still valid
+        try:
+            # Test the connection by executing a simple query
+            from sqlalchemy import text
+            with existing_db_manager.engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            logger.debug("Using existing global database manager")
+            # Create ProcessingService (uses global db_manager)
+            processing_service = ProcessingService()
+            
+            # Create and return the processor handler
+            return ProcessorHandler(
+                processor=processor,
+                processing_service=processing_service,
+                config=config or {},
+                dead_letter_queue_client=dead_letter_queue_client,
+            )
+        except Exception as e:
+            logger.warning(f"Existing database connection is invalid ({e}), recreating...")
+            # Fall through to recreate the db_manager
+            
+    except ServiceError:
+        logger.warning("Global db_manager not initialized")
+        # Fall through to create new db_manager
+        
+    # Create new db_manager (either not initialized or connection is closed)
+    logger.warning("Initializing DB")
+    db_manager = create_db_manager()
+    logger.info(f"Created database manager from environment: {db_manager.config}")
+    
     # Initialize database and import all models
     init_db(db_manager)
     logger.info("Database initialized with all models imported")
+    
+    # Set as global db_manager
+    from ...db.db_config import set_db_manager
+    set_db_manager(db_manager)
+    logger.info("Global database manager initialized")
 
-    # Store db_manager for services to create their own sessions
-    # Note: Each service now creates its own session to eliminate session conflicts
-
-    # Services are created per-execution within ProcessorHandler as needed
-
-    # Create ProcessingService with the database manager
-    processing_service = ProcessingService(db_manager=db_manager)
+    # Create ProcessingService (uses global db_manager)
+    processing_service = ProcessingService()
 
     # Create and return the processor handler
-    # Note: state_tracking_service and error_service are now logging-based
-    # and created per-execution within ProcessorHandler (no sessions needed)
+    # Note: All services now use global db_manager
     return ProcessorHandler(
         processor=processor,
         processing_service=processing_service,
         config=config or {},
         dead_letter_queue_client=dead_letter_queue_client,
-        db_manager=db_manager,  # Pass db_manager for ProcessingService
     )
 
 

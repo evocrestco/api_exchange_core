@@ -49,59 +49,27 @@ class ProcessingService:
     management according to processor configuration.
     """
 
-    def __init__(self, db_manager=None):
-        """
-        Initialize the processing service with shared session for all services.
-
-        All services share the same session to ensure transaction coordination.
-
-        Args:
-            db_manager: Optional database manager. If provided, uses it to create session.
-                       If None, creates from environment variables (for backward compatibility).
-        """
+    def __init__(self):
+        """Initialize the processing service with global database manager."""
         # Import here to avoid circular dependencies
         from ..services.entity_service import EntityService
         from ..services.logging_processing_error_service import LoggingProcessingErrorService
         from ..services.logging_state_tracking_service import LoggingStateTrackingService
 
-        # Store db_manager for service initialization
-        self.db_manager = db_manager
-        
-        # Create shared session for all services
-        if db_manager is not None:
-            # Use provided database manager
-            self.session = db_manager.get_session()
-        else:
-            # Backward compatibility: create from environment
-            self.session = self._create_session()
-
-        # Create services - EntityService with session, logging services with db_manager
-        self.entity_service = EntityService(session=self.session)
-        self.state_tracking_service = LoggingStateTrackingService(db_manager=self.db_manager)
+        # Create services - they'll all use the global db_manager
+        self.entity_service = EntityService()
+        self.state_tracking_service = LoggingStateTrackingService()
         self.error_service = LoggingProcessingErrorService()
-
-        # Keep existing services that don't need sessions
         self.duplicate_detection_service = DuplicateDetectionService()
         self.attribute_builder = EntityAttributeBuilder()
         self.logger = get_logger()
 
-    def _create_session(self):
-        """Create a new database session using same pattern as SessionManagedService."""
-        from sqlalchemy import create_engine
-        from sqlalchemy.orm import sessionmaker
-
-        from ..db.db_config import get_production_config
-
-        db_config = get_production_config()
-        engine = create_engine(db_config.get_connection_string())
-        Session = sessionmaker(bind=engine)
-        return Session()
-
     def close_services(self):
-        """Close the shared session and clean up resources."""
+        """Clean up resources."""
         try:
-            if hasattr(self, "session") and self.session:
-                self.session.close()
+            # Services will manage their own cleanup
+            if hasattr(self.duplicate_detection_service, "close"):
+                self.duplicate_detection_service.close()
         except Exception as e:
             self.logger.warning(f"Error closing session: {e}")
 

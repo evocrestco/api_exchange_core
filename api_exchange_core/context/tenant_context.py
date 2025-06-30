@@ -97,12 +97,12 @@ class TenantContext:
             cls._logger.debug("Tenant cache cleared")
 
     @classmethod
-    def get_tenant(cls, session, tenant_id: Optional[str] = None) -> Optional["TenantRead"]:
+    def get_tenant(cls, session=None, tenant_id: Optional[str] = None) -> Optional["TenantRead"]:
         """
         Get a tenant object by ID or from current context using repository pattern.
 
         Args:
-            session: Database session for repository operations
+            session: Database session for repository operations (deprecated, ignored)
             tenant_id: Optional explicit tenant ID (prioritized if provided)
 
         Returns:
@@ -130,9 +130,9 @@ class TenantContext:
         if effective_tenant_id in cls._thread_local.tenant_cache:
             return cls._thread_local.tenant_cache[effective_tenant_id]
 
-        # Get tenant via service
+        # Get tenant via service (uses global db_manager)
         try:
-            service = TenantService(session)
+            service = TenantService()
             tenant = service.get_tenant(effective_tenant_id)
 
             # Cache for future use (limit cache size to prevent memory issues)
@@ -225,19 +225,19 @@ def tenant_aware(tenant_id: Union[Optional[str], Callable] = None):
     return decorator
 
 
-def get_tenant_config(session: Session, key: str, default: Any = None) -> Any:
+def get_tenant_config(session=None, key: str = None, default: Any = None) -> Any:
     """
     Get a configuration value for the current tenant.
 
     Args:
-        session: Database session
+        session: Database session (deprecated, ignored)
         key: Configuration key
         default: Default value if key not found
 
     Returns:
         Configuration value or default
     """
-    tenant = TenantContext.get_tenant(session)
+    tenant = TenantContext.get_tenant()
     if not tenant:
         return default
 

@@ -29,12 +29,12 @@ class TestPipelineStateService:
     """
 
     @pytest.fixture
-    def service(self, db_session):
-        """Create PipelineStateService with real session."""
-        return PipelineStateService(session=db_session)
+    def service(self, db_manager):
+        """Create PipelineStateService with global database manager."""
+        return PipelineStateService()
 
     @pytest.fixture
-    def sample_state_records(self, db_session):
+    def sample_state_records(self, db_manager):
         """Create sample pipeline state records for testing."""
         now = datetime.utcnow()
         
@@ -130,18 +130,20 @@ class TestPipelineStateService:
             ),
         ]
         
+        # Add records to the test session
+        session = db_manager.get_session()
         for record in records:
-            db_session.add(record)
-        db_session.commit()
+            session.add(record)
+        session.flush()  # Ensure records are persisted for the tests
         
         return {
             "records": records,
         }
 
-    def test_service_initialization(self, db_session):
-        """Test service initialization with session."""
-        service = PipelineStateService(session=db_session)
-        assert service.session is db_session
+    def test_service_initialization(self, db_manager):
+        """Test service initialization with global database manager."""
+        service = PipelineStateService()
+        assert service.session is not None
 
     def test_get_entity_timeline(self, service, sample_state_records, tenant_context_fixture):
         """Test getting processing timeline for a specific entity."""
@@ -297,12 +299,12 @@ class TestPipelineStateService:
         # Verify health status (83.33% should be "degraded" since it's between 80-95%)
         assert summary.health_status == "degraded"
 
-    def test_get_status_summary_healthy(self, service, db_session, tenant_context_fixture):
+    def test_get_status_summary_healthy(self, service, db_manager, tenant_context_fixture):
         """Test status summary with high success rate (healthy status)."""
         # Create mostly successful records
         now = datetime.utcnow()
         
-        successful_records = []
+        session = db_manager.get_session()
         for i in range(10):
             record = PipelineStateHistory.create(
                 tenant_id="test-tenant",
@@ -312,10 +314,8 @@ class TestPipelineStateService:
                 log_timestamp=now - timedelta(minutes=i),
                 processing_duration_ms=1000,
             )
-            successful_records.append(record)
-            db_session.add(record)
-        
-        db_session.commit()
+            session.add(record)
+        session.flush()  # Ensure records are persisted
         
         with tenant_context("test-tenant"):
             summary = service.get_status_summary()
@@ -324,10 +324,12 @@ class TestPipelineStateService:
         assert summary.success_rate_percentage == 100.0
         assert summary.health_status == "healthy"
 
-    def test_get_status_summary_unhealthy(self, service, db_session, tenant_context_fixture):
+    def test_get_status_summary_unhealthy(self, service, db_manager, tenant_context_fixture):
         """Test status summary with low success rate (unhealthy status)."""
         # Create mostly failed records
         now = datetime.utcnow()
+        
+        session = db_manager.get_session()
         
         # Create 1 success, 4 failures = 20% success rate
         success_record = PipelineStateHistory.create(
@@ -338,7 +340,7 @@ class TestPipelineStateService:
             log_timestamp=now - timedelta(minutes=1),
             processing_duration_ms=1000,
         )
-        db_session.add(success_record)
+        session.add(success_record)
         
         for i in range(4):
             failed_record = PipelineStateHistory.create(
@@ -350,9 +352,9 @@ class TestPipelineStateService:
                 processing_duration_ms=500,
                 error_message="Test failure",
             )
-            db_session.add(failed_record)
+            session.add(failed_record)
         
-        db_session.commit()
+        session.flush()  # Ensure records are persisted
         
         with tenant_context("test-tenant"):
             summary = service.get_status_summary()

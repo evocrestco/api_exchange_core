@@ -32,6 +32,7 @@ class PipelineStateHistory(Base):
     tenant_id = Column(String(100), nullable=False, index=True)
     entity_id = Column(String(36), nullable=True, index=True)
     external_id = Column(String(100), nullable=True)
+    pipeline_id = Column(String(36), nullable=True, index=True)
 
     # Processing context
     processor_name = Column(String(100), nullable=False, index=True)
@@ -67,6 +68,7 @@ class PipelineStateHistory(Base):
         log_timestamp,
         entity_id: Optional[str] = None,
         external_id: Optional[str] = None,
+        pipeline_id: Optional[str] = None,
         result_code: Optional[str] = None,
         error_message: Optional[str] = None,
         source_queue: Optional[str] = None,
@@ -80,6 +82,7 @@ class PipelineStateHistory(Base):
             tenant_id=tenant_id,
             entity_id=entity_id,
             external_id=external_id,
+            pipeline_id=pipeline_id,
             processor_name=processor_name,
             status=status,
             result_code=result_code,

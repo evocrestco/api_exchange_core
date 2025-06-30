@@ -29,21 +29,21 @@ class TestLoggingStateTrackingService:
     """Test cases for LoggingStateTrackingService with database integration."""
 
     def test_service_initialization_without_db_manager(self):
-        """Test service can be initialized without database manager (backward compatibility)."""
+        """Test service can be initialized and gets global database manager."""
         service = LoggingStateTrackingService()
         
         assert service.logger is not None
-        assert service.db_manager is None
+        assert service.db_manager is not None  # Now gets global db_manager
 
     def test_service_initialization_with_db_manager(self, db_manager):
         """Test service initialization with database manager."""
-        service = LoggingStateTrackingService(db_manager=db_manager)
+        service = LoggingStateTrackingService()
         
         assert service.logger is not None
         assert service.db_manager is db_manager
 
-    def test_record_transition_logs_only_without_db_manager(self, caplog, tenant_context_fixture):
-        """Test that without db_manager, only logging occurs (backward compatibility)."""
+    def test_record_transition_logs_and_writes_to_db(self, caplog, tenant_context_fixture):
+        """Test that service logs and writes to database."""
         service = LoggingStateTrackingService()
         correlation_id = str(uuid.uuid4())
         
@@ -96,9 +96,9 @@ class TestLoggingStateTrackingService:
         assert log_record.actor == "TestProcessor"
         assert log_record.transition_type == "NORMAL"
 
-    def test_record_transition_with_db_manager_writes_to_database(self, db_manager, db_session, caplog, tenant_context_fixture):
+    def test_record_transition_with_db_manager_writes_to_database(self, db_manager, caplog, tenant_context_fixture):
         """Test that with db_manager, both logging and database write occur."""
-        service = LoggingStateTrackingService(db_manager=db_manager)
+        service = LoggingStateTrackingService()
         correlation_id = str(uuid.uuid4())
         
         transition_data = PipelineStateTransitionCreate(
@@ -126,8 +126,9 @@ class TestLoggingStateTrackingService:
         assert "State transition: RECEIVED → PROCESSING" in caplog.text
         
         # Verify database record was created
+        session = db_manager.get_session()
         db_record = (
-            db_session.query(PipelineStateHistory)
+            session.query(PipelineStateHistory)
             .filter(PipelineStateHistory.id == result.transition_id)
             .first()
         )
@@ -144,9 +145,9 @@ class TestLoggingStateTrackingService:
         assert db_record.processing_duration_ms == 150
         assert db_record.error_message is None  # Not a failed transition
 
-    def test_record_transition_error_state_mapping(self, db_manager, db_session, tenant_context_fixture):
+    def test_record_transition_error_state_mapping(self, db_manager, tenant_context_fixture):
         """Test that ERROR transition types map to FAILED status."""
-        service = LoggingStateTrackingService(db_manager=db_manager)
+        service = LoggingStateTrackingService()
         correlation_id = str(uuid.uuid4())
         
         transition_data = PipelineStateTransitionCreate(
@@ -164,8 +165,9 @@ class TestLoggingStateTrackingService:
                 transition_id = result.transition_id
         
         # Verify database record has correct status mapping
+        session = db_manager.get_session()
         db_record = (
-            db_session.query(PipelineStateHistory)
+            session.query(PipelineStateHistory)
             .filter(PipelineStateHistory.id == transition_id)
             .first()
         )
@@ -174,9 +176,9 @@ class TestLoggingStateTrackingService:
         assert db_record.status == "FAILED"  # ERROR transition_type maps to FAILED
         assert db_record.error_message == "Validation failed: missing required field"
 
-    def test_record_transition_retry_state_mapping(self, db_manager, db_session, tenant_context_fixture):
+    def test_record_transition_retry_state_mapping(self, db_manager, tenant_context_fixture):
         """Test that RETRY transition types map to RETRYING status."""
-        service = LoggingStateTrackingService(db_manager=db_manager)
+        service = LoggingStateTrackingService()
         correlation_id = str(uuid.uuid4())
         
         transition_data = PipelineStateTransitionCreate(
@@ -194,8 +196,9 @@ class TestLoggingStateTrackingService:
                 transition_id = result.transition_id
         
         # Verify database record has correct status mapping
+        session = db_manager.get_session()
         db_record = (
-            db_session.query(PipelineStateHistory)
+            session.query(PipelineStateHistory)
             .filter(PipelineStateHistory.id == transition_id)
             .first()
         )
@@ -204,9 +207,9 @@ class TestLoggingStateTrackingService:
         assert db_record.status == "RETRYING"  # RETRY transition_type maps to RETRYING
         assert db_record.error_message is None  # Not an error, just a retry
 
-    def test_record_transition_with_string_states(self, db_manager, db_session, tenant_context_fixture):
+    def test_record_transition_with_string_states(self, db_manager, tenant_context_fixture):
         """Test recording transition with string states instead of enums."""
-        service = LoggingStateTrackingService(db_manager=db_manager)
+        service = LoggingStateTrackingService()
         correlation_id = str(uuid.uuid4())
         
         transition_data = PipelineStateTransitionCreate(
@@ -223,8 +226,9 @@ class TestLoggingStateTrackingService:
                 transition_id = result.transition_id
         
         # Verify database record handles string states
+        session = db_manager.get_session()
         db_record = (
-            db_session.query(PipelineStateHistory)
+            session.query(PipelineStateHistory)
             .filter(PipelineStateHistory.id == transition_id)
             .first()
         )
@@ -233,9 +237,9 @@ class TestLoggingStateTrackingService:
         assert db_record.status == "COMPLETED"
         assert db_record.processor_name == "CustomProcessor"
 
-    def test_record_transition_minimal_parameters(self, db_manager, db_session, tenant_context_fixture):
+    def test_record_transition_minimal_parameters(self, db_manager, tenant_context_fixture):
         """Test recording transition with only required parameters."""
-        service = LoggingStateTrackingService(db_manager=db_manager)
+        service = LoggingStateTrackingService()
         correlation_id = str(uuid.uuid4())
         
         transition_data = PipelineStateTransitionCreate(
@@ -251,8 +255,9 @@ class TestLoggingStateTrackingService:
                 transition_id = result.transition_id
         
         # Verify database record with minimal data
+        session = db_manager.get_session()
         db_record = (
-            db_session.query(PipelineStateHistory)
+            session.query(PipelineStateHistory)
             .filter(PipelineStateHistory.id == transition_id)
             .first()
         )
@@ -269,7 +274,7 @@ class TestLoggingStateTrackingService:
 
     def test_record_transition_database_failure_continues_logging(self, db_manager, caplog, tenant_context_fixture):
         """Test that database failures don't interrupt logging (reliability)."""
-        service = LoggingStateTrackingService(db_manager=db_manager)
+        service = LoggingStateTrackingService()
         correlation_id = str(uuid.uuid4())
         
         transition_data = PipelineStateTransitionCreate(

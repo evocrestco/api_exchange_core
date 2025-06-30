@@ -15,20 +15,18 @@ class TestAPITokenRepository:
     """Test APITokenRepository functionality."""
     
     @pytest.fixture
-    def test_api_provider_repo(self, db_session):
+    def test_api_provider_repo(self, db_manager):
         """Create repository configured for test API provider (25 tokens, 1 hour)."""
         return APITokenRepository(
-            session=db_session,
             api_provider="test_api_provider",
             max_tokens=25,
             token_validity_hours=1
         )
     
     @pytest.fixture  
-    def shopify_repo(self, db_session):
+    def shopify_repo(self, db_manager):
         """Create repository configured for Shopify (10 tokens, 2 hours)."""
         return APITokenRepository(
-            session=db_session,
             api_provider="shopify",
             max_tokens=10,
             token_validity_hours=2

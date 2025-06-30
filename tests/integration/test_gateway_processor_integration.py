@@ -67,9 +67,9 @@ class TestGatewayProcessorIntegration:
         }
     
     @pytest.fixture
-    def processing_service(self, integration_db_session):
-        """Create real processing service with database session."""
-        # Use session-per-service pattern: ProcessingService creates its own services
+    def processing_service(self, db_manager):
+        """Create real processing service with global database manager."""
+        # The db_manager fixture sets up the global db_manager, so ProcessingService can use it
         return ProcessingService()
     
     @pytest.fixture

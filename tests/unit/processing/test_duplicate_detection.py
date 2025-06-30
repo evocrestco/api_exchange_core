@@ -158,15 +158,10 @@ class TestDuplicateDetectionService:
     """Test DuplicateDetectionService with real database operations."""
     
     @pytest.fixture
-    def detection_service(self, db_session):
-        """Create a duplicate detection service with test session."""
-        from api_exchange_core.services.entity_service import EntityService
-        
-        # Create the EntityService with the test session
-        test_entity_service = EntityService(session=db_session)
-        
-        # Create DuplicateDetectionService with the test EntityService
-        return DuplicateDetectionService(entity_service=test_entity_service)
+    def detection_service(self, db_manager):
+        """Create a duplicate detection service with global db_manager."""
+        # Use the regular constructor now that it uses global db_manager
+        return DuplicateDetectionService()
     
     @pytest.fixture
     def sample_order_data(self):

@@ -92,14 +92,20 @@ class HelloWorldProcessor(ProcessorInterface):
 
 @pytest.fixture
 def hello_world_processor_handler():
-    """Create processor handler for testing with thread-safe session management."""
-    from api_exchange_core.processors.v2.processor_factory import create_db_manager
+    """Create processor handler for integration testing using PostgreSQL from environment."""
+    import os
     
-    # Use same database configuration as production
-    db_manager = create_db_manager()
+    # Debug: Print environment variables being used
+    print(f"DEBUG ENV - DB_HOST: {os.getenv('DB_HOST')}")
+    print(f"DEBUG ENV - DB_PORT: {os.getenv('DB_PORT')}")
+    print(f"DEBUG ENV - DB_NAME: {os.getenv('DB_NAME')}")
+    print(f"DEBUG ENV - DB_USER: {os.getenv('DB_USER')}")
+    print(f"DEBUG ENV - DB_PASSWORD: {os.getenv('DB_PASSWORD', 'NOT_SET')}")
+    print(f"DEBUG ENV - TENANT_ID: {os.getenv('TENANT_ID')}")
     
-    # Create processor handler with db_manager for thread-safe sessions
-    return create_processor_handler(processor=HelloWorldProcessor(), db_manager=db_manager)
+    # The processor framework should create the database manager from environment variables
+    # Environment variables are set by the integration test setup from .env file
+    return create_processor_handler(processor=HelloWorldProcessor())
 
 
 @pytest.fixture
@@ -147,12 +153,8 @@ def entity_service_for_validation():
     db_manager = create_db_manager()
     
     # Create a fresh session for validation to ensure we see committed changes
-    # This is important because ProcessingService uses its own session and commits,
-    # but we need a fresh session to see those committed changes
-    db_session = db_manager.get_session()
-    
-    # Use session-per-service pattern: pass session to EntityService
-    return EntityService(session=db_session)
+    # Use global db_manager pattern
+    return EntityService()
 
 
 class TestHelloWorldIntegration:
@@ -190,7 +192,7 @@ class TestHelloWorldIntegration:
         from api_exchange_core.processors.v2.processor_factory import create_db_manager
         db_manager = create_db_manager()
         fresh_session = db_manager.get_session()
-        entity_service_for_validation = EntityService(session=fresh_session)
+        entity_service_for_validation = EntityService()
         
         # Validation needs tenant context too (same as real Azure function)
         with tenant_context(os.getenv("TENANT_ID", "e2e_test_tenant")):
@@ -487,7 +489,7 @@ class TestHelloWorldIntegration:
             os.environ["TENANT_ID"] = tenant_id
             db_manager = create_db_manager()
             db_session = db_manager.get_session()
-            entity_service = EntityService(session=db_session)
+            entity_service = EntityService()
             
             # This tenant can see their own entity
             with tenant_context(tenant_id):
@@ -721,7 +723,6 @@ class TestHelloWorldIntegration:
         db_manager = create_db_manager()
         failing_processor_handler = create_processor_handler(
             processor=FailingProcessor(),
-            db_manager=db_manager,
             dead_letter_queue_client=dead_letter_queue_client
         )
         
@@ -798,7 +799,6 @@ class TestHelloWorldIntegration:
         db_manager = create_db_manager()
         retryable_processor_handler = create_processor_handler(
             processor=RetryableFailingProcessor(),
-            db_manager=db_manager,
             dead_letter_queue_client=dead_letter_queue_client
         )
         
@@ -859,10 +859,8 @@ class TestHelloWorldIntegration:
                 return False
         
         # Create processor handler
-        db_manager = create_db_manager()
         validation_processor_handler = create_processor_handler(
-            processor=StrictValidationProcessor(),
-            db_manager=db_manager
+            processor=StrictValidationProcessor()
         )
         
         external_id = f"hello-validation-{uuid.uuid4().hex[:8]}"
@@ -973,7 +971,7 @@ class TestHelloWorldIntegration:
         
         processor_with_queue = HelloWorldWithQueueOutput(azure_connection_string)
         db_manager = create_db_manager()
-        processor_handler = create_processor_handler(processor=processor_with_queue, db_manager=db_manager)
+        processor_handler = create_processor_handler(processor=processor_with_queue)
         
         # Create test message
         external_id = f"hello-queue-{uuid.uuid4().hex[:8]}"
@@ -1139,7 +1137,7 @@ class TestHelloWorldIntegration:
         
         processor = MultiOutputProcessor(azure_connection_string)
         db_manager = create_db_manager()
-        processor_handler = create_processor_handler(processor=processor, db_manager=db_manager)
+        processor_handler = create_processor_handler(processor=processor)
         
         # Create test message
         external_id = f"multi-output-{uuid.uuid4().hex[:8]}"

@@ -33,15 +33,14 @@ class TenantService(SessionManagedService):
     Uses SQLAlchemy directly - simple, explicit, and efficient.
     """
 
-    def __init__(self, session=None, logger: Optional[logging.Logger] = None):
+    def __init__(self, logger: Optional[logging.Logger] = None):
         """
-        Initialize the tenant service with its own session.
+        Initialize the tenant service with global database manager.
 
         Args:
-            session: Optional existing session (for testing or coordination)
             logger: Optional logger instance
         """
-        super().__init__(session=session, logger=logger)
+        super().__init__(logger=logger)
 
     @operation()
     def create_tenant(self, tenant_data: TenantCreate) -> TenantRead:

@@ -146,6 +146,7 @@ class StateTransitionCreate(BaseModel):
         "NORMAL", description="Type of transition (NORMAL, ERROR, RETRY, etc.)"
     )
     external_id: Optional[str] = Field(None, description="External identifier")
+    pipeline_id: Optional[str] = Field(None, description="Pipeline identifier for tracking related operations")
     queue_source: Optional[str] = Field(None, description="Queue from which message was received")
     queue_destination: Optional[str] = Field(None, description="Queue to which message was sent")
     notes: Optional[str] = Field(None, description="Additional notes about the transition")
@@ -179,6 +180,7 @@ class StateTransitionRead(BaseModel):
     entity_id: str = Field(..., description="ID of the entity")
     tenant_id: str = Field(..., description="Tenant identifier")
     correlation_id: Optional[str] = Field(None, description="Correlation ID")
+    pipeline_id: Optional[str] = Field(None, description="Pipeline identifier for tracking related operations")
     from_state: str = Field(..., description="Previous state")
     to_state: str = Field(..., description="New state")
     actor: str = Field(..., description="Actor making the transition")

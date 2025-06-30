@@ -45,14 +45,12 @@ class ProcessorHandler:
         config: Optional[Dict[str, Any]] = None,
         dead_letter_queue_client=None,
         output_queue_client=None,
-        db_manager=None,
     ):
         self.processor = processor
         self.processing_service = processing_service
         self.config = config or {}
         self.dead_letter_queue_client = dead_letter_queue_client
         self.output_queue_client = output_queue_client
-        self.db_manager = db_manager  # Store db_manager for creating new sessions
         self.logger = get_logger()
 
     @operation(name="processor_v2_execute")
@@ -98,44 +96,24 @@ class ProcessorHandler:
         """Execute processor within tenant context."""
         start_time = time.time()
 
-        # Create services - much simpler now with logging-based state/error tracking
-        if self.db_manager:
-            # Create ProcessingService with db_manager
-            from ...processing import ProcessingService
+        # Create services - all use global db_manager
+        from ...processing import ProcessingService
+        from ...services.logging_processing_error_service import LoggingProcessingErrorService
+        from ...services.logging_state_tracking_service import LoggingStateTrackingService
 
-            processing_service = ProcessingService(db_manager=self.db_manager)
+        processing_service = ProcessingService()
+        state_tracking_service = LoggingStateTrackingService()
+        error_service = LoggingProcessingErrorService()
+        entity_service = None  # ProcessingService handles entity operations
 
-            # Create logging-based services (no sessions needed!)
-            from ...services.logging_processing_error_service import LoggingProcessingErrorService
-            from ...services.logging_state_tracking_service import LoggingStateTrackingService
-
-            state_tracking_service = LoggingStateTrackingService(db_manager=self.db_manager)
-            error_service = LoggingProcessingErrorService()
-            entity_service = None  # ProcessingService handles entity operations
-
-            self.logger.debug(
-                "Created services with logging-based state tracking and error handling",
-                extra={
-                    "processor_class": self.processor.__class__.__name__,
-                    "state_tracking": "logging",
-                    "error_handling": "logging",
-                },
-            )
-        else:
-            # Fallback to the shared services (old behavior)
-            self.logger.warning(
-                "No db_manager provided - using shared ProcessingService. "
-                "Consider providing db_manager to ProcessorHandler."
-            )
-            processing_service = self.processing_service
-
-            # Use logging services even in fallback mode
-            from ...services.logging_processing_error_service import LoggingProcessingErrorService
-            from ...services.logging_state_tracking_service import LoggingStateTrackingService
-
-            state_tracking_service = LoggingStateTrackingService(db_manager=self.db_manager)
-            error_service = LoggingProcessingErrorService()
-            entity_service = None  # noqa: F841 - Placeholder for future fallback mode
+        self.logger.debug(
+            "Created services with logging-based state tracking and error handling",
+            extra={
+                "processor_class": self.processor.__class__.__name__,
+                "state_tracking": "logging",
+                "error_handling": "logging",
+            },
+        )
 
         try:
             # Check if entity exists in message
@@ -197,12 +175,8 @@ class ProcessorHandler:
             # Execute processor - let it control everything
             result = self.processor.process(message, context)
 
-            # Commit ProcessingService transaction if processor succeeded
-            # ProcessingService uses shared session pattern and doesn't commit its own transactions
-            if result.success:
-                processing_service.session.commit()
-            else:
-                processing_service.session.rollback()
+            # ProcessingService manages its own transactions now with global db_manager
+            # No need to manually commit/rollback here
 
             # Add timing and metadata
             duration_ms = (time.time() - start_time) * 1000
@@ -313,6 +287,7 @@ class ProcessorHandler:
                         result,
                         state_tracking_service,
                         external_id,
+                        message.pipeline_id,
                     )
 
                 # Record processing error for unexpected errors
@@ -330,25 +305,24 @@ class ProcessorHandler:
             return result
 
         finally:
-            # Clean up the ProcessingService session if we created a new one
-            if self.db_manager and processing_service != self.processing_service:
-                try:
-                    processing_service.session.close()
+            # Clean up services if they have cleanup methods
+            try:
+                if hasattr(processing_service, 'close_services'):
+                    processing_service.close_services()
                     self.logger.debug(
-                        "Closed ProcessingService session",
+                        "Closed ProcessingService sessions",
                         extra={
-                            "processor_class": self.processor.__class__.__name__,
-                            "session_id": id(processing_service.session),
-                        },
-                    )
-                except Exception as e:
-                    self.logger.warning(
-                        "Failed to close ProcessingService session",
-                        extra={
-                            "error": str(e),
                             "processor_class": self.processor.__class__.__name__,
                         },
                     )
+            except Exception as e:
+                self.logger.warning(
+                    "Failed to close ProcessingService sessions",
+                    extra={
+                        "error": str(e),
+                        "processor_class": self.processor.__class__.__name__,
+                    },
+                )
 
     def _create_failure_result(
         self, error_message: str, error_code: str, can_retry: bool, duration_ms: float
@@ -828,6 +802,7 @@ class ProcessorHandler:
         processing_result: "ProcessingResult",
         state_tracking_service=None,
         external_id: str = None,
+        pipeline_id: str = None,
     ) -> None:
         """
         Record state transition for entity processing.
@@ -872,6 +847,7 @@ class ProcessorHandler:
                 actor=self.processor.__class__.__name__,
                 processor_data=processor_data,
                 external_id=external_id,
+                pipeline_id=pipeline_id,
             )
             service.record_transition(transition_data)
 
@@ -996,6 +972,7 @@ class ProcessorHandler:
                 result,
                 state_tracking_service,
                 track_external_id,
+                message.pipeline_id,
             )
 
     def _record_failure_state_transitions(
@@ -1041,4 +1018,5 @@ class ProcessorHandler:
                 result,
                 state_tracking_service,
                 track_external_id,
+                message.pipeline_id,
             )

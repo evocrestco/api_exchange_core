@@ -449,7 +449,7 @@ class TestTenantServiceErrorHandling:
         with pytest.raises((ValueError, ServiceError)):
             service.update_tenant(update_data)
 
-    def test_cache_clearing_behavior(self, tenant_service, db_session):
+    def test_cache_clearing_behavior(self, tenant_service, db_manager):
         """Test that service operations properly clear tenant cache."""
         service = tenant_service
 
@@ -461,7 +461,7 @@ class TestTenantServiceErrorHandling:
 
         with tenant_context(created.tenant_id):
             # Populate cache by getting tenant via TenantContext
-            TenantContext.get_tenant(db_session, created.tenant_id)
+            TenantContext.get_tenant(db_manager, created.tenant_id)
 
             # Update tenant - should clear cache
             update_data = TenantUpdate(customer_name="Updated Name")

@@ -11,7 +11,8 @@ from api_exchange_core.db.db_pipeline_state_models import PipelineStateHistory
 class TestPipelineStateHistory:
     """Test cases for PipelineStateHistory model."""
 
-    def test_create_pipeline_state_history(self, db_session):
+    def test_create_pipeline_state_history(self, db_manager):
+        session = db_manager.get_session()
         """Test creating a pipeline state history record."""
         log_timestamp = datetime.now(timezone.utc)
         
@@ -48,7 +49,8 @@ class TestPipelineStateHistory:
         assert record.created_at is not None
         assert record.updated_at is not None
 
-    def test_create_minimal_pipeline_state_history(self, db_session):
+    def test_create_minimal_pipeline_state_history(self, db_manager):
+        session = db_manager.get_session()
         """Test creating pipeline state history with minimal required fields."""
         log_timestamp = datetime.now(timezone.utc)
         
@@ -75,7 +77,8 @@ class TestPipelineStateHistory:
         assert record.processing_duration_ms is None
         assert record.message_payload_hash is None
 
-    def test_pipeline_state_history_persistence(self, db_session):
+    def test_pipeline_state_history_persistence(self, db_manager):
+        session = db_manager.get_session()
         """Test saving and retrieving pipeline state history."""
         log_timestamp = datetime.now(timezone.utc)
         
@@ -88,12 +91,11 @@ class TestPipelineStateHistory:
         )
         
         # Save to database
-        db_session.add(record)
-        db_session.commit()
-        
+        session.add(record)
+                
         # Retrieve from database
         retrieved = (
-            db_session.query(PipelineStateHistory)
+            session.query(PipelineStateHistory)
             .filter(PipelineStateHistory.processor_name == "PersistenceProcessor")
             .first()
         )
@@ -105,7 +107,8 @@ class TestPipelineStateHistory:
         assert retrieved.status == "FAILED"
         assert retrieved.error_message == "Test error message"
 
-    def test_pipeline_state_history_indexes(self, db_session):
+    def test_pipeline_state_history_indexes(self, db_manager):
+        session = db_manager.get_session()
         """Test that indexes work correctly for common queries."""
         log_timestamp = datetime.now(timezone.utc)
         
@@ -120,13 +123,12 @@ class TestPipelineStateHistory:
                 entity_id=f"entity-{i}",
             )
             records.append(record)
-            db_session.add(record)
+            session.add(record)
         
-        db_session.commit()
-        
+                
         # Test tenant_id index
         tenant_records = (
-            db_session.query(PipelineStateHistory)
+            session.query(PipelineStateHistory)
             .filter(PipelineStateHistory.tenant_id == "test-tenant")
             .all()
         )
@@ -134,7 +136,7 @@ class TestPipelineStateHistory:
         
         # Test processor_name index
         processor_record = (
-            db_session.query(PipelineStateHistory)
+            session.query(PipelineStateHistory)
             .filter(PipelineStateHistory.processor_name == "Processor2")
             .first()
         )
@@ -143,7 +145,7 @@ class TestPipelineStateHistory:
         
         # Test status index
         failed_records = (
-            db_session.query(PipelineStateHistory)
+            session.query(PipelineStateHistory)
             .filter(PipelineStateHistory.status == "FAILED")
             .all()
         )
@@ -151,7 +153,7 @@ class TestPipelineStateHistory:
         
         # Test composite index (tenant_id, processor_name)
         composite_record = (
-            db_session.query(PipelineStateHistory)
+            session.query(PipelineStateHistory)
             .filter(
                 PipelineStateHistory.tenant_id == "test-tenant",
                 PipelineStateHistory.processor_name == "Processor4"
@@ -161,7 +163,8 @@ class TestPipelineStateHistory:
         assert composite_record is not None
         assert composite_record.processor_name == "Processor4"
 
-    def test_pipeline_state_history_repr(self, db_session):
+    def test_pipeline_state_history_repr(self, db_manager):
+        session = db_manager.get_session()
         """Test string representation of PipelineStateHistory."""
         record = PipelineStateHistory.create(
             tenant_id="test-tenant",
@@ -177,7 +180,8 @@ class TestPipelineStateHistory:
         assert "STARTED" in repr_str
         assert "entity-repr" in repr_str
 
-    def test_pipeline_state_history_long_fields(self, db_session):
+    def test_pipeline_state_history_long_fields(self, db_manager):
+        session = db_manager.get_session()
         """Test pipeline state history with maximum length fields."""
         long_error_message = "A" * 1000  # Long error message
         
@@ -189,19 +193,19 @@ class TestPipelineStateHistory:
             error_message=long_error_message,
         )
         
-        db_session.add(record)
-        db_session.commit()
-        
+        session.add(record)
+                
         # Verify long text field is stored correctly
         retrieved = (
-            db_session.query(PipelineStateHistory)
+            session.query(PipelineStateHistory)
             .filter(PipelineStateHistory.processor_name == "LongFieldProcessor")
             .first()
         )
         
         assert retrieved.error_message == long_error_message
 
-    def test_pipeline_state_history_unique_id(self, db_session):
+    def test_pipeline_state_history_unique_id(self, db_manager):
+        session = db_manager.get_session()
         """Test that each record gets a unique ID."""
         log_timestamp = datetime.now(timezone.utc)
         

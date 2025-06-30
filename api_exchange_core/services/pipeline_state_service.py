@@ -10,7 +10,6 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 
 from sqlalchemy import and_, desc, func
-from sqlalchemy.orm import Session
 
 from ..context.operation_context import operation
 from ..context.tenant_context import tenant_aware
@@ -36,15 +35,14 @@ class PipelineStateService(SessionManagedService):
     debugging, and analytics purposes.
     """
 
-    def __init__(self, session: Optional[Session] = None, logger=None):
+    def __init__(self, logger=None):
         """
-        Initialize the pipeline state service.
+        Initialize the pipeline state service with global database manager.
 
         Args:
-            session: Optional existing session
             logger: Optional logger instance
         """
-        super().__init__(session=session, logger=logger)
+        super().__init__(logger=logger)
 
     # Note: get_pipeline_history_by_correlation_id has been removed
     # Use get_entity_timeline instead for tracking entity processing history

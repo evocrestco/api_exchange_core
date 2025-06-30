@@ -75,8 +75,7 @@ class TestProcessorHandlerStateTracking:
         # Setup: ProcessorHandler with real database
         handler = ProcessorHandler(
             processor=processor,
-            processing_service=None,  # Will create new one with db_manager
-            db_manager=db_manager
+            processing_service=None
         )
 
         # Execute
@@ -124,8 +123,7 @@ class TestProcessorHandlerStateTracking:
         # Setup: ProcessorHandler with real database
         handler = ProcessorHandler(
             processor=processor,
-            processing_service=None,  # Will create new one with db_manager
-            db_manager=db_manager
+            processing_service=None
         )
 
         # Execute
@@ -173,8 +171,7 @@ class TestProcessorHandlerStateTracking:
         # Setup: ProcessorHandler with real database
         handler = ProcessorHandler(
             processor=processor,
-            processing_service=None,  # Will create new one with db_manager
-            db_manager=db_manager
+            processing_service=None
         )
 
         # Execute
@@ -209,7 +206,7 @@ class TestProcessorHandlerStateTracking:
         """Test _record_success_state_transitions with existing entity."""
         # Setup
         processor = MockProcessor()
-        handler = ProcessorHandler(processor=processor, processing_service=None, db_manager=db_manager)
+        handler = ProcessorHandler(processor=processor, processing_service=None)
         
         entity_id = str(uuid.uuid4())
         external_id = "test-external-id"
@@ -232,7 +229,7 @@ class TestProcessorHandlerStateTracking:
         
         # Create mock state tracking service using real implementation
         from api_exchange_core.services.logging_state_tracking_service import LoggingStateTrackingService
-        state_service = LoggingStateTrackingService(db_manager=db_manager)
+        state_service = LoggingStateTrackingService()
         
         # Execute
         handler._record_success_state_transitions(
@@ -263,7 +260,7 @@ class TestProcessorHandlerStateTracking:
         """Test _record_success_state_transitions with newly created entities."""
         # Setup
         processor = MockProcessor()
-        handler = ProcessorHandler(processor=processor, processing_service=None, db_manager=db_manager)
+        handler = ProcessorHandler(processor=processor, processing_service=None)
         
         message = Message(
             message_type=MessageType.ENTITY_PROCESSING,
@@ -277,7 +274,7 @@ class TestProcessorHandlerStateTracking:
         
         # Create mock state tracking service using real implementation
         from api_exchange_core.services.logging_state_tracking_service import LoggingStateTrackingService
-        state_service = LoggingStateTrackingService(db_manager=db_manager)
+        state_service = LoggingStateTrackingService()
         
         # Execute
         handler._record_success_state_transitions(
@@ -307,7 +304,7 @@ class TestProcessorHandlerStateTracking:
         """Test _record_success_state_transitions with both existing and created entities."""
         # Setup
         processor = MockProcessor()
-        handler = ProcessorHandler(processor=processor, processing_service=None, db_manager=db_manager)
+        handler = ProcessorHandler(processor=processor, processing_service=None)
         
         existing_entity_id = str(uuid.uuid4())
         external_id = "test-external-id"
@@ -332,7 +329,7 @@ class TestProcessorHandlerStateTracking:
         
         # Create mock state tracking service using real implementation
         from api_exchange_core.services.logging_state_tracking_service import LoggingStateTrackingService
-        state_service = LoggingStateTrackingService(db_manager=db_manager)
+        state_service = LoggingStateTrackingService()
         
         # Execute
         handler._record_success_state_transitions(
@@ -364,7 +361,7 @@ class TestProcessorHandlerStateTracking:
         """Test _record_failure_state_transitions with created entities."""
         # Setup
         processor = MockProcessor()
-        handler = ProcessorHandler(processor=processor, processing_service=None, db_manager=db_manager)
+        handler = ProcessorHandler(processor=processor, processing_service=None)
         
         message = Message(
             message_type=MessageType.ENTITY_PROCESSING,
@@ -382,7 +379,7 @@ class TestProcessorHandlerStateTracking:
         
         # Create mock state tracking service using real implementation
         from api_exchange_core.services.logging_state_tracking_service import LoggingStateTrackingService
-        state_service = LoggingStateTrackingService(db_manager=db_manager)
+        state_service = LoggingStateTrackingService()
         
         # Execute
         handler._record_failure_state_transitions(

@@ -17,12 +17,22 @@ depends_on = None
 
 
 def upgrade():
-    # Remove indexes that include correlation_id
-    op.drop_index('ix_pipeline_state_correlation_timeline', table_name='pipeline_state_history')
-    op.drop_index('ix_pipeline_state_tenant_correlation', table_name='pipeline_state_history')
+    # Remove indexes that include correlation_id (if they exist)
+    try:
+        op.drop_index('ix_pipeline_state_correlation_timeline', table_name='pipeline_state_history')
+    except:
+        pass  # Index doesn't exist
     
-    # Drop the correlation_id column
-    op.drop_column('pipeline_state_history', 'correlation_id')
+    try:
+        op.drop_index('ix_pipeline_state_tenant_correlation', table_name='pipeline_state_history')
+    except:
+        pass  # Index doesn't exist
+    
+    # Drop the correlation_id column (if it exists)
+    try:
+        op.drop_column('pipeline_state_history', 'correlation_id')
+    except:
+        pass  # Column doesn't exist
 
 
 def downgrade():

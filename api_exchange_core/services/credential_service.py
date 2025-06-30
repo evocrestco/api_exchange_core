@@ -40,11 +40,13 @@ class CredentialService:
 
     def __init__(
         self,
-        session: Session,
         api_token_service: Optional[APITokenService] = None,
     ):
-        """Initialize with SQLAlchemy session and optional API token service."""
-        self.session = session
+        """Initialize with global database manager and optional API token service."""
+        from ..db.db_config import get_db_manager
+        
+        self.db_manager = get_db_manager()
+        self.session = self.db_manager.get_session()
         self.api_token_service = api_token_service
         self.logger = get_logger()
 

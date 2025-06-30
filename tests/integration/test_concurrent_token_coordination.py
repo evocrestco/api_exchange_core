@@ -128,18 +128,33 @@ class TestConcurrentTokenCoordination:
                 thread_session = Session()
                 
                 try:
+                    # Set up global db_manager for this thread
+                    from api_exchange_core.db.db_config import set_db_manager
+                    from api_exchange_core.db import DatabaseManager
+                    
+                    class ThreadDatabaseManager(DatabaseManager):
+                        def __init__(self, session):
+                            self._session = session
+
+                        def get_session(self):
+                            return self._session
+
+                        def close_session(self, session=None):
+                            pass  # Don't close in thread test
+                    
+                    thread_db_manager = ThreadDatabaseManager(thread_session)
+                    set_db_manager(thread_db_manager)
+                    
                     with tenant_context("test_tenant"):  # Same tenant for all functions
                         # Create API token repository and service (consistent pattern)
                         # Use the shared unique provider for this test run
                         api_token_repo = APITokenRepository(
-                            session=thread_session,
                             api_provider=unique_provider,  # Fresh pool for each test run, shared by all threads
                             max_tokens=25,  # Realistic token limit for testing coordination
                             token_validity_hours=1
                         )
                         api_token_service = APITokenService(token_repository=api_token_repo)
                         credential_service = CredentialService(
-                            session=thread_session,
                             api_token_service=api_token_service
                         )
                         

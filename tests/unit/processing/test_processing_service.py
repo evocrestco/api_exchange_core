@@ -21,30 +21,10 @@ class TestProcessingServiceErrorPaths:
     """Test error handling in ProcessingService."""
 
     @pytest.fixture
-    def processing_service(self, db_session, tenant_context):
+    def processing_service(self, db_manager, tenant_context):
         """Create ProcessingService instance."""
-        from api_exchange_core.processing.entity_attributes import EntityAttributeBuilder
-        from api_exchange_core.utils.logger import get_logger
-        
-        # Create ProcessingService manually without using constructor
-        processing_service = object.__new__(ProcessingService)
-        
-        # Set up the session that process_message expects
-        processing_service.session = db_session
-        
-        # Set up services with test session
-        processing_service.entity_service = EntityService(session=db_session)
-        processing_service.duplicate_detection_service = DuplicateDetectionService(
-            entity_service=EntityService(session=db_session)
-        )
-        processing_service.attribute_builder = EntityAttributeBuilder()
-        processing_service.logger = get_logger()
-        
-        # Optional services (not initialized by default)
-        processing_service.state_tracking_service = None
-        processing_service.error_service = None
-        
-        return processing_service
+        # Use the regular constructor now that it uses global db_manager
+        return ProcessingService()
 
     def test_process_entity_with_invalid_external_id(self, processing_service):
         """Test process_entity with invalid external_id."""
@@ -178,7 +158,7 @@ class TestProcessingServiceWithStateAndErrorTracking:
     """Test ProcessingService with state tracking and error services."""
 
     @pytest.fixture
-    def services(self, db_session, tenant_context):
+    def services(self, db_manager, tenant_context):
         """Create all services needed for testing."""
         from api_exchange_core.processing.entity_attributes import EntityAttributeBuilder
         from api_exchange_core.utils.logger import get_logger
@@ -187,17 +167,15 @@ class TestProcessingServiceWithStateAndErrorTracking:
         processing_service = object.__new__(ProcessingService)
         
         # Set up core services with test session
-        processing_service.entity_service = EntityService(session=db_session)
-        processing_service.duplicate_detection_service = DuplicateDetectionService(
-            entity_service=EntityService(session=db_session)
-        )
+        processing_service.entity_service = EntityService()
+        processing_service.duplicate_detection_service = DuplicateDetectionService()
         processing_service.attribute_builder = EntityAttributeBuilder()
         processing_service.logger = get_logger()
         
         # Create additional services (logging-based, no session needed)
         state_service = LoggingStateTrackingService()
         error_service = LoggingProcessingErrorService()
-        entity_service = EntityService(session=db_session)
+        entity_service = EntityService()
         
         # Inject state and error services
         processing_service.state_tracking_service = state_service
@@ -352,7 +330,7 @@ class TestProcessingServiceWithStateAndErrorTracking:
         history = services['state'].get_entity_state_history(result.entity_id)
         assert history is None or len(history.transitions) == 0
 
-    def test_processing_without_injected_services(self, db_session, tenant_context):
+    def test_processing_without_injected_services(self, db_manager, tenant_context):
         """Test that processing works without state/error services."""
         from api_exchange_core.processing.entity_attributes import EntityAttributeBuilder
         from api_exchange_core.utils.logger import get_logger
@@ -361,10 +339,8 @@ class TestProcessingServiceWithStateAndErrorTracking:
         processing_service = object.__new__(ProcessingService)
         
         # Set up core services with test session
-        processing_service.entity_service = EntityService(session=db_session)
-        processing_service.duplicate_detection_service = DuplicateDetectionService(
-            entity_service=EntityService(session=db_session)
-        )
+        processing_service.entity_service = EntityService()
+        processing_service.duplicate_detection_service = DuplicateDetectionService()
         processing_service.attribute_builder = EntityAttributeBuilder()
         processing_service.logger = get_logger()
         

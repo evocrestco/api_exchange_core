@@ -117,21 +117,12 @@ class DuplicateDetectionService:
     Uses session-per-service pattern - creates its own EntityService.
     """
 
-    def __init__(self, entity_service=None):
-        """
-        Initialize the duplicate detection service.
+    def __init__(self):
+        """Initialize the duplicate detection service with global database manager."""
+        # Import here to avoid circular dependencies
+        from ..services.entity_service import EntityService
 
-        Args:
-            entity_service: Optional EntityService instance (for testing)
-        """
-        if entity_service:
-            self.entity_service = entity_service
-        else:
-            # Import here to avoid circular dependencies
-            from ..services.entity_service import EntityService
-
-            self.entity_service = EntityService()
-
+        self.entity_service = EntityService()
         self.logger = get_logger()
 
     def close(self):

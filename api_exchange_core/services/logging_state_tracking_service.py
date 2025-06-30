@@ -31,16 +31,12 @@ class LoggingStateTrackingService:
     efficient querying for GUI and analytics.
     """
 
-    def __init__(self, db_manager=None):
-        """
-        Initialize the hybrid state tracking service.
-
-        Args:
-            db_manager: Optional database manager for writing state records.
-                       If None, only logging will be performed (backward compatibility).
-        """
+    def __init__(self):
+        """Initialize the hybrid state tracking service with global database manager."""
+        from ..db.db_config import get_db_manager
+        
         self.logger = get_logger()
-        self.db_manager = db_manager
+        self.db_manager = get_db_manager()
 
     @tenant_aware
     @operation(name="log_state_transition")
@@ -76,6 +72,7 @@ class LoggingStateTrackingService:
             "external_id": transition_data.external_id,
             "tenant_id": tenant_id,
             "correlation_id": correlation_id,
+            "pipeline_id": transition_data.pipeline_id,
             "from_state": transition_data.from_state,
             "to_state": transition_data.to_state,
             "actor": transition_data.actor,
@@ -97,23 +94,23 @@ class LoggingStateTrackingService:
             extra=log_data,
         )
 
-        # Also write to database if db_manager is available
-        if self.db_manager:
-            self._write_to_database(
-                transition_id=transition_id,
-                entity_id=transition_data.entity_id,
-                external_id=transition_data.external_id,
-                tenant_id=tenant_id,
-                processor_name=transition_data.actor,
-                status=transition_data.to_state,
-                log_timestamp=timestamp,
-                source_queue=transition_data.queue_source,
-                destination_queue=transition_data.queue_destination,
-                processing_duration_ms=transition_data.transition_duration,
-                processor_data=transition_data.processor_data,
-                transition_type=transition_data.transition_type,
-                notes=transition_data.notes,
-            )
+        # Also write to database
+        self._write_to_database(
+            transition_id=transition_id,
+            entity_id=transition_data.entity_id,
+            external_id=transition_data.external_id,
+            pipeline_id=transition_data.pipeline_id,
+            tenant_id=tenant_id,
+            processor_name=transition_data.actor,
+            status=transition_data.to_state,
+            log_timestamp=timestamp,
+            source_queue=transition_data.queue_source,
+            destination_queue=transition_data.queue_destination,
+            processing_duration_ms=transition_data.transition_duration,
+            processor_data=transition_data.processor_data,
+            transition_type=transition_data.transition_type,
+            notes=transition_data.notes,
+        )
 
         # Return properly typed response
         return PipelineStateTransitionRead(
@@ -121,6 +118,7 @@ class LoggingStateTrackingService:
             entity_id=transition_data.entity_id,
             tenant_id=tenant_id,
             correlation_id=correlation_id,
+            pipeline_id=transition_data.pipeline_id,
             from_state=transition_data.from_state,
             to_state=transition_data.to_state,
             actor=transition_data.actor,
@@ -143,6 +141,7 @@ class LoggingStateTrackingService:
         status: str,
         log_timestamp: datetime,
         external_id: Optional[str] = None,
+        pipeline_id: Optional[str] = None,
         source_queue: Optional[str] = None,
         destination_queue: Optional[str] = None,
         processing_duration_ms: Optional[int] = None,
@@ -177,6 +176,7 @@ class LoggingStateTrackingService:
                 log_timestamp=log_timestamp,
                 entity_id=entity_id,
                 external_id=external_id,
+                pipeline_id=pipeline_id,
                 source_queue=source_queue,
                 destination_queue=destination_queue,
                 processing_duration_ms=processing_duration_ms,

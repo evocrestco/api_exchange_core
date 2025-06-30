@@ -26,7 +26,6 @@ class BaseRepository(Generic[T]):
 
     def __init__(
         self,
-        session: Session,
         entity_class: Type[T],
         logger=None,
     ):
@@ -34,11 +33,13 @@ class BaseRepository(Generic[T]):
         Initialize the base repository.
 
         Args:
-            session: SQLAlchemy session for database operations
             entity_class: SQLAlchemy model class this repository handles
             logger: Optional logger instance
         """
-        self.session = session
+        from ..db.db_config import get_db_manager
+        
+        self.db_manager = get_db_manager()
+        self.session = self.db_manager.get_session()
         self.entity_class = entity_class
         self.logger = logger or get_logger()
         self.entity_name = entity_class.__name__

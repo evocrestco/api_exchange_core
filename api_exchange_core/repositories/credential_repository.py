@@ -35,8 +35,8 @@ class CredentialRepository(BaseRepository[ExternalCredential]):
     - Comprehensive audit logging
     """
 
-    def __init__(self, session: Session):
-        super().__init__(session, ExternalCredential)
+    def __init__(self):
+        super().__init__(ExternalCredential)
         self.logger = get_logger()
 
     def _validate_tenant_isolation(

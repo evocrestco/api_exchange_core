@@ -162,28 +162,22 @@ class SessionManagedService(BaseService[TCreate, TRead, TUpdate, TFilter]):
         repository_class: Optional[Type] = None,
         read_schema_class: Optional[Type[TRead]] = None,
         logger: Optional[logging.Logger] = None,
-        session: Optional[Session] = None,
     ):
         """
-        Initialize service with its own session.
+        Initialize service with global database manager.
 
         Args:
             repository_class: DEPRECATED - Repository class (for backward compatibility)
             read_schema_class: DEPRECATED - Pydantic schema class (for backward compatibility)
             logger: Optional logger instance
-            session: Optional existing session (for testing or coordination)
         """
-        # Create or use provided session
-        if session:
-            self.session = session
-            self._owns_session = False
-        else:
-            self.session = self._create_session()
-            self._owns_session = True
+        # Always use global database manager
+        self.session = self._create_session()
+        self._owns_session = True
 
         # Legacy repository support (DEPRECATED - use SQLAlchemy directly)
         if repository_class:
-            repository = repository_class(self.session)
+            repository = repository_class()
         else:
             repository = None
 
@@ -196,13 +190,10 @@ class SessionManagedService(BaseService[TCreate, TRead, TUpdate, TFilter]):
             self.logger = logger or get_logger()
 
     def _create_session(self) -> Session:
-        """Create a new database session."""
-        from sqlalchemy import create_engine
-
-        db_config = get_production_config()
-        engine = create_engine(db_config.get_connection_string())
-        Session = sessionmaker(bind=engine)
-        return Session()
+        """Create a new database session using the global database manager."""
+        from ..db.db_config import get_db_manager
+        
+        return get_db_manager().get_session()
 
     @contextmanager
     def transaction(self):

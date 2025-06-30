@@ -20,9 +20,9 @@ class TestCredentialRepository:
     """Test CredentialRepository ."""
 
     @pytest.fixture(scope="function")
-    def credential_repo(self, db_session):
-        """Create credential repository with database session."""
-        return CredentialRepository(db_session)
+    def credential_repo(self, db_manager):
+        """Create credential repository with global database manager."""
+        return CredentialRepository()
 
     @pytest.fixture(scope="function")
     def test_credentials(self):
@@ -33,7 +33,7 @@ class TestCredentialRepository:
             "endpoint": "https://api.example.com"
         }
 
-    def test_create_credential_success(self, credential_repo, db_session, test_tenant, test_credentials):
+    def test_create_credential_success(self, credential_repo, db_manager, test_tenant, test_credentials):
         """Test successful credential creation."""
         TenantContext.set_current_tenant(test_tenant["id"])
         
@@ -45,7 +45,6 @@ class TestCredentialRepository:
                 expires_at=datetime.utcnow() + timedelta(days=30)
             )
             
-            db_session.commit()
             
             # Verify credential was created
             assert credential.id is not None
@@ -56,7 +55,7 @@ class TestCredentialRepository:
             assert credential.expires_at is not None
             
             # Verify credentials are encrypted and can be decrypted
-            retrieved_creds = credential.get_credentials(db_session)
+            retrieved_creds = credential.get_credentials(credential_repo.session)
             assert retrieved_creds == test_credentials
             
         finally:
@@ -85,7 +84,7 @@ class TestCredentialRepository:
         finally:
             TenantContext.clear_current_tenant()
 
-    def test_get_by_system_name_success(self, credential_repo, db_session, test_tenant, test_credentials):
+    def test_get_by_system_name_success(self, credential_repo, db_manager, test_tenant, test_credentials):
         """Test getting credential by system name."""
         TenantContext.set_current_tenant(test_tenant["id"])
         
@@ -96,7 +95,6 @@ class TestCredentialRepository:
                 auth_type="api_token", 
                 credentials=test_credentials
             )
-            db_session.commit()
             
             # Retrieve credential
             retrieved_credential = credential_repo.get_by_system_name("test_system")
@@ -107,7 +105,7 @@ class TestCredentialRepository:
             assert retrieved_credential.tenant_id == test_tenant["id"]
             
             # Verify credentials can be decrypted
-            retrieved_creds = retrieved_credential.get_credentials(db_session)
+            retrieved_creds = retrieved_credential.get_credentials(credential_repo.session)
             assert retrieved_creds == test_credentials
             
         finally:
@@ -123,7 +121,7 @@ class TestCredentialRepository:
         finally:
             TenantContext.clear_current_tenant()
 
-    def test_update_credentials_success(self, credential_repo, db_session, test_tenant, test_credentials):
+    def test_update_credentials_success(self, credential_repo, db_manager, test_tenant, test_credentials):
         """Test updating existing credentials."""
         TenantContext.set_current_tenant(test_tenant["id"])
         
@@ -134,7 +132,6 @@ class TestCredentialRepository:
                 auth_type="api_token",
                 credentials=test_credentials
             )
-            db_session.commit()
             
             # Update with new credentials
             new_credentials = {
@@ -148,14 +145,13 @@ class TestCredentialRepository:
                 credentials=new_credentials,
                 expires_at=new_expiry
             )
-            db_session.commit()
             
             # Verify update
             assert updated_credential.id == credential.id
             assert updated_credential.expires_at.replace(microsecond=0) == new_expiry.replace(microsecond=0)
             
             # Verify new credentials can be decrypted
-            retrieved_creds = updated_credential.get_credentials(db_session)
+            retrieved_creds = updated_credential.get_credentials(credential_repo.session)
             assert retrieved_creds == new_credentials
             
         finally:
@@ -174,7 +170,7 @@ class TestCredentialRepository:
         finally:
             TenantContext.clear_current_tenant()
 
-    def test_delete_credential_success(self, credential_repo, db_session, test_tenant, test_credentials):
+    def test_delete_credential_success(self, credential_repo, db_manager, test_tenant, test_credentials):
         """Test deleting existing credential.""" 
         TenantContext.set_current_tenant(test_tenant["id"])
         
@@ -185,14 +181,12 @@ class TestCredentialRepository:
                 auth_type="api_token",
                 credentials=test_credentials
             )
-            db_session.commit()
             
             # Verify credential exists
             assert credential_repo.get_by_system_name("test_system") is not None
             
             # Delete credential
             result = credential_repo.delete_credential("test_system")
-            db_session.commit()
             
             # Verify deletion
             assert result is True
@@ -211,7 +205,7 @@ class TestCredentialRepository:
         finally:
             TenantContext.clear_current_tenant()
 
-    def test_tenant_isolation(self, credential_repo, db_session, multi_tenant_context):
+    def test_tenant_isolation(self, credential_repo, db_manager, multi_tenant_context):
         """Test that credentials are properly isolated by tenant."""
         tenant1, tenant2, tenant3 = multi_tenant_context
         
@@ -230,14 +224,13 @@ class TestCredentialRepository:
             credentials={"tenant2_key": "tenant2_value"}
         )
         
-        db_session.commit()
         
         # Verify tenant1 only sees their credential
         TenantContext.set_current_tenant(tenant1["id"])
         tenant1_cred = credential_repo.get_by_system_name("shared_system")
         assert tenant1_cred is not None
         assert tenant1_cred.tenant_id == tenant1["id"]
-        tenant1_creds = tenant1_cred.get_credentials(db_session)
+        tenant1_creds = tenant1_cred.get_credentials(credential_repo.session)
         assert "tenant1_key" in tenant1_creds
         
         # Verify tenant2 only sees their credential
@@ -245,7 +238,7 @@ class TestCredentialRepository:
         tenant2_cred = credential_repo.get_by_system_name("shared_system")
         assert tenant2_cred is not None
         assert tenant2_cred.tenant_id == tenant2["id"]
-        tenant2_creds = tenant2_cred.get_credentials(db_session)
+        tenant2_creds = tenant2_cred.get_credentials(credential_repo.session)
         assert "tenant2_key" in tenant2_creds
         
         # Verify tenant3 sees no credentials

@@ -198,6 +198,7 @@ class ProcessorContext:
         payload: Dict[str, Any],
         metadata: Optional[Dict[str, Any]] = None,
         message_type: str = "entity_processing",
+        pipeline_id: Optional[str] = None,
     ) -> Message:
         """
         Create a message with an entity reference.
@@ -210,6 +211,7 @@ class ProcessorContext:
             payload: Message payload data
             metadata: Optional message metadata
             message_type: Type of message (default: "entity_processing")
+            pipeline_id: Optional pipeline ID (for linking related operations)
 
         Returns:
             Message: The created message with entity reference
@@ -235,12 +237,18 @@ class ProcessorContext:
             tenant_id=entity.tenant_id,
         )
 
-        return Message(
-            message_type=MessageType(message_type),
-            entity_reference=entity_ref,
-            payload=payload,
-            metadata=metadata or {},
-        )
+        message_kwargs = {
+            "message_type": MessageType(message_type),
+            "entity_reference": entity_ref,
+            "payload": payload,
+            "metadata": metadata or {},
+        }
+        
+        # Only pass pipeline_id if it's not None (let Message use its default factory otherwise)
+        if pipeline_id is not None:
+            message_kwargs["pipeline_id"] = pipeline_id
+            
+        return Message(**message_kwargs)
 
     def create_entity_and_message(
         self,
@@ -252,6 +260,7 @@ class ProcessorContext:
         entity_metadata: Optional[Dict[str, Any]] = None,
         message_metadata: Optional[Dict[str, Any]] = None,
         message_type: str = "entity_processing",
+        pipeline_id: Optional[str] = None,
     ) -> Tuple[str, Message]:
         """
         Create both an entity and a message in one operation.
@@ -268,6 +277,7 @@ class ProcessorContext:
             entity_metadata: Optional metadata for the entity
             message_metadata: Optional metadata for the message
             message_type: Type of message (default: "entity_processing")
+            pipeline_id: Optional pipeline ID (for linking related operations)
 
         Returns:
             Tuple[str, Message]: The created entity_id and message
@@ -290,6 +300,7 @@ class ProcessorContext:
             payload=message_payload,
             metadata=message_metadata,
             message_type=message_type,
+            pipeline_id=pipeline_id,
         )
 
         return entity_id, message
@@ -343,6 +354,7 @@ class ProcessorContext:
         entity_metadata: Optional[Dict[str, Any]] = None,
         message_metadata: Optional[Dict[str, Any]] = None,
         message_type: str = "entity_processing",
+        pipeline_id: Optional[str] = None,
         **handler_params,
     ) -> Dict[str, Any]:
         """
@@ -392,6 +404,7 @@ class ProcessorContext:
             entity_metadata=entity_metadata,
             message_metadata=message_metadata,
             message_type=message_type,
+            pipeline_id=pipeline_id,
         )
 
         # Send output
