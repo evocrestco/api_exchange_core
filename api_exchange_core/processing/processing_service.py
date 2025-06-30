@@ -154,7 +154,7 @@ class ProcessingService:
                 notes=notes,
             )
             self.state_tracking_service.record_transition(transition_data)
-            # Note: No commit here - ProcessorHandler manages the shared session transaction
+            # Note: State transitions are logged-only and don't require transaction management
         except Exception as e:
             entity_type = "new entity" if is_new_entity else "version update"
             self.logger.warning(f"Failed to record state transition for {entity_type}: {e}")
@@ -355,24 +355,25 @@ class ProcessingService:
         )
 
         if existing_entity is None:
-            # Create new entity
-            entity_id = self.entity_service.create_entity(
-                external_id=external_id,
-                canonical_type=canonical_type,
-                source=source,
-                content=content,
-                attributes=attributes,
-                hash_config=config.hash_config,
-            )
+            # Create new entity with transaction management
+            with self.entity_service.transaction():
+                entity_id = self.entity_service.create_entity(
+                    external_id=external_id,
+                    canonical_type=canonical_type,
+                    source=source,
+                    content=content,
+                    attributes=attributes,
+                    hash_config=config.hash_config,
+                )
 
-            # Record state transition for new entity
-            self._record_state_transition(
-                entity_id=entity_id,
-                config=config,
-                is_new_entity=True,
-                version=1,
-                duplicate_result=duplicate_result,
-            )
+                # Record state transition for new entity
+                self._record_state_transition(
+                    entity_id=entity_id,
+                    config=config,
+                    is_new_entity=True,
+                    version=1,
+                    duplicate_result=duplicate_result,
+                )
 
             return ProcessingResult(
                 entity_id=entity_id,
@@ -384,23 +385,24 @@ class ProcessingService:
                 processing_metadata={"processor": config.processor_name},
             )
         else:
-            # Create new version of existing entity
-            entity_id, version = self.entity_service.create_new_version(
-                external_id=external_id,
-                source=source,
-                content=content,
-                attributes=attributes,
-                hash_config=config.hash_config,
-            )
+            # Create new version of existing entity with transaction management
+            with self.entity_service.transaction():
+                entity_id, version = self.entity_service.create_new_version(
+                    external_id=external_id,
+                    source=source,
+                    content=content,
+                    attributes=attributes,
+                    hash_config=config.hash_config,
+                )
 
-            # Record state transition for version update
-            self._record_state_transition(
-                entity_id=entity_id,
-                config=config,
-                is_new_entity=False,
-                version=version,
-                duplicate_result=duplicate_result,
-            )
+                # Record state transition for version update
+                self._record_state_transition(
+                    entity_id=entity_id,
+                    config=config,
+                    is_new_entity=False,
+                    version=version,
+                    duplicate_result=duplicate_result,
+                )
 
             return ProcessingResult(
                 entity_id=entity_id,
@@ -471,11 +473,12 @@ class ProcessingService:
                     merge_results=True,
                 )
 
-            # Update entity attributes
-            self.entity_service.update_entity_attributes(
-                entity_id=existing_entity.id,
-                attributes=updated_attributes,
-            )
+            # Update entity attributes with transaction management
+            with self.entity_service.transaction():
+                self.entity_service.update_entity_attributes(
+                    entity_id=existing_entity.id,
+                    attributes=updated_attributes,
+                )
 
         return ProcessingResult(
             entity_id=existing_entity.id,

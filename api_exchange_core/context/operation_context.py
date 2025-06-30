@@ -79,7 +79,7 @@ class OperationHandler:
         op_ctx = OperationContext(name, **context)
 
         # Log operation entry with IDs
-        self.logger.debug(
+        self.logger.info(
             f"ENTER: {name}",
             extra={
                 **context,
@@ -103,7 +103,7 @@ class OperationHandler:
             }
 
             # Log successful exit
-            self.logger.debug(f"EXIT: {name}", extra=log_context)
+            self.logger.info(f"EXIT: {name}", extra=log_context)
 
             try:
                 from ..config import get_config
