@@ -74,7 +74,7 @@ class ProcessorConfig(BaseModel):
 
     # State tracking configuration
     enable_state_tracking: bool = Field(
-        default=False, description="Whether to record state transitions for entity processing"
+        default=True, description="Whether to record state transitions for entity processing"
     )
 
     # Output handler configuration
