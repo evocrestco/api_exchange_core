@@ -45,14 +45,10 @@ class ContextAwareLogger:
         # Extract extra if present
         extra = kwargs.pop("extra", {})
 
-        # Format extra as JSON structure
+        # Format extra as string
         if extra:
-            import json
-            structured_msg = {
-                "text": msg,
-                **extra  # Spread the extra fields into the JSON
-            }
-            full_msg = json.dumps(structured_msg)
+            extra_str = " | ".join([f"{k}={v}" for k, v in extra.items()])
+            full_msg = f"{msg} | {extra_str}"
         else:
             full_msg = msg
 
