@@ -12,12 +12,12 @@ from typing import Any, Dict, Optional
 
 from pydantic import ValidationError as PydanticValidationError
 
-from ...db.db_config import DatabaseConfig, DatabaseManager, init_db, initialize_db, set_db_manager
-from ...exceptions import ErrorCode, ServiceError, ValidationError
-from ...processing.processing_service import ProcessingService
-from ...utils.logger import get_logger
 from .processor_handler import ProcessorHandler
 from .processor_interface import ProcessorInterface
+from ...db.db_config import DatabaseConfig, DatabaseManager, init_db
+from ...exceptions import ErrorCode, ServiceError
+from ...processing.processing_service import ProcessingService
+from ...utils.logger import get_logger
 
 
 def create_db_manager() -> DatabaseManager:
@@ -94,18 +94,20 @@ def create_processor_handler(
     # Initialize global db_manager if not already done, or if connection is closed
     try:
         from ...db.db_config import get_db_manager
+
         existing_db_manager = get_db_manager()
-        
+
         # Check if the connection is still valid
         try:
             # Test the connection by executing a simple query
             from sqlalchemy import text
+
             with existing_db_manager.engine.connect() as conn:
                 conn.execute(text("SELECT 1"))
             logger.debug("Using existing global database manager")
             # Create ProcessingService (uses global db_manager)
             processing_service = ProcessingService()
-            
+
             # Create and return the processor handler
             return ProcessorHandler(
                 processor=processor,
@@ -116,22 +118,23 @@ def create_processor_handler(
         except Exception as e:
             logger.warning(f"Existing database connection is invalid ({e}), recreating...")
             # Fall through to recreate the db_manager
-            
+
     except ServiceError:
         logger.warning("Global db_manager not initialized")
         # Fall through to create new db_manager
-        
+
     # Create new db_manager (either not initialized or connection is closed)
     logger.warning("Initializing DB")
     db_manager = create_db_manager()
     logger.info(f"Created database manager from environment: {db_manager.config}")
-    
+
     # Initialize database and import all models
     init_db(db_manager)
     logger.info("Database initialized with all models imported")
-    
+
     # Set as global db_manager
     from ...db.db_config import set_db_manager
+
     set_db_manager(db_manager)
     logger.info("Global database manager initialized")
 

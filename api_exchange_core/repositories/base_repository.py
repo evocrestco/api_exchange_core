@@ -10,7 +10,6 @@ from typing import Any, Dict, Generic, List, NoReturn, Optional, Tuple, Type, Ty
 
 from sqlalchemy import asc, desc, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy.orm import Session
 
 from ..context.tenant_context import TenantContext
 from ..db import BaseModel
@@ -37,7 +36,7 @@ class BaseRepository(Generic[T]):
             logger: Optional logger instance
         """
         from ..db.db_config import get_db_manager
-        
+
         self.db_manager = get_db_manager()
         self.session = self.db_manager.get_session()
         self.entity_class = entity_class

@@ -7,13 +7,13 @@ using SQLAlchemy directly - simple, explicit, and efficient.
 
 import uuid
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any, List
 
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import exists
 from sqlalchemy.exc import IntegrityError
 
-from ..utils import get_logger
+from .base_service import SessionManagedService
 from ..context.operation_context import operation
 from ..db.db_tenant_models import Tenant
 from ..exceptions import ErrorCode, ServiceError, ValidationError
@@ -23,7 +23,7 @@ from ..schemas.tenant_schema import (
     TenantRead,
     TenantUpdate,
 )
-from .base_service import SessionManagedService
+from ..utils import get_logger
 
 
 class TenantService(SessionManagedService):

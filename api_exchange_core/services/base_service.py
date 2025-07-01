@@ -9,10 +9,9 @@ from contextlib import contextmanager
 from typing import Any, Dict, Generic, List, NoReturn, Optional, Type, TypeVar
 
 from pydantic import BaseModel
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session
 
 from ..context.operation_context import operation
-from ..db.db_config import get_production_config
 from ..exceptions import ErrorCode, RepositoryError, ServiceError, ValidationError
 from ..utils.logger import get_logger
 
@@ -30,7 +29,7 @@ class BaseService(Generic[TCreate, TRead, TUpdate, TFilter]):
         self,
         repository: Any,
         read_schema_class: Type[TRead],
-        logger = get_logger(),
+        logger=get_logger(),
     ):
         """
         Initialize the base service.
@@ -160,7 +159,7 @@ class SessionManagedService(BaseService[TCreate, TRead, TUpdate, TFilter]):
         self,
         repository_class: Optional[Type] = None,
         read_schema_class: Optional[Type[TRead]] = None,
-        logger = get_logger(),
+        logger=get_logger(),
     ):
         """
         Initialize service with global database manager.
@@ -191,7 +190,7 @@ class SessionManagedService(BaseService[TCreate, TRead, TUpdate, TFilter]):
     def _create_session(self) -> Session:
         """Create a new database session using the global database manager."""
         from ..db.db_config import get_db_manager
-        
+
         return get_db_manager().get_session()
 
     @contextmanager

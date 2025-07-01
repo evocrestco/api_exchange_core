@@ -13,8 +13,6 @@ from contextlib import contextmanager
 from functools import wraps
 from typing import TYPE_CHECKING, Any, Callable, Generator, Optional, Union
 
-from sqlalchemy.orm import Session
-
 from ..exceptions import ErrorCode, ValidationError
 from ..utils.logger import get_logger
 

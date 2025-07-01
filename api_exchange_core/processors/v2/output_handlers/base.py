@@ -352,7 +352,7 @@ class OutputHandler(ABC):
             result = operation()
             duration_ms = (time.time() - start_time) * 1000
             return result, duration_ms
-        except Exception as e:
+        except Exception:
             duration_ms = (time.time() - start_time) * 1000
             # Re-raise the original exception to preserve stack trace
             raise

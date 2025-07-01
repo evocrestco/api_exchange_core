@@ -5,8 +5,8 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, declarative_base, scoped_session, sessionmaker
 
-from ..utils import get_logger
 from ..exceptions import ErrorCode, ServiceError, ValidationError
+from ..utils import get_logger
 
 # Base class for all SQLAlchemy models
 Base: Any = declarative_base()
@@ -184,10 +184,10 @@ _db_manager: Optional[DatabaseManager] = None
 def get_db_manager() -> DatabaseManager:
     """
     Get the global database manager instance.
-    
+
     Returns:
         DatabaseManager: The current database manager
-        
+
     Raises:
         ServiceError: If no database manager has been initialized
     """
@@ -196,7 +196,7 @@ def get_db_manager() -> DatabaseManager:
         raise ServiceError(
             "Database manager not initialized. Call initialize_db() first.",
             error_code=ErrorCode.CONFIGURATION_ERROR,
-            operation="get_db_manager"
+            operation="get_db_manager",
         )
     return _db_manager
 
@@ -204,9 +204,9 @@ def get_db_manager() -> DatabaseManager:
 def set_db_manager(manager: DatabaseManager) -> None:
     """
     Set the global database manager instance.
-    
+
     This is primarily used for testing to inject a test database manager.
-    
+
     Args:
         manager: DatabaseManager instance to set as global
     """
@@ -217,24 +217,24 @@ def set_db_manager(manager: DatabaseManager) -> None:
 def initialize_db(config: Optional[DatabaseConfig] = None) -> DatabaseManager:
     """
     Initialize the global database manager with the given config.
-    
+
     Args:
         config: Optional DatabaseConfig. If None, uses production config from environment.
-        
+
     Returns:
         DatabaseManager: The initialized database manager
     """
     global _db_manager
-    
+
     if config is None:
         config = get_production_config()
-    
+
     _db_manager = DatabaseManager(config)
-    
+
     # Initialize tables
     import_all_models()
     _db_manager.create_tables()
-    
+
     return _db_manager
 
 

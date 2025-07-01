@@ -5,14 +5,13 @@ This module provides a unified exception hierarchy for the entire application,
 with automatic logging, telemetry support, and correlation ID tracking.
 """
 
+# Thread-local storage for correlation ID
+import threading
 import traceback
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
-
-# Thread-local storage for correlation ID
-import threading
 
 # Removed logger import to avoid circular dependency - calling code should handle logging
 
@@ -114,6 +113,7 @@ class BaseError(Exception):
         """Log error with appropriate level based on status code."""
         # Import logger here to avoid circular dependency at module load time
         from .utils.logger import get_logger
+
         logger = get_logger()
 
         log_data = {
@@ -384,13 +384,13 @@ def set_correlation_id(correlation_id: str) -> None:
 
 def get_correlation_id() -> Optional[str]:
     """Get the current thread's correlation ID."""
-    return getattr(_thread_local, 'correlation_id', None)
+    return getattr(_thread_local, "correlation_id", None)
 
 
 def clear_correlation_id() -> None:
     """Clear the current thread's correlation ID."""
-    if hasattr(_thread_local, 'correlation_id'):
-        delattr(_thread_local, 'correlation_id')
+    if hasattr(_thread_local, "correlation_id"):
+        delattr(_thread_local, "correlation_id")
 
 
 # Telemetry integration (optional)
@@ -424,6 +424,7 @@ class ErrorTelemetry:
 
         # For now, just log it (using lazy import to avoid circular dependencies)
         from .utils.logger import get_logger
+
         logger = get_logger()
         logger.debug(f"Telemetry: {error.error_code} - {error.message}", extra=properties)
 

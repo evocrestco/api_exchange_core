@@ -9,8 +9,8 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import and_, or_
-from sqlalchemy.orm import Session
 
+from .base_repository import BaseRepository
 from ..context.tenant_context import tenant_aware
 from ..db.db_credential_models import ExternalCredential
 from ..exceptions import (
@@ -21,7 +21,6 @@ from ..exceptions import (
     ValidationError,
 )
 from ..utils.logger import get_logger
-from .base_repository import BaseRepository
 
 
 class CredentialRepository(BaseRepository[ExternalCredential]):

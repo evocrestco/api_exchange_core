@@ -243,11 +243,11 @@ class ProcessorContext:
             "payload": payload,
             "metadata": metadata or {},
         }
-        
+
         # Only pass pipeline_id if it's not None (let Message use its default factory otherwise)
         if pipeline_id is not None:
             message_kwargs["pipeline_id"] = pipeline_id
-            
+
         return Message(**message_kwargs)
 
     def create_entity_and_message(

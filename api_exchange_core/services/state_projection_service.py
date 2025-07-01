@@ -5,16 +5,13 @@ This service implements event sourcing pattern by reading log entries and projec
 state changes into the pipeline_state_history table for monitoring and debugging.
 """
 
-import json
 import re
 from datetime import datetime
 from typing import Dict, List, Optional
 
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
 
 from ..db import DatabaseManager, PipelineStateHistory
-from ..exceptions import ErrorCode, ServiceError
 from ..utils.logger import get_logger
 
 logger = get_logger()
@@ -43,7 +40,6 @@ class StateProjectionService:
         """
         try:
             # Extract basic log metadata
-            message = log_entry.get("message", "")
             timestamp_str = log_entry.get("timestamp") or log_entry.get("@timestamp")
 
             if not timestamp_str:

@@ -10,8 +10,8 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 from sqlalchemy import and_, func, or_, text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
 
+from .base_repository import BaseRepository
 from ..context.tenant_context import tenant_aware
 from ..db.db_api_token_models import APIToken, APITokenUsageLog, TokenCoordination
 from ..exceptions import (
@@ -21,7 +21,6 @@ from ..exceptions import (
     ValidationError,
 )
 from ..utils.logger import get_logger
-from .base_repository import BaseRepository
 
 
 class APITokenRepository(BaseRepository[APIToken]):

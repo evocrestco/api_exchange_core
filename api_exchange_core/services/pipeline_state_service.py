@@ -7,24 +7,22 @@ All inputs are validated using Pydantic schemas and outputs are properly typed.
 """
 
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import List
 
 from sqlalchemy import and_, desc, func
 
+from .base_service import SessionManagedService
 from ..context.operation_context import operation
 from ..context.tenant_context import tenant_aware
 from ..db.db_pipeline_state_models import PipelineStateHistory
-from ..exceptions import ErrorCode, ServiceError
 from ..schemas import (
     EntityQuery,
-    PipelineHistoryResponse,
     PipelineStateHistoryRead,
     PipelineStateQuery,
     ProcessorMetricsRead,
     ProcessorMetricsResponse,
     StatusSummaryRead,
 )
-from .base_service import SessionManagedService
 
 
 class PipelineStateService(SessionManagedService):

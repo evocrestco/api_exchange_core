@@ -36,7 +36,7 @@ class ContextAwareLogger:
     def _log_with_formatted_extra(self, level, msg, **kwargs):
         """
         Log with extra data formatted for console output while preserving structured data.
-        
+
         For console logs, extra data is formatted as pipe-delimited key=value pairs.
         The AzureQueueHandler will receive the structured extra data for JSON formatting.
 
@@ -188,13 +188,10 @@ class AzureQueueHandler(logging.Handler):
         try:
             # Import here to avoid circular dependency
             from ..exceptions import get_correlation_id
-            
+
             # Extract correlation_id and operation_id from various sources
-            correlation_id = (
-                getattr(record, 'correlation_id', None) or
-                get_correlation_id()
-            )
-            operation_id = getattr(record, 'operation_id', None)
+            correlation_id = getattr(record, "correlation_id", None) or get_correlation_id()
+            operation_id = getattr(record, "operation_id", None)
 
             # Top-level metadata (core log record info)
             log_entry = {
@@ -216,10 +213,28 @@ class AzureQueueHandler(logging.Handler):
             # Push everything to top-level (let Loki decide what to index)
             # Only exclude standard Python logging internals
             excluded_fields = {
-                "name", "msg", "args", "levelname", "levelno", "pathname", "filename",
-                "module", "exc_info", "exc_text", "stack_info", "lineno", "funcName",
-                "created", "msecs", "relativeCreated", "thread", "threadName",
-                "processName", "process", "correlation_id", "operation_id"
+                "name",
+                "msg",
+                "args",
+                "levelname",
+                "levelno",
+                "pathname",
+                "filename",
+                "module",
+                "exc_info",
+                "exc_text",
+                "stack_info",
+                "lineno",
+                "funcName",
+                "created",
+                "msecs",
+                "relativeCreated",
+                "thread",
+                "threadName",
+                "processName",
+                "process",
+                "correlation_id",
+                "operation_id",
             }
 
             for key, value in record.__dict__.items():

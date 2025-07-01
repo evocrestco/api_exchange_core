@@ -9,12 +9,9 @@ import time
 import uuid
 from contextlib import contextmanager
 from functools import wraps
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, TypeVar, Union, cast
+from typing import Any, Callable, Dict, Optional, TypeVar, Union, cast
 
 from ..utils.logger import get_logger
-
-if TYPE_CHECKING:
-    from ..utils.logger import ContextAwareLogger
 
 from ..exceptions import BaseError, get_correlation_id, set_correlation_id
 from .tenant_context import TenantContext
@@ -59,8 +56,7 @@ class OperationHandler:
 
     def __init__(
         self,
-        logger = get_logger(),
-        module_name: Optional[str] = None,
+        logger=get_logger()
     ):
         if logger is None:
             from ..utils.logger import get_logger
@@ -232,9 +228,7 @@ def operation(name: Union[Optional[str], Callable] = None):
     def decorator(func: F) -> F:
         @wraps(func)
         def wrapper(*args, **kwargs) -> Any:
-            from ..utils.logger import get_logger
 
-            logger = get_logger()
             # Generate operation name that includes class information if it's a method
             if name is not None:
                 op_name = name
@@ -266,12 +260,8 @@ def operation(name: Union[Optional[str], Callable] = None):
                     continue
                 sanitized_args.append(_sanitize_param(arg))
 
-            sanitized_kwargs = {k: _sanitize_param(v) for k, v in kwargs.items()}
-
-            # Remove noisy args/kwargs logging
-
             # Create handler
-            handler = OperationHandler(module_name=func.__module__)
+            handler = OperationHandler()
 
             # Execute with operation context
             with handler.operation(op_name, **context):

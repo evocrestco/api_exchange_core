@@ -9,8 +9,8 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
 from sqlalchemy import and_
-from sqlalchemy.orm import Session
 
+from .api_token_service import APITokenService
 from ..context.operation_context import operation
 from ..context.tenant_context import TenantContext, tenant_aware
 from ..db.db_credential_models import ExternalCredential
@@ -23,7 +23,6 @@ from ..exceptions import (
     ValidationError,
 )
 from ..utils.logger import get_logger
-from .api_token_service import APITokenService
 
 
 class CredentialService:
@@ -44,7 +43,7 @@ class CredentialService:
     ):
         """Initialize with global database manager and optional API token service."""
         from ..db.db_config import get_db_manager
-        
+
         self.db_manager = get_db_manager()
         self.session = self.db_manager.get_session()
         self.api_token_service = api_token_service

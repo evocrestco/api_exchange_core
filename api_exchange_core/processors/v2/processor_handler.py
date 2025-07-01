@@ -104,7 +104,6 @@ class ProcessorHandler:
         processing_service = ProcessingService()
         state_tracking_service = LoggingStateTrackingService()
         error_service = LoggingProcessingErrorService()
-        entity_service = None  # ProcessingService handles entity operations
 
         self.logger.debug(
             "Created services with logging-based state tracking and error handling",
@@ -221,7 +220,7 @@ class ProcessorHandler:
                     self._send_to_dead_letter_queue(message, result)
                     result.status = ProcessingStatus.DEAD_LETTERED
 
-                # Record state transitions for existing entities and newly created entities 
+                # Record state transitions for existing entities and newly created entities
                 if state_tracking_service:
                     self._record_failure_state_transitions(
                         entity_id, message, result, state_tracking_service
@@ -307,7 +306,7 @@ class ProcessorHandler:
         finally:
             # Clean up services if they have cleanup methods
             try:
-                if hasattr(processing_service, 'close_services'):
+                if hasattr(processing_service, "close_services"):
                     processing_service.close_services()
                     self.logger.debug(
                         "Closed ProcessingService sessions",
@@ -936,9 +935,9 @@ class ProcessorHandler:
     ) -> None:
         """
         Record state transitions for successful processing.
-        
+
         Handles both existing entities (from message) and newly created entities (from result).
-        
+
         Args:
             entity_id: ID of existing entity from message (if any)
             message: Original message
@@ -946,14 +945,12 @@ class ProcessorHandler:
             state_tracking_service: State tracking service
         """
         entities_to_track = []
-        
+
         # Track existing entity if present
         if entity_id:
-            external_id = (
-                message.entity_reference.external_id if message.entity_reference else None
-            )
+            external_id = message.entity_reference.external_id if message.entity_reference else None
             entities_to_track.append((entity_id, external_id, "processing"))
-        
+
         # Track newly created entities (source operations)
         if result.entities_created:
             for created_entity_id in result.entities_created:
@@ -962,7 +959,7 @@ class ProcessorHandler:
                     # For newly created entities, we don't have external_id easily available
                     # The processor should set it in entity metadata if needed
                     entities_to_track.append((created_entity_id, None, "started"))
-        
+
         # Record transitions for all entities
         for track_entity_id, track_external_id, from_state in entities_to_track:
             self._record_state_transition(
@@ -984,9 +981,9 @@ class ProcessorHandler:
     ) -> None:
         """
         Record state transitions for failed processing.
-        
+
         Handles both existing entities (from message) and newly created entities (from result).
-        
+
         Args:
             entity_id: ID of existing entity from message (if any)
             message: Original message
@@ -994,21 +991,19 @@ class ProcessorHandler:
             state_tracking_service: State tracking service
         """
         entities_to_track = []
-        
+
         # Track existing entity if present
         if entity_id:
-            external_id = (
-                message.entity_reference.external_id if message.entity_reference else None
-            )
+            external_id = message.entity_reference.external_id if message.entity_reference else None
             entities_to_track.append((entity_id, external_id, "processing"))
-        
+
         # Track newly created entities (source operations can still fail after creating entities)
         if result.entities_created:
             for created_entity_id in result.entities_created:
                 # Skip if this is the same as the existing entity
                 if created_entity_id != entity_id:
                     entities_to_track.append((created_entity_id, None, "started"))
-        
+
         # Record transitions for all entities
         for track_entity_id, track_external_id, from_state in entities_to_track:
             self._record_state_transition(

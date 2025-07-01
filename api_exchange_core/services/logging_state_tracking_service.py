@@ -9,16 +9,14 @@ All inputs are validated using Pydantic schemas.
 
 import uuid
 from datetime import UTC, datetime
-from typing import Optional, Union
+from typing import Optional
 
 from sqlalchemy.exc import IntegrityError
 
 from ..context.operation_context import operation
 from ..context.tenant_context import tenant_aware
-from ..db import EntityStateEnum, PipelineStateHistory
-from ..enums import TransitionTypeEnum
+from ..db import PipelineStateHistory
 from ..schemas import PipelineStateTransitionCreate, PipelineStateTransitionRead
-from ..type_definitions import ProcessorData
 from ..utils.logger import get_logger
 
 
@@ -34,7 +32,7 @@ class LoggingStateTrackingService:
     def __init__(self):
         """Initialize the hybrid state tracking service with global database manager."""
         from ..db.db_config import get_db_manager
-        
+
         self.logger = get_logger()
         self.db_manager = get_db_manager()
 
