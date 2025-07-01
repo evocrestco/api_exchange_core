@@ -365,11 +365,10 @@ class TestAzureQueueHandler:
         assert len(handler.log_buffer) == 1
         log_entry = handler.log_buffer[0]
         
-        assert "context" in log_entry
-        context = log_entry["context"]
-        assert context["operation"] == "test_operation"
-        assert context["retry_count"] == 3
-        assert context["custom_field"] == "custom_value"
+        # All fields should now be at top-level (no context nesting)
+        assert log_entry["operation"] == "test_operation"
+        assert log_entry["retry_count"] == 3
+        assert log_entry["custom_field"] == "custom_value"
     
     def test_emit_with_exception_info(self):
         """Test emitting log record with exception information."""

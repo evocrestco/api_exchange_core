@@ -5,16 +5,17 @@ This module provides a unified exception hierarchy for the entire application,
 with automatic logging, telemetry support, and correlation ID tracking.
 """
 
-import logging
 import traceback
 import uuid
-from contextvars import ContextVar
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
 # Thread-local storage for correlation ID
 import threading
+
+# Removed logger import to avoid circular dependency - calling code should handle logging
+
 _thread_local = threading.local()
 
 
@@ -103,7 +104,7 @@ class BaseError(Exception):
                 "traceback": traceback.format_exception(type(cause), cause, cause.__traceback__),
             }
 
-        # Log the error
+        # Log the error (using lazy import to avoid circular dependencies)
         self._log_error()
 
         # Call parent constructor
@@ -111,7 +112,9 @@ class BaseError(Exception):
 
     def _log_error(self) -> None:
         """Log error with appropriate level based on status code."""
-        logger = logging.getLogger(self.__class__.__module__)
+        # Import logger here to avoid circular dependency at module load time
+        from .utils.logger import get_logger
+        logger = get_logger()
 
         log_data = {
             "error_id": self.error_id,
@@ -419,8 +422,9 @@ class ErrorTelemetry:
         #     measurements={'duration_ms': properties.get('duration_ms', 0)}
         # )
 
-        # For now, just log it
-        logger = logging.getLogger(__name__)
+        # For now, just log it (using lazy import to avoid circular dependencies)
+        from .utils.logger import get_logger
+        logger = get_logger()
         logger.debug(f"Telemetry: {error.error_code} - {error.message}", extra=properties)
 
 

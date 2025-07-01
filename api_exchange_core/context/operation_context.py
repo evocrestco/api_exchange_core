@@ -5,12 +5,13 @@ This module provides context management for operations including logging,
 error handling, and metrics collection.
 """
 
-import logging
 import time
 import uuid
 from contextlib import contextmanager
 from functools import wraps
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, TypeVar, Union, cast
+
+from ..utils.logger import get_logger
 
 if TYPE_CHECKING:
     from ..utils.logger import ContextAwareLogger
@@ -58,7 +59,7 @@ class OperationHandler:
 
     def __init__(
         self,
-        logger: Optional[Union[logging.Logger, "ContextAwareLogger"]] = None,
+        logger = get_logger(),
         module_name: Optional[str] = None,
     ):
         if logger is None:
@@ -79,7 +80,7 @@ class OperationHandler:
         op_ctx = OperationContext(name, **context)
 
         # Log operation entry with IDs
-        self.logger.info(
+        self.logger.debug(
             f"ENTER: {name}",
             extra={
                 **context,
@@ -103,7 +104,7 @@ class OperationHandler:
             }
 
             # Log successful exit
-            self.logger.info(f"EXIT: {name}", extra=log_context)
+            self.logger.debug(f"EXIT: {name}", extra=log_context)
 
             try:
                 from ..config import get_config
@@ -267,9 +268,7 @@ def operation(name: Union[Optional[str], Callable] = None):
 
             sanitized_kwargs = {k: _sanitize_param(v) for k, v in kwargs.items()}
 
-            # context['args'] = sanitized_args
-            # context['kwargs'] = sanitized_kwargs
-            logger.info(f"args: {sanitized_args}, kwargs: {sanitized_kwargs}")
+            # Remove noisy args/kwargs logging
 
             # Create handler
             handler = OperationHandler(module_name=func.__module__)

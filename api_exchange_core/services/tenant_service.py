@@ -5,7 +5,6 @@ This module provides business logic for managing tenants
 using SQLAlchemy directly - simple, explicit, and efficient.
 """
 
-import logging
 import uuid
 from datetime import datetime
 from typing import Any, List, Optional
@@ -14,6 +13,7 @@ from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import exists
 from sqlalchemy.exc import IntegrityError
 
+from ..utils import get_logger
 from ..context.operation_context import operation
 from ..db.db_tenant_models import Tenant
 from ..exceptions import ErrorCode, ServiceError, ValidationError
@@ -33,14 +33,14 @@ class TenantService(SessionManagedService):
     Uses SQLAlchemy directly - simple, explicit, and efficient.
     """
 
-    def __init__(self, logger: Optional[logging.Logger] = None):
+    def __init__(self):
         """
         Initialize the tenant service with global database manager.
 
         Args:
             logger: Optional logger instance
         """
-        super().__init__(logger=logger)
+        super().__init__(logger=get_logger())
 
     @operation()
     def create_tenant(self, tenant_data: TenantCreate) -> TenantRead:

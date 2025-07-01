@@ -1,4 +1,3 @@
-import logging
 import os
 from typing import Any, Optional
 
@@ -6,6 +5,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, declarative_base, scoped_session, sessionmaker
 
+from ..utils import get_logger
 from ..exceptions import ErrorCode, ServiceError, ValidationError
 
 # Base class for all SQLAlchemy models
@@ -169,7 +169,7 @@ def init_db(db_manager: DatabaseManager) -> None:
     Args:
         db_manager: DatabaseManager instance to use for table creation
     """
-    logging.warning("Initializing DB")
+    get_logger().warning("Initializing DB")
     # First ensure all models are imported and registered
     import_all_models()
 

@@ -5,7 +5,6 @@ This module provides a base class with shared methods and patterns to
 reduce duplication across service implementations.
 """
 
-import logging
 from contextlib import contextmanager
 from typing import Any, Dict, Generic, List, NoReturn, Optional, Type, TypeVar
 
@@ -31,7 +30,7 @@ class BaseService(Generic[TCreate, TRead, TUpdate, TFilter]):
         self,
         repository: Any,
         read_schema_class: Type[TRead],
-        logger: Optional[logging.Logger] = None,
+        logger = get_logger(),
     ):
         """
         Initialize the base service.
@@ -161,7 +160,7 @@ class SessionManagedService(BaseService[TCreate, TRead, TUpdate, TFilter]):
         self,
         repository_class: Optional[Type] = None,
         read_schema_class: Optional[Type[TRead]] = None,
-        logger: Optional[logging.Logger] = None,
+        logger = get_logger(),
     ):
         """
         Initialize service with global database manager.

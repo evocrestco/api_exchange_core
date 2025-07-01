@@ -35,7 +35,10 @@ class ContextAwareLogger:
 
     def _log_with_formatted_extra(self, level, msg, **kwargs):
         """
-        Log with extra data formatted into the message.
+        Log with extra data formatted for console output while preserving structured data.
+        
+        For console logs, extra data is formatted as pipe-delimited key=value pairs.
+        The AzureQueueHandler will receive the structured extra data for JSON formatting.
 
         Args:
             level: Logging level method to use
@@ -45,16 +48,18 @@ class ContextAwareLogger:
         # Extract extra if present
         extra = kwargs.pop("extra", {})
 
-        # Format extra as string
+        # Format extra as pipe-delimited key=value pairs for console readability
         if extra:
-            extra_str = " | ".join([f"{k}={v}" for k, v in extra.items()])
+            extra_parts = [f"{k}={v}" for k, v in extra.items()]
+            extra_str = " | ".join(extra_parts)
             full_msg = f"{msg} | {extra_str}"
         else:
             full_msg = msg
 
-        # Call the underlying logger method with proper parameters
+        # Call the underlying logger method with both formatted message and structured extra
+        # Console handlers will use the formatted message, queue handlers will use the extra data
         log_method = getattr(self.logger, level)
-        log_method(full_msg, extra=extra)
+        log_method(full_msg, extra=extra, **kwargs)
 
     def set_level(self, level):
         """Set the logging level of the underlying logger."""
@@ -175,73 +180,60 @@ class AzureQueueHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         """
-        Queue a log record for sending to Azure Queue.
+        Create unified JSON log structure with separated concerns.
 
         Args:
             record: LogRecord to send
         """
         try:
-            # Create a dictionary representation of the log entry
+            # Import here to avoid circular dependency
+            from ..exceptions import get_correlation_id
+            
+            # Extract correlation_id and operation_id from various sources
+            correlation_id = (
+                getattr(record, 'correlation_id', None) or
+                get_correlation_id()
+            )
+            operation_id = getattr(record, 'operation_id', None)
+
+            # Top-level metadata (core log record info)
             log_entry = {
                 "timestamp": datetime.fromtimestamp(record.created).isoformat(),
                 "level": record.levelname,
                 "logger": record.name,
-                "message": record.getMessage(),  # Use the raw message
+                "message": record.getMessage(),
                 "module": record.module,
                 "function": record.funcName,
                 "line": record.lineno,
             }
 
-            # Add common fields if present
-            for field in ["tenant_id", "entity_id"]:
-                if hasattr(record, field):
-                    log_entry[field] = getattr(record, field)
+            # Add correlation and operation IDs if available
+            if correlation_id:
+                log_entry["correlation_id"] = correlation_id
+            if operation_id:
+                log_entry["operation_id"] = operation_id
 
-            # Add context with all extra fields
-            context = {}
+            # Push everything to top-level (let Loki decide what to index)
+            # Only exclude standard Python logging internals
+            excluded_fields = {
+                "name", "msg", "args", "levelname", "levelno", "pathname", "filename",
+                "module", "exc_info", "exc_text", "stack_info", "lineno", "funcName",
+                "created", "msecs", "relativeCreated", "thread", "threadName",
+                "processName", "process", "correlation_id", "operation_id"
+            }
+
             for key, value in record.__dict__.items():
                 if (
-                    key.startswith("_")
+                    key not in excluded_fields
                     and not key.startswith("__")
                     and not callable(value)
                     and value is not None
                 ):
-                    # Custom fields with underscore
-                    context[key[1:]] = value
-                elif (
-                    key
-                    not in [
-                        "name",
-                        "msg",
-                        "args",
-                        "levelname",
-                        "levelno",
-                        "pathname",
-                        "filename",
-                        "module",
-                        "exc_info",
-                        "exc_text",
-                        "stack_info",
-                        "lineno",
-                        "funcName",
-                        "created",
-                        "msecs",
-                        "relativeCreated",
-                        "thread",
-                        "threadName",
-                        "processName",
-                        "process",
-                        "tenant_id",
-                        "entity_id",
-                    ]
-                    and not key.startswith("__")
-                    and not callable(value)
-                ):
-                    # Other non-standard fields
-                    context[key] = value
-
-            if context:
-                log_entry["context"] = context
+                    # Handle underscore-prefixed custom fields
+                    if key.startswith("_") and not key.startswith("__"):
+                        log_entry[key[1:]] = value  # Remove leading underscore
+                    else:
+                        log_entry[key] = value
 
             # Add exception info if present
             if record.exc_info and record.exc_info[0]:
