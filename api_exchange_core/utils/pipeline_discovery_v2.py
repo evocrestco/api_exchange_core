@@ -123,9 +123,7 @@ def register_function_step(
         pipeline_def_id = pipeline_def.id
 
     # Check if step already exists
-    existing_step = get_record(
-        session, PipelineStepDefinition, {"pipeline_name": pipeline_name, "step_name": step_name}
-    )
+    existing_step = get_record(session, PipelineStepDefinition, {"pipeline_name": pipeline_name, "step_name": step_name})
 
     step_data = {
         "pipeline_definition_id": pipeline_def_id,
@@ -179,9 +177,7 @@ def get_pipeline_structure(session: Session, pipeline_name: str) -> Optional[Dic
         Pipeline structure dict or None if not found
     """
     # Get pipeline definition
-    pipeline_def = get_record(
-        session, PipelineDefinition, {"pipeline_name": pipeline_name, "is_active": True}
-    )
+    pipeline_def = get_record(session, PipelineDefinition, {"pipeline_name": pipeline_name, "is_active": True})
 
     if not pipeline_def:
         return None
@@ -275,9 +271,7 @@ def auto_register_function_step(
     """
     # Use sensible defaults
     step_name = step_name or function_name
-    pipeline_name = (
-        pipeline_name or function_name.split("_")[0] if "_" in function_name else function_name
-    )
+    pipeline_name = pipeline_name or function_name.split("_")[0] if "_" in function_name else function_name
 
     return register_function_step(
         session=session,

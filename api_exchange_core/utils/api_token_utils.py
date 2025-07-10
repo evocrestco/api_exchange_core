@@ -16,9 +16,7 @@ from ..utils.crud_helpers import create_record, delete_record, list_records
 from ..utils.logger import get_logger
 
 
-def get_valid_token(
-    session: Session, tenant_id: str, api_provider: str, operation: str = "api_call"
-) -> Tuple[str, str]:
+def get_valid_token(session: Session, tenant_id: str, api_provider: str, operation: str = "api_call") -> Tuple[str, str]:
     """
     Get a valid API token for the specified provider and tenant.
 
@@ -118,9 +116,7 @@ def store_token(
     return new_token.id  # type: ignore[return-value]
 
 
-def cleanup_expired_tokens(
-    session: Session, tenant_id: Optional[str] = None, api_provider: Optional[str] = None
-) -> int:
+def cleanup_expired_tokens(session: Session, tenant_id: Optional[str] = None, api_provider: Optional[str] = None) -> int:
     """
     Clean up expired tokens using generic CRUD.
 
@@ -176,9 +172,7 @@ def cleanup_expired_tokens(
     return deleted_count
 
 
-def get_token_statistics(
-    session: Session, tenant_id: str, api_provider: Optional[str] = None
-) -> Dict[str, Any]:
+def get_token_statistics(session: Session, tenant_id: str, api_provider: Optional[str] = None) -> Dict[str, Any]:
     """
     Get token statistics for a tenant using generic CRUD.
 

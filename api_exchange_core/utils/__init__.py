@@ -117,8 +117,8 @@ __all__ = [
     # Azure utilities
     "process_metrics",
     "send_metrics_to_queue",
-    "send_message_to_queue",
-    "send_queue_message",
+    "send_message_to_queue_binding",
+    "send_message_to_queue_direct",
     "track_message_receive",
     "calculate_queue_time",
     "get_message_metadata",

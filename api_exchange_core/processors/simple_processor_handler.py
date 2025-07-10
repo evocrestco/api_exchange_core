@@ -46,9 +46,7 @@ class SimpleProcessorHandler:
         self.enable_metrics = enable_metrics
         self.logger = get_logger()
 
-    def process_message(
-        self, message: Message, context: Optional[Dict[str, Any]] = None
-    ) -> ProcessingResult:
+    def process_message(self, message: Message, context: Optional[Dict[str, Any]] = None) -> ProcessingResult:
         """
         Process a message through the processor with full tracking.
 
@@ -77,9 +75,7 @@ class SimpleProcessorHandler:
         try:
             # Validate message
             if not self.processor.validate_message(message):
-                return ProcessingResult.failure_result(
-                    error_message="Message validation failed", error_code="INVALID_MESSAGE"
-                )
+                return ProcessingResult.failure_result(error_message="Message validation failed", error_code="INVALID_MESSAGE")
 
             # Track pipeline execution start (if enabled)
             if self.enable_pipeline_tracking:
@@ -108,9 +104,7 @@ class SimpleProcessorHandler:
             }
 
             if result.success:
-                self.logger.info(
-                    f"Processing completed successfully: {processor_name}", extra=result_context
-                )
+                self.logger.info(f"Processing completed successfully: {processor_name}", extra=result_context)
             else:
                 result_context.update(
                     {
@@ -149,9 +143,7 @@ class SimpleProcessorHandler:
                 processing_duration_ms=processing_duration_ms,
             )
 
-    def _track_pipeline_start(
-        self, message: Message, processor_name: str, context: Dict[str, Any]
-    ) -> None:
+    def _track_pipeline_start(self, message: Message, processor_name: str, context: Dict[str, Any]) -> None:
         """
         Track the start of pipeline execution.
 
@@ -206,9 +198,7 @@ class SimpleProcessorHandler:
             },
         )
 
-    def _track_pipeline_failure(
-        self, message: Message, processor_name: str, error_message: str, context: Dict[str, Any]
-    ) -> None:
+    def _track_pipeline_failure(self, message: Message, processor_name: str, error_message: str, context: Dict[str, Any]) -> None:
         """
         Track the failure of pipeline execution.
 

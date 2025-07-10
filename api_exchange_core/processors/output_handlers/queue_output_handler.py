@@ -7,11 +7,11 @@ to configured Azure Storage Queues.
 
 from typing import Any, Dict, Optional
 
-from .base_output_handler import BaseOutputHandler
 from ...utils.logger import get_logger
 from ...utils.queue_utils import send_message_to_queue_direct
 from ..message import Message
 from ..processing_result import ProcessingResult
+from .base_output_handler import BaseOutputHandler
 
 
 class QueueOutputHandler(BaseOutputHandler):
@@ -41,9 +41,7 @@ class QueueOutputHandler(BaseOutputHandler):
         self.default_queue = default_queue
         self.logger = get_logger()
 
-    def handle_output(
-        self, result: ProcessingResult, source_message: Message, context: Dict[str, Any]
-    ) -> None:
+    def handle_output(self, result: ProcessingResult, source_message: Message, context: Dict[str, Any]) -> None:
         """
         Handle output messages by sending them to queues.
 
@@ -62,9 +60,7 @@ class QueueOutputHandler(BaseOutputHandler):
             "output_messages_count": len(result.output_messages),
         }
 
-        self.logger.info(
-            f"Routing {len(result.output_messages)} output messages", extra=log_context
-        )
+        self.logger.info(f"Routing {len(result.output_messages)} output messages", extra=log_context)
 
         for output_message in result.output_messages:
             try:

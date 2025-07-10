@@ -29,9 +29,7 @@ def send_metrics_to_queue(
     """
     queue_name = queue_name or QueueName.METRICS.value
     log = get_logger()
-    connection_string = connection_string or os.getenv(
-        EnvironmentVariable.AZURE_STORAGE_CONNECTION.value
-    )
+    connection_string = connection_string or os.getenv(EnvironmentVariable.AZURE_STORAGE_CONNECTION.value)
 
     if not metrics:
         log.info("No metrics to process")
@@ -46,9 +44,7 @@ def send_metrics_to_queue(
 
     try:
         # Create queue client
-        queue_client = QueueClient.from_connection_string(
-            conn_str=connection_string, queue_name=queue_name
-        )
+        queue_client = QueueClient.from_connection_string(conn_str=connection_string, queue_name=queue_name)
 
         log.debug(f"Sending {len(metrics)} metrics to queue {queue_name}")
 
@@ -67,9 +63,7 @@ def send_metrics_to_queue(
                         queue_client.send_message(json_metric)
                         log.debug(f"Metric {idx + 1} sent to queue after creation: {json_metric}")
                     except Exception as create_error:
-                        log.error(
-                            f"Failed to create queue or send metric {idx + 1}: {str(create_error)}"
-                        )
+                        log.error(f"Failed to create queue or send metric {idx + 1}: {str(create_error)}")
                 else:
                     log.error(f"Failed to send metric {idx + 1}: {str(e)}")
 

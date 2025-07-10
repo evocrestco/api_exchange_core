@@ -34,9 +34,7 @@ def track_message_receive(
     dequeue_count = getattr(msg, "dequeue_count", 0)
 
     # Create metrics list
-    metrics = [
-        QueueMetric.message_count(queue_name=queue_name, operation=QueueOperation.RECEIVE.value)
-    ]
+    metrics = [QueueMetric.message_count(queue_name=queue_name, operation=QueueOperation.RECEIVE.value)]
 
     # Add dequeue count metric if available
     if dequeue_count:

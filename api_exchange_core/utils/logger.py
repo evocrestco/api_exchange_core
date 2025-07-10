@@ -214,12 +214,7 @@ class AzureQueueHandler(logging.Handler):
             }
 
             for key, value in record.__dict__.items():
-                if (
-                    key not in excluded_fields
-                    and not key.startswith("__")
-                    and not callable(value)
-                    and value is not None
-                ):
+                if key not in excluded_fields and not key.startswith("__") and not callable(value) and value is not None:
                     # Handle underscore-prefixed custom fields
                     if key.startswith("_") and not key.startswith("__"):
                         log_entry[key[1:]] = value  # Remove leading underscore
@@ -231,9 +226,7 @@ class AzureQueueHandler(logging.Handler):
                 log_entry["exception"] = {
                     "type": record.exc_info[0].__name__,
                     "message": str(record.exc_info[1]),
-                    "traceback": [
-                        line.rstrip() for line in traceback.format_exception(*record.exc_info)
-                    ],
+                    "traceback": [line.rstrip() for line in traceback.format_exception(*record.exc_info)],
                 }
 
             # Add to buffer
@@ -256,9 +249,7 @@ class AzureQueueHandler(logging.Handler):
 
         try:
             # Create queue client
-            queue_client = QueueClient.from_connection_string(
-                conn_str=self.connection_string, queue_name=self.queue_name
-            )
+            queue_client = QueueClient.from_connection_string(conn_str=self.connection_string, queue_name=self.queue_name)
 
             # Send individual log entries (like metrics) to avoid base64 encoding bug
             for log_entry in self.log_buffer:
@@ -334,9 +325,7 @@ def configure_logging(
     # Add Azure Queue handler if enabled
     if enable_queue:
         queue_name = queue_name or "logs-queue"
-        queue_handler = AzureQueueHandler(
-            queue_name=queue_name, connection_string=connection_string, batch_size=queue_batch_size
-        )
+        queue_handler = AzureQueueHandler(queue_name=queue_name, connection_string=connection_string, batch_size=queue_batch_size)
         queue_handler.setLevel(log_level)
         logger.addHandler(queue_handler)
 

@@ -124,9 +124,7 @@ def calculate_data_hash(
         )
 
     # Apply configuration
-    key_fields, ignore_fields, sort_keys = _apply_config(
-        config, key_fields, ignore_fields, sort_keys
-    )
+    key_fields, ignore_fields, sort_keys = _apply_config(config, key_fields, ignore_fields, sort_keys)
 
     # Create a filtered copy to hash
     filtered_data = {}

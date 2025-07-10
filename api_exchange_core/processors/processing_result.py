@@ -33,32 +33,22 @@ class ProcessingResult(BaseModel):
     success: bool = Field(description="Whether processing succeeded")
 
     # Output routing
-    output_messages: List[Message] = Field(
-        default_factory=list, description="Messages to route to output queues"
-    )
+    output_messages: List[Message] = Field(default_factory=list, description="Messages to route to output queues")
 
     # Optional metadata
-    processing_duration_ms: Optional[int] = Field(
-        default=None, description="Processing duration in milliseconds"
-    )
+    processing_duration_ms: Optional[int] = Field(default=None, description="Processing duration in milliseconds")
 
     records_processed: int = Field(default=0, description="Number of records processed")
 
     # Error information
-    error_message: Optional[str] = Field(
-        default=None, description="Error message if processing failed"
-    )
+    error_message: Optional[str] = Field(default=None, description="Error message if processing failed")
 
     error_code: Optional[str] = Field(default=None, description="Error code if processing failed")
 
     # Additional context
-    context: Dict[str, Any] = Field(
-        default_factory=dict, description="Additional processing context"
-    )
+    context: Dict[str, Any] = Field(default_factory=dict, description="Additional processing context")
 
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), description="Result creation timestamp"
-    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Result creation timestamp")
 
     @classmethod
     def success_result(

@@ -20,17 +20,12 @@ class HashConfig(BaseModel):
 
     key_fields: Optional[List[str]] = Field(
         default=None,
-        description="Optional list of fields to include in hash calculation. "
-        "If empty, all fields except those in ignore_fields are used.",
+        description="Optional list of fields to include in hash calculation. " "If empty, all fields except those in ignore_fields are used.",
     )
 
-    ignore_fields: Optional[List[str]] = Field(
-        default=None, description="Fields to exclude from hash calculation."
-    )
+    ignore_fields: Optional[List[str]] = Field(default=None, description="Fields to exclude from hash calculation.")
 
-    sort_keys: bool = Field(
-        default=True, description="Whether to sort dictionary keys for deterministic ordering."
-    )
+    sort_keys: bool = Field(default=True, description="Whether to sort dictionary keys for deterministic ordering.")
 
     @classmethod
     def default(cls) -> "HashConfig":

@@ -92,11 +92,7 @@ class FrameworkExceptionVisitor(ast.NodeVisitor):
                 return
 
             # Check if it's a framework exception or allowed exception
-            if (
-                exc_name not in self.FRAMEWORK_EXCEPTIONS
-                and exc_name not in self.ALLOWED_EXCEPTIONS
-                and exc_name not in self.imported_exceptions
-            ):
+            if exc_name not in self.FRAMEWORK_EXCEPTIONS and exc_name not in self.ALLOWED_EXCEPTIONS and exc_name not in self.imported_exceptions:
 
                 # Provide specific suggestions for common exceptions
                 suggestion = self._get_suggestion(exc_name)
@@ -138,11 +134,11 @@ class FrameworkExceptionVisitor(ast.NodeVisitor):
         if not self.current_function:
             return False
 
-        # Check if function has @validator decorator
+        # Check if function has @validator or @field_validator decorator (Pydantic V1 and V2)
         for decorator in self.current_function.decorator_list:
-            if isinstance(decorator, ast.Name) and decorator.id == "validator":
+            if isinstance(decorator, ast.Name) and decorator.id in ("validator", "field_validator"):
                 return True
-            elif isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Name) and decorator.func.id == "validator":
+            elif isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Name) and decorator.func.id in ("validator", "field_validator"):
                 return True
 
         return False
@@ -312,9 +308,7 @@ class UTCTimestampVisitor(ast.NodeVisitor):
         # Check for datetime.now() without timezone
         if self._is_datetime_now_call(node):
             if not self._has_utc_timezone_arg(node):
-                msg = (
-                    "UTC001 Use datetime.now(timezone.utc) instead of datetime.now() for timestamps"
-                )
+                msg = "UTC001 Use datetime.now(timezone.utc) instead of datetime.now() for timestamps"
                 self.errors.append((node.lineno, node.col_offset, msg))
 
         # Check for datetime.datetime() constructor without timezone
@@ -389,12 +383,7 @@ class UTCTimestampVisitor(ast.NodeVisitor):
     def _is_timezone_utc(self, node: ast.AST) -> bool:
         """Check if node represents timezone.utc or UTC."""
         # Check for timezone.utc
-        if (
-            isinstance(node, ast.Attribute)
-            and isinstance(node.value, ast.Name)
-            and node.value.id == "timezone"
-            and node.attr == "utc"
-        ):
+        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "timezone" and node.attr == "utc":
             return True
 
         # Check for UTC (from datetime import UTC)

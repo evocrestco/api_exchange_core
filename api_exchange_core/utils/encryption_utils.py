@@ -27,9 +27,7 @@ def encrypt_value(session: Session, value: str, tenant_id: str, key_suffix: str 
         # Use tenant-specific key with pgcrypto
         encryption_key = f"{tenant_id}_{key_suffix}" if key_suffix else tenant_id
 
-        result = session.execute(
-            text("SELECT pgp_sym_encrypt(:data, :key)"), {"data": value, "key": encryption_key}
-        ).scalar()
+        result = session.execute(text("SELECT pgp_sym_encrypt(:data, :key)"), {"data": value, "key": encryption_key}).scalar()
 
         return result
     else:
@@ -37,9 +35,7 @@ def encrypt_value(session: Session, value: str, tenant_id: str, key_suffix: str 
         return value.encode() if isinstance(value, str) else value
 
 
-def decrypt_value(
-    session: Session, encrypted_value: bytes, tenant_id: str, key_suffix: str = ""
-) -> Optional[str]:
+def decrypt_value(session: Session, encrypted_value: bytes, tenant_id: str, key_suffix: str = "") -> Optional[str]:
     """
     Decrypt a value using database-specific decryption.
 
@@ -77,22 +73,16 @@ def encrypt_token(session: Session, token: str, tenant_id: str, api_provider: st
     return encrypt_value(session, token, tenant_id, f"token_{api_provider}")
 
 
-def decrypt_token(
-    session: Session, encrypted: bytes, tenant_id: str, api_provider: str
-) -> Optional[str]:
+def decrypt_token(session: Session, encrypted: bytes, tenant_id: str, api_provider: str) -> Optional[str]:
     """Decrypt an API token."""
     return decrypt_value(session, encrypted, tenant_id, f"token_{api_provider}")
 
 
-def encrypt_credential(
-    session: Session, credential: str, tenant_id: str, system_name: str
-) -> bytes:
+def encrypt_credential(session: Session, credential: str, tenant_id: str, system_name: str) -> bytes:
     """Encrypt credentials with tenant and system isolation."""
     return encrypt_value(session, credential, tenant_id, f"cred_{system_name}")
 
 
-def decrypt_credential(
-    session: Session, encrypted: bytes, tenant_id: str, system_name: str
-) -> Optional[str]:
+def decrypt_credential(session: Session, encrypted: bytes, tenant_id: str, system_name: str) -> Optional[str]:
     """Decrypt credentials."""
     return decrypt_value(session, encrypted, tenant_id, f"cred_{system_name}")

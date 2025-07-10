@@ -5,7 +5,7 @@ This module provides tenant operations using the generic CRUD system
 and Pydantic schemas for type safety and validation.
 """
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -13,8 +13,6 @@ from ..db.db_tenant_models import Tenant
 from ..exceptions import duplicate
 from ..schemas.tenant_schemas import (
     TenantCreate,
-    deserialize_tenant_config,
-    serialize_tenant_config,
 )
 from ..utils.crud_helpers import (
     create_record,
@@ -87,7 +85,7 @@ def create_tenant(session: Session, tenant_create: TenantCreate) -> str:
     config_data = None
     if tenant_create.config:
         # If it's a Pydantic model, convert to dict
-        if hasattr(tenant_create.config, 'model_dump'):
+        if hasattr(tenant_create.config, "model_dump"):
             config_data = tenant_create.config.model_dump()
         else:
             config_data = tenant_create.config
@@ -165,7 +163,7 @@ def update_tenant_config(session: Session, tenant_id: str, key: str, value: Any)
 
     # Config is already deserialized by SQLAlchemy's JSON type
     config = tenant.config if tenant.config is not None else {}
-    
+
     # Create a new dict to ensure SQLAlchemy detects the change
     new_config = dict(config)
     new_config[key] = value
@@ -176,9 +174,7 @@ def update_tenant_config(session: Session, tenant_id: str, key: str, value: Any)
     return updated is not None
 
 
-def list_tenants(
-    session: Session, limit: Optional[int] = None, offset: Optional[int] = None
-) -> List[Dict[str, Any]]:
+def list_tenants(session: Session, limit: Optional[int] = None, offset: Optional[int] = None) -> List[Dict[str, Any]]:
     """
     List all tenants using generic CRUD.
 

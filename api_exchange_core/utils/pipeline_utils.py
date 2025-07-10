@@ -46,9 +46,7 @@ def create_pipeline_definition(
     return pipeline.id  # type: ignore[return-value]
 
 
-def get_pipeline_definition(
-    session: Session, pipeline_name: str, tenant_id: Optional[str] = None
-) -> Optional[Dict[str, Any]]:
+def get_pipeline_definition(session: Session, pipeline_name: str, tenant_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Get a pipeline definition by name."""
     filters = {"pipeline_name": pipeline_name, "is_active": True}
     if tenant_id:
@@ -73,9 +71,7 @@ def get_pipeline_definition(
     }
 
 
-def update_pipeline_definition(
-    session: Session, pipeline_id: str, updates: Dict[str, Any], tenant_id: Optional[str] = None
-) -> bool:
+def update_pipeline_definition(session: Session, pipeline_id: str, updates: Dict[str, Any], tenant_id: Optional[str] = None) -> bool:
     """Update a pipeline definition."""
     try:
         update_record(session, PipelineDefinition, pipeline_id, updates, tenant_id)
@@ -84,9 +80,7 @@ def update_pipeline_definition(
         return False
 
 
-def delete_pipeline_definition(
-    session: Session, pipeline_id: str, tenant_id: Optional[str] = None
-) -> bool:
+def delete_pipeline_definition(session: Session, pipeline_id: str, tenant_id: Optional[str] = None) -> bool:
     """Delete a pipeline definition (soft delete by setting is_active=False)."""
     try:
         update_record(session, PipelineDefinition, pipeline_id, {"is_active": False}, tenant_id)
@@ -95,9 +89,7 @@ def delete_pipeline_definition(
         return False
 
 
-def list_pipeline_definitions(
-    session: Session, tenant_id: Optional[str] = None, active_only: bool = True
-) -> List[Dict[str, Any]]:
+def list_pipeline_definitions(session: Session, tenant_id: Optional[str] = None, active_only: bool = True) -> List[Dict[str, Any]]:
     """List all pipeline definitions."""
     filters: Dict[str, Any] = {}
     if active_only:
@@ -155,9 +147,7 @@ def create_pipeline_step_definition(
     return step.id  # type: ignore[return-value]
 
 
-def get_pipeline_steps(
-    session: Session, pipeline_name: str, tenant_id: Optional[str] = None
-) -> List[Dict[str, Any]]:
+def get_pipeline_steps(session: Session, pipeline_name: str, tenant_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """Get all steps for a pipeline."""
     filters = {"pipeline_name": pipeline_name}
     if tenant_id:
@@ -217,9 +207,7 @@ def create_pipeline_execution(
     return execution.id  # type: ignore[return-value]
 
 
-def update_pipeline_execution(
-    session: Session, execution_id: str, updates: Dict[str, Any], tenant_id: Optional[str] = None
-) -> bool:
+def update_pipeline_execution(session: Session, execution_id: str, updates: Dict[str, Any], tenant_id: Optional[str] = None) -> bool:
     """Update a pipeline execution."""
     try:
         update_record(session, PipelineExecution, execution_id, updates, tenant_id)
@@ -253,9 +241,7 @@ def complete_pipeline_execution(
     return update_pipeline_execution(session, execution_id, updates, tenant_id)
 
 
-def get_pipeline_execution(
-    session: Session, execution_id: str, tenant_id: Optional[str] = None
-) -> Optional[Dict[str, Any]]:
+def get_pipeline_execution(session: Session, execution_id: str, tenant_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Get a pipeline execution by ID."""
     execution = get_record_by_id(session, PipelineExecution, execution_id)
 
@@ -297,9 +283,7 @@ def list_pipeline_executions(
     if status:
         filters["status"] = status
 
-    executions = list_records(
-        session, PipelineExecution, filters, tenant_id, limit=limit, order_by="started_at"
-    )
+    executions = list_records(session, PipelineExecution, filters, tenant_id, limit=limit, order_by="started_at")
 
     return [
         {
@@ -388,13 +372,9 @@ def complete_pipeline_step(
         return False
 
 
-def get_pipeline_steps_for_execution(
-    session: Session, execution_id: str, tenant_id: Optional[str] = None
-) -> List[Dict[str, Any]]:
+def get_pipeline_steps_for_execution(session: Session, execution_id: str, tenant_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """Get all steps for a pipeline execution."""
-    steps = list_records(
-        session, PipelineStep, {"execution_id": execution_id}, tenant_id, order_by="started_at"
-    )
+    steps = list_records(session, PipelineStep, {"execution_id": execution_id}, tenant_id, order_by="started_at")
 
     return [
         {

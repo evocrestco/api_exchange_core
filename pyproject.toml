@@ -73,7 +73,7 @@ LOG001 = "api_exchange_core.custom_flake8_rules:LoggingStandardsChecker"
 UTC001 = "api_exchange_core.custom_flake8_rules:UTCTimestampChecker"
 
 [tool.flake8]
-max_line_length = 140
+max_line_length = 150
 extend_ignore = ["E203", "W503"]
 exclude = [
     ".git",

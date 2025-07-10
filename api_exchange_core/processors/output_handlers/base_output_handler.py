@@ -15,14 +15,12 @@ from ..processing_result import ProcessingResult
 class BaseOutputHandler(ABC):
     """
     Abstract base class for all output handlers.
-    
+
     Defines the standard interface that all output handlers must implement.
     """
 
     @abstractmethod
-    def handle_output(
-        self, result: ProcessingResult, source_message: Message, context: Dict[str, Any]
-    ) -> None:
+    def handle_output(self, result: ProcessingResult, source_message: Message, context: Dict[str, Any]) -> None:
         """
         Handle output messages from processing results.
 

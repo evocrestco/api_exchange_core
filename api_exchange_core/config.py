@@ -21,9 +21,7 @@ class DatabaseConfig(BaseModel):
     """Database connection configuration."""
 
     connection_string: str = Field(
-        default_factory=lambda: os.getenv(
-            EnvironmentVariable.DATABASE_URL.value, "sqlite:///./api_exchange.db"
-        ),
+        default_factory=lambda: os.getenv(EnvironmentVariable.DATABASE_URL.value, "sqlite:///./api_exchange.db"),
         description="Database connection string",
     )
     pool_size: int = Field(default=5, description="Connection pool size")
@@ -41,9 +39,7 @@ class QueueConfig(BaseModel):
     )
     metrics_queue_name: str = Field(default="metrics-queue", description="Metrics queue name")
     error_queue_name: str = Field(default="error-queue", description="Error queue name")
-    default_visibility_timeout: int = Field(
-        default=30, description="Default message visibility timeout in seconds"
-    )
+    default_visibility_timeout: int = Field(default=30, description="Default message visibility timeout in seconds")
 
 
 class LoggingConfig(BaseModel):
@@ -80,27 +76,17 @@ class FeatureFlags(BaseModel):
     enable_metrics_queue: bool = Field(default=True, description="Enable metrics queue output")
     enable_logs_queue: bool = Field(default=True, description="Enable logs queue output")
     enable_state_tracking: bool = Field(default=True, description="Enable automatic state tracking")
-    enable_content_hashing: bool = Field(
-        default=True, description="Enable content hashing for entities"
-    )
-    enable_operation_context: bool = Field(
-        default=True, description="Enable operation context tracking"
-    )
+    enable_content_hashing: bool = Field(default=True, description="Enable content hashing for entities")
+    enable_operation_context: bool = Field(default=True, description="Enable operation context tracking")
     enable_tenant_isolation: bool = Field(default=True, description="Enable multi-tenant isolation")
-    enable_auto_retry: bool = Field(
-        default=True, description="Enable automatic retry for recoverable errors"
-    )
-    enable_dead_letter_queue: bool = Field(
-        default=True, description="Enable dead letter queue for failed messages"
-    )
+    enable_auto_retry: bool = Field(default=True, description="Enable automatic retry for recoverable errors")
+    enable_dead_letter_queue: bool = Field(default=True, description="Enable dead letter queue for failed messages")
 
 
 class ProcessingConfig(BaseModel):
     """Configuration for processing behavior."""
 
-    max_retry_attempts: int = Field(
-        default=3, description="Maximum retry attempts for recoverable errors"
-    )
+    max_retry_attempts: int = Field(default=3, description="Maximum retry attempts for recoverable errors")
     retry_backoff_base: int = Field(default=2, description="Base for exponential backoff (seconds)")
     retry_backoff_max: int = Field(default=300, description="Maximum backoff time (seconds)")
     processing_timeout: int = Field(default=300, description="Processing timeout (seconds)")
@@ -110,12 +96,8 @@ class ProcessingConfig(BaseModel):
 class SecurityConfig(BaseModel):
     """Security-related configuration."""
 
-    enable_encryption: bool = Field(
-        default=False, description="Enable encryption for sensitive data"
-    )
-    encryption_key: Optional[str] = Field(
-        default=None, description="Encryption key (base64 encoded)"
-    )
+    enable_encryption: bool = Field(default=False, description="Enable encryption for sensitive data")
+    encryption_key: Optional[str] = Field(default=None, description="Encryption key (base64 encoded)")
     enable_audit_logging: bool = Field(default=True, description="Enable audit logging")
     allowed_origins: list[str] = Field(default_factory=list, description="Allowed CORS origins")
 
@@ -133,20 +115,12 @@ class AppConfig(BaseModel):
     )
 
     # Sub-configurations
-    database: DatabaseConfig = Field(
-        default_factory=DatabaseConfig, description="Database configuration"
-    )
+    database: DatabaseConfig = Field(default_factory=DatabaseConfig, description="Database configuration")
     queue: QueueConfig = Field(default_factory=QueueConfig, description="Queue configuration")
-    logging: LoggingConfig = Field(
-        default_factory=LoggingConfig, description="Logging configuration"
-    )
+    logging: LoggingConfig = Field(default_factory=LoggingConfig, description="Logging configuration")
     features: FeatureFlags = Field(default_factory=FeatureFlags, description="Feature flags")
-    processing: ProcessingConfig = Field(
-        default_factory=ProcessingConfig, description="Processing configuration"
-    )
-    security: SecurityConfig = Field(
-        default_factory=SecurityConfig, description="Security configuration"
-    )
+    processing: ProcessingConfig = Field(default_factory=ProcessingConfig, description="Processing configuration")
+    security: SecurityConfig = Field(default_factory=SecurityConfig, description="Security configuration")
 
     # Custom configuration
     custom: Dict[str, Any] = Field(default_factory=dict, description="Custom configuration values")

@@ -8,7 +8,7 @@ used to authenticate with external systems.
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Type, Union
 
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..exceptions import ValidationError
 
@@ -87,9 +87,7 @@ class AzureServicePrincipalCredentials(BaseCredentialSchema):
         """Validate GUID format for Azure IDs."""
         import re
 
-        guid_pattern = (
-            r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
-        )
+        guid_pattern = r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
         if not re.match(guid_pattern, v):
             raise ValueError("Must be a valid GUID format")
         return v
@@ -157,9 +155,7 @@ class ExternalCredentialCreate(BaseModel):
 
         # Allow alphanumeric, underscore, hyphen, dot
         if not re.match(r"^[a-zA-Z0-9_.-]+$", v):
-            raise ValueError(
-                "System name can only contain letters, numbers, underscore, hyphen, and dot"
-            )
+            raise ValueError("System name can only contain letters, numbers, underscore, hyphen, and dot")
         return v.lower()  # Store as lowercase for consistency
 
 

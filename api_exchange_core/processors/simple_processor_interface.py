@@ -92,6 +92,4 @@ class SimpleProcessorInterface(ABC):
         Returns:
             New Message with inherited context
         """
-        return source_message.create_child_message(
-            payload=payload, processor_name=self.get_processor_name()
-        )
+        return source_message.create_child_message(payload=payload, processor_name=self.get_processor_name())

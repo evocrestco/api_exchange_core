@@ -16,9 +16,7 @@ from ..utils.logger import get_logger
 T = TypeVar("T")
 
 
-def create_record(
-    session: Session, model_class: Type[T], data: Dict[str, Any], tenant_id: Optional[str] = None
-) -> T:
+def create_record(session: Session, model_class: Type[T], data: Dict[str, Any], tenant_id: Optional[str] = None) -> T:
     """
     Generic create operation for any model.
 
@@ -76,9 +74,7 @@ def create_record(
         )
 
 
-def get_record(
-    session: Session, model_class: Type[T], filters: Dict[str, Any], tenant_id: Optional[str] = None
-) -> Optional[T]:
+def get_record(session: Session, model_class: Type[T], filters: Dict[str, Any], tenant_id: Optional[str] = None) -> Optional[T]:
     """
     Generic get operation for any model.
 
@@ -105,9 +101,7 @@ def get_record(
     return query.first()
 
 
-def get_record_by_id(
-    session: Session, model_class: Type[T], record_id: str, tenant_id: Optional[str] = None
-) -> Optional[T]:
+def get_record_by_id(session: Session, model_class: Type[T], record_id: str, tenant_id: Optional[str] = None) -> Optional[T]:
     """
     Generic get by ID operation.
 
@@ -191,9 +185,7 @@ def update_record(
         )
 
 
-def delete_record(
-    session: Session, model_class: Type[T], record_id: str, tenant_id: Optional[str] = None
-) -> bool:
+def delete_record(session: Session, model_class: Type[T], record_id: str, tenant_id: Optional[str] = None) -> bool:
     """
     Generic delete operation for any model.
 
@@ -329,9 +321,7 @@ def count_records(
     return query.count()
 
 
-def record_exists(
-    session: Session, model_class: Type[T], filters: Dict[str, Any], tenant_id: Optional[str] = None
-) -> bool:
+def record_exists(session: Session, model_class: Type[T], filters: Dict[str, Any], tenant_id: Optional[str] = None) -> bool:
     """
     Check if a record exists with the given filters.
 

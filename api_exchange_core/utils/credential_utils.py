@@ -111,9 +111,7 @@ def store_credentials(
     serialized_data = serialize_credentials(credential_create.credential_data)
 
     # Check if credentials already exist using generic CRUD
-    existing = get_record(
-        session, ExternalCredential, {"system_name": credential_create.system_name}, tenant_id
-    )
+    existing = get_record(session, ExternalCredential, {"system_name": credential_create.system_name}, tenant_id)
 
     if existing:
         # Update existing using generic CRUD

@@ -6,7 +6,7 @@ Defines the structure and validation for tenant configuration data.
 
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..exceptions import ValidationError
 
@@ -24,9 +24,7 @@ class BaseTenantConfigSchema(BaseModel):
 class DatabaseConfigSchema(BaseTenantConfigSchema):
     """Database configuration for tenant."""
 
-    connection_pool_size: Optional[int] = Field(
-        None, gt=0, le=100, description="Connection pool size"
-    )
+    connection_pool_size: Optional[int] = Field(None, gt=0, le=100, description="Connection pool size")
     query_timeout: Optional[int] = Field(None, gt=0, le=300, description="Query timeout in seconds")
     retry_attempts: Optional[int] = Field(None, ge=0, le=10, description="Number of retry attempts")
     isolation_level: Optional[str] = Field(None, description="Database isolation level")
@@ -50,9 +48,7 @@ class DatabaseConfigSchema(BaseTenantConfigSchema):
 class ProcessingConfigSchema(BaseTenantConfigSchema):
     """Processing configuration for tenant."""
 
-    max_concurrent_processes: Optional[int] = Field(
-        None, gt=0, le=100, description="Max concurrent processes"
-    )
+    max_concurrent_processes: Optional[int] = Field(None, gt=0, le=100, description="Max concurrent processes")
     batch_size: Optional[int] = Field(None, gt=0, le=10000, description="Processing batch size")
     timeout: Optional[int] = Field(None, gt=0, le=3600, description="Processing timeout in seconds")
     retry_delay: Optional[int] = Field(None, ge=0, le=300, description="Retry delay in seconds")
@@ -63,12 +59,8 @@ class ProcessingConfigSchema(BaseTenantConfigSchema):
 class ApiConfigSchema(BaseTenantConfigSchema):
     """API configuration for tenant."""
 
-    rate_limit_requests: Optional[int] = Field(
-        None, gt=0, le=10000, description="Rate limit requests per minute"
-    )
-    rate_limit_window: Optional[int] = Field(
-        None, gt=0, le=3600, description="Rate limit window in seconds"
-    )
+    rate_limit_requests: Optional[int] = Field(None, gt=0, le=10000, description="Rate limit requests per minute")
+    rate_limit_window: Optional[int] = Field(None, gt=0, le=3600, description="Rate limit window in seconds")
     allowed_origins: Optional[List[str]] = Field(None, description="CORS allowed origins")
     api_version: Optional[str] = Field(None, description="API version")
     enable_swagger: Optional[bool] = Field(None, description="Enable Swagger documentation")
@@ -202,12 +194,8 @@ class TenantRead(BaseModel):
 class TenantUpdate(BaseModel):
     """Schema for updating tenants."""
 
-    name: Optional[str] = Field(
-        None, min_length=1, max_length=200, description="Updated tenant name"
-    )
-    description: Optional[str] = Field(
-        None, max_length=500, description="Updated tenant description"
-    )
+    name: Optional[str] = Field(None, min_length=1, max_length=200, description="Updated tenant name")
+    description: Optional[str] = Field(None, max_length=500, description="Updated tenant description")
     is_active: Optional[bool] = Field(None, description="Updated active status")
     config: Optional[TenantConfigData] = Field(None, description="Updated tenant configuration")
 

@@ -76,9 +76,7 @@ class PipelineStep(Base, UUIDMixin, TimestampMixin):
     duration_ms = Column(Integer, nullable=True)
 
     # Execution status
-    status = Column(
-        String(20), nullable=False, default="processing"
-    )  # processing, completed, failed
+    status = Column(String(20), nullable=False, default="processing")  # processing, completed, failed
 
     # Results
     output_count = Column(Integer, nullable=False, default=0)  # Number of output messages

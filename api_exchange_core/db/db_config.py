@@ -33,10 +33,7 @@ class DatabaseConfig(BaseModel):
                     field="database_config",
                     value={"host": self.host, "database": self.database, "username": self.username},
                 )
-            return (
-                f"postgresql://{self.username}:{self.password}@"
-                f"{self.host}:{self.port}/{self.database}"
-            )
+            return f"postgresql://{self.username}:{self.password}@" f"{self.host}:{self.port}/{self.database}"
         elif self.db_type.lower() == "sqlite":
             return f"sqlite:///{self.database}"
         raise ValidationError(
@@ -76,9 +73,7 @@ class DatabaseManager:
         connection_string = self.config.get_connection_string()
         if self.config.db_type.lower() == "sqlite":
             connect_args = {"check_same_thread": False}
-            return create_engine(
-                connection_string, echo=self.config.echo, connect_args=connect_args
-            )
+            return create_engine(connection_string, echo=self.config.echo, connect_args=connect_args)
         return create_engine(
             connection_string,
             echo=self.config.echo,

@@ -26,9 +26,7 @@ class PipelineDefinition(Base, UUIDMixin, TimestampMixin):
     pipeline_structure = Column(JSON, nullable=False)  # Complete step definitions and connections
 
     # Settings
-    capture_messages = Column(
-        Boolean, nullable=False, default=True
-    )  # Whether to store input/output messages
+    capture_messages = Column(Boolean, nullable=False, default=True)  # Whether to store input/output messages
     is_active = Column(Boolean, nullable=False, default=True)
 
     # Context

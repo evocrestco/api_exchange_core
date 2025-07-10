@@ -105,9 +105,7 @@ class Message(BaseModel):
             **kwargs,
         )
 
-    def create_child_message(
-        self, payload: Dict[str, Any], processor_name: Optional[str] = None, **kwargs
-    ) -> "Message":
+    def create_child_message(self, payload: Dict[str, Any], processor_name: Optional[str] = None, **kwargs) -> "Message":
         """
         Create a child message that inherits context from this message.
 

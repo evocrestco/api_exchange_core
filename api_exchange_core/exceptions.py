@@ -130,17 +130,13 @@ class BaseError(Exception):
             log_data["correlation_id"] = self.context["correlation_id"]
 
         if self.status_code >= 500:
-            logger.error(
-                f"Error {self.error_code}: {self.message}", extra=log_data, exc_info=self.cause
-            )
+            logger.error(f"Error {self.error_code}: {self.message}", extra=log_data, exc_info=self.cause)
         elif self.status_code >= 400:
             logger.warning(f"Client error {self.error_code}: {self.message}", extra=log_data)
         else:
             logger.info(f"Error {self.error_code}: {self.message}", extra=log_data)
 
-    def to_dict(
-        self, include_cause: bool = False, include_traceback: bool = False
-    ) -> Dict[str, Any]:
+    def to_dict(self, include_cause: bool = False, include_traceback: bool = False) -> Dict[str, Any]:
         """
         Convert to dict for API responses.
 
@@ -157,11 +153,7 @@ class BaseError(Exception):
                 "code": self.error_code.value,
                 "message": self.message,
                 "timestamp": self.timestamp,
-                "context": {
-                    k: v
-                    for k, v in self.context.items()
-                    if k not in ["cause", "error_id", "correlation_id"]
-                },
+                "context": {k: v for k, v in self.context.items() if k not in ["cause", "error_id", "correlation_id"]},
             }
         }
 
@@ -269,9 +261,7 @@ class ExternalServiceError(BaseError):
 
 
 # Factory functions for common error patterns
-def not_found(
-    resource_type: str, cause: Optional[Exception] = None, **identifiers
-) -> NotFoundError:
+def not_found(resource_type: str, cause: Optional[Exception] = None, **identifiers) -> NotFoundError:
     """
     Factory for not found errors.
 
@@ -296,9 +286,7 @@ def not_found(
     )
 
 
-def duplicate(
-    resource_type: str, cause: Optional[Exception] = None, **identifiers
-) -> DuplicateError:
+def duplicate(resource_type: str, cause: Optional[Exception] = None, **identifiers) -> DuplicateError:
     """
     Factory for duplicate resource errors.
 
@@ -323,9 +311,7 @@ def duplicate(
     )
 
 
-def validation_failed(
-    field: str, value: Any, reason: str, cause: Optional[Exception] = None
-) -> ValidationError:
+def validation_failed(field: str, value: Any, reason: str, cause: Optional[Exception] = None) -> ValidationError:
     """
     Factory for validation errors.
 
@@ -348,9 +334,7 @@ def validation_failed(
     )
 
 
-def permission_denied(
-    action: str, resource: str, cause: Optional[Exception] = None, **context
-) -> BaseError:
+def permission_denied(action: str, resource: str, cause: Optional[Exception] = None, **context) -> BaseError:
     """
     Factory for permission denied errors.
 
@@ -434,9 +418,7 @@ class CredentialError(BaseError):
     """Base exception for credential-related errors."""
 
     def __init__(self, message: str = "Credential error", **kwargs):
-        super().__init__(
-            message=message, error_code=ErrorCode.INTEGRATION_ERROR, status_code=500, **kwargs
-        )
+        super().__init__(message=message, error_code=ErrorCode.INTEGRATION_ERROR, status_code=500, **kwargs)
 
 
 class CredentialNotFoundError(BaseError):
@@ -457,9 +439,7 @@ class TenantIsolationViolationError(BaseError):
     """Raised when tenant isolation is violated in credential operations."""
 
     def __init__(self, message: str = "Tenant isolation violation detected", **kwargs):
-        super().__init__(
-            message=message, error_code=ErrorCode.PERMISSION_DENIED, status_code=403, **kwargs
-        )
+        super().__init__(message=message, error_code=ErrorCode.PERMISSION_DENIED, status_code=403, **kwargs)
 
 
 class TokenNotAvailableError(BaseError):
