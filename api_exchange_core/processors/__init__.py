@@ -1,67 +1,18 @@
-"""
-Unified processor framework for data integration pipelines.
+"""Core processor framework for API Exchange V2."""
 
-This module provides the core interfaces and classes for building flexible
-data processing pipelines.
-"""
-
-# Import entity reference for compatibility
-from ..schemas.entity_schema import EntityReference
-
-# Import infrastructure processors
-from . import infrastructure
-
-# Import shared components
-from .mapper_interface import CompositeMapper, MapperInterface
+from .message import Message, MessageType
+from .output_handlers import NoOpOutputHandler, QueueOutputHandler
 from .processing_result import ProcessingResult, ProcessingStatus
-
-# Import core processor components
-from .v2.message import Message, MessageType
-
-# Import output handlers
-from .v2.output_handlers import (
-    FileOutputHandler,
-    NoOpOutputHandler,
-    OutputHandler,
-    OutputHandlerError,
-    OutputHandlerResult,
-    OutputHandlerStatus,
-    QueueOutputHandler,
-)
-from .v2.processor_factory import (
-    create_db_manager,
-    create_processor_handler,
-)
-from .v2.processor_handler import ProcessorHandler
-from .v2.processor_interface import ProcessorContext, ProcessorInterface
-
-# Rebuild models to resolve forward references
-ProcessingResult.model_rebuild()
+from .simple_processor_handler import SimpleProcessorHandler
+from .simple_processor_interface import SimpleProcessorInterface
 
 __all__ = [
-    # Core interfaces and classes
-    "ProcessorInterface",
-    "ProcessorContext",
     "Message",
     "MessageType",
-    "EntityReference",
-    # Shared components
-    "MapperInterface",
-    "CompositeMapper",
     "ProcessingResult",
     "ProcessingStatus",
-    # Factory and handler patterns
-    "ProcessorHandler",
-    "create_processor_handler",
-    "create_db_manager",
-    # Output handlers
-    "OutputHandler",
-    "OutputHandlerError",
-    "OutputHandlerResult",
-    "OutputHandlerStatus",
-    "QueueOutputHandler",
-    "FileOutputHandler",
+    "SimpleProcessorInterface",
+    "SimpleProcessorHandler",
     "NoOpOutputHandler",
-    # Infrastructure
-    "infrastructure",
+    "QueueOutputHandler",
 ]

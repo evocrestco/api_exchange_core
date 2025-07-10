@@ -90,7 +90,6 @@ class LogContextKey(str, Enum):
     OPERATION_ID = "operation_id"
     CORRELATION_ID = "correlation_id"
     TENANT_ID = "tenant_id"
-    ENTITY_ID = "entity_id"
     DURATION_MS = "duration_ms"
     STATUS = "status"
     ERROR_CODE = "error_code"

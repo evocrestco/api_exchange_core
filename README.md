@@ -1,146 +1,122 @@
-# API Exchange Core
+# API Exchange Core V2
 
-A flexible Python framework for building robust data integration pipelines between systems.
+**A clean, minimal data integration framework focused on pipeline-based message processing.**
 
-## What is API Exchange Core?
+## What This Is
 
-API Exchange Core is a framework that helps you build reliable data pipelines that move and transform data between different systems. Whether you're syncing customer data between a CRM and data warehouse, processing orders from an e-commerce platform, or integrating with multiple APIs, this framework provides the building blocks you need.
+API Exchange Core V2 is a complete rewrite of the data integration framework, removing all legacy concepts and focusing purely on:
 
-## Project Status
+- **Pipeline-based processing** using `pipeline_id` for tracking
+- **Message-driven architecture** with simple Message objects  
+- **Serverless-first design** for Azure Functions / AWS Lambda
+- **No external dependencies** - processors just transform and route messages
+- **Clean separation of concerns** - processors do business logic, handlers do routing
 
-🚧 **Beta Release** - The framework is feature-complete and tested but still undergoing refinements. We welcome early adopters and contributors!
+## What Was Removed (And Why)
 
-### What's Working
-- ✅ Core entity management and versioning
-- ✅ Multi-tenant data isolation  
-- ✅ State tracking and transitions
-- ✅ Error handling and recovery
-- ✅ Service-oriented architecture with session management
-- ✅ Comprehensive test suite (85%+ coverage)
-- ✅ Type safety with full type hints
+❌ **All "entity" concepts** - The old system was deeply coupled to entity tracking, versioning, and persistence. This created massive complexity and made processors hard to test and understand.
 
-### In Progress
-- 🔄 Performance optimizations
-- 🔄 Additional adapter implementations
-- 🔄 Enhanced monitoring capabilities
-- 🔄 Production deployment guides
+❌ **Complex state tracking** - The state management system was tightly coupled to entities and created more problems than it solved.
 
-## Key Benefits
+❌ **Heavy database dependencies** - Most processors don't need complex database operations. Keep it simple.
 
-- **🔄 Unified Processing Model**: Write once, process anywhere. Build processors that work consistently across different data sources
-- **📊 Built-in State Tracking**: Never lose track of your data. Every entity is versioned and tracked through its lifecycle
-- **🏢 Multi-Tenant Ready**: Serve multiple customers with isolated data and configurations
-- **🛡️ Enterprise-Grade Error Handling**: Comprehensive error tracking and recovery mechanisms
-- **🔌 Extensible Architecture**: Easy to add new data sources, transformations, and destinations
+❌ **Duplicate detection** - This was entity-specific and added complexity. Handle at message level if needed.
 
-## Use Cases
+❌ **Complex error tracking** - Basic error handling is sufficient. Don't over-engineer.
 
-### Data Synchronization
-Sync data between systems like Salesforce, SAP, or custom databases while maintaining data integrity and handling conflicts.
+## Core Architecture
 
-### ETL/ELT Pipelines
-Build extract, transform, and load pipelines that can handle complex business logic and data transformations.
+### Message Flow
+```
+Queue A → [Function: SimpleProcessor] → Queue B → [Function: SimpleProcessor] → Queue C
+```
 
-### API Integration Hub
-Create a central hub for integrating with multiple external APIs, handling authentication, rate limiting, and error recovery.
+Each processor:
+1. Receives a `Message` from input queue
+2. Processes the message data (business logic)
+3. Returns a `ProcessingResult`
+4. Framework routes result to output queues
 
-### Event Processing
-Process events from message queues, webhooks, or streaming sources with guaranteed delivery and processing.
+### Key Components (To Be Built)
 
-## How It Works
+#### 1. **Message**
+- Lightweight message structure for queue transport
+- Contains `pipeline_id` for tracking execution across steps
+- Supports any payload structure (dict or Pydantic models)
+- Auto-generates UUIDs for correlation
 
-The framework is built around three core concepts:
+#### 2. **SimpleProcessorInterface**
+- Clean interface: `process(message, context) -> ProcessingResult`
+- No dependencies on persistence or external systems
+- Easy to test and implement
 
-1. **Entities**: Your data objects (customers, orders, products, etc.)
-2. **Processors**: Components that transform, validate, or route your data
-3. **Adapters**: Connectors to external systems (APIs, databases, queues)
+#### 3. **ProcessingResult**
+- Clean result object with success/failure status
+- Contains routing instructions (which queues to send to)
+- No external dependencies
+
+#### 4. **Output Handlers** (Optional)
+- **QueueOutputHandler** - Route messages to Azure Storage Queues
+- **NoOpOutputHandler** - Terminal processor (no routing)
+
+## Design Principles
+
+1. **Message-Centric** - Everything flows through Message objects
+2. **Stateless Processors** - No persistence logic in business code
+3. **Serverless Native** - Designed for function-based execution  
+4. **Minimal Dependencies** - Keep it simple
+5. **Easy Testing** - Simple interfaces, no mocking required
+6. **Pipeline Observability** - Track execution flow via `pipeline_id`
+
+## Example (Future Implementation)
 
 ```python
-# Example: Simple product price monitoring pipeline
-from api_exchange_core.processors.v2.processor_interface import ProcessorInterface
-from api_exchange_core.processors.v2.message import Message
-from api_exchange_core.processors.processing_result import ProcessingResult
+import azure.functions as func
+from api_exchange_core.processors.v2 import (
+    SimpleProcessorInterface,
+    Message,
+    ProcessingResult
+)
 
-class PriceMonitorProcessor(ProcessorInterface):
-    def __init__(self, config):
-        self.threshold = config.get("alert_threshold", 100.0)
+class OrderProcessor(SimpleProcessorInterface):
+    def process(self, message: Message, context: dict) -> ProcessingResult:
+        order_data = message.payload
+        processed_order = self.transform_order(order_data)
+        
+        return ProcessingResult.success_result(
+            output_messages=[
+                Message.create_simple_message(
+                    payload=processed_order,
+                    pipeline_id=message.pipeline_id
+                )
+            ]
+        )
+
+# Azure Function
+@app.queue_trigger(arg_name="msg", queue_name="orders")
+@app.queue_output(arg_name="output", queue_name="processed-orders")  
+def process_order(msg: func.QueueMessage, output: func.Out[str]) -> None:
+    processor = OrderProcessor()
+    message = Message.model_validate_json(msg.get_body())
+    result = processor.process(message, {"tenant_id": "test"})
     
-    def process(self, message: Message):
-        product = message.entity
-        if product.price > self.threshold:
-            # Send to alert queue
-            return ProcessingResult(
-                success=True,
-                output_queue="high_price_alerts"
-            )
-        return ProcessingResult(success=True)
+    if result.success and result.output_messages:
+        output.set(result.output_messages[0].model_dump_json())
 ```
 
-## Getting Started
+## Migration Strategy
 
-### Installation
+1. **Start fresh** - Don't try to migrate the old codebase
+2. **Build minimal components** - Only what's actually needed  
+3. **Test each component** - Ensure everything works before adding complexity
+4. **Add features incrementally** - Based on real needs, not theoretical requirements
 
-**From Source (Development)**
-```bash
-git clone https://github.com/evocrest/api_exchange_core.git
-cd api_exchange_core
-pip install -e .
-```
+## Current Status
 
-**From PyPI** *(Coming Soon)*
-```bash
-pip install api-exchange-core
-```
+This is a clean slate. We will build only the minimal components needed for:
+- Message processing
+- Pipeline tracking via `pipeline_id`
+- Simple routing between processors
+- Basic error handling
 
-### Quick Start
-
-1. Set up your development environment (see [Developer Guide](DEVELOPER_GUIDE.md))
-2. Define your data models using Pydantic schemas
-3. Create processors for your business logic
-4. Configure adapters for your systems
-5. Run your pipeline
-
-Check out the [examples](examples/) directory for complete working examples.
-
-## Features
-
-- **State Management**: Automatic versioning and state tracking for all entities
-- **Error Recovery**: Built-in retry mechanisms and dead letter queues
-- **Monitoring**: Comprehensive metrics and logging
-- **Testing**: Full testing framework with examples
-- **Type Safety**: Full type hints and Pydantic models
-- **Async Support**: Built for high-performance async processing
-
-## Documentation
-
-- [Developer Guide](DEVELOPER_GUIDE.md) - Comprehensive guide for developers
-- [Technical Architecture](TECHNICAL.md) - Detailed technical documentation
-- [Logging Standards](docs/logging_standards.md) - Framework logging practices and correlation ID usage
-- [Examples](examples/) - Working examples to get you started
-- [Testing Guide](tests/README_TESTING.md) - How to test your pipelines
-- [Contributing](CONTRIBUTING.md) - How to contribute to the project
-
-## Requirements
-
-- Python 3.8+ (3.11 recommended)
-- SQLAlchemy 2.0+ for data persistence
-- Pydantic 2.0+ for data validation
-- PostgreSQL 12+ for production (SQLite supported for development)
-- Additional requirements based on your adapters (e.g., boto3 for AWS)
-
-## Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-## License
-
-*License information coming soon*
-
-## Support
-
-- [GitHub Issues](https://github.com/evocrest/api_exchange_core/issues) - *Coming soon*
-- [Documentation](docs/) - *In progress*
-
----
-
-Built with ❤️ for data engineers and integration developers
+Everything else can be added later if actually needed.

@@ -1,5 +1,5 @@
 """
-Hash configuration for entity comparison and duplicate detection.
+Hash configuration for data comparison and duplicate detection.
 
 This module provides a configuration class for hash calculation,
 allowing for flexible and reusable hash strategies.
@@ -12,9 +12,9 @@ from pydantic import BaseModel, Field
 
 class HashConfig(BaseModel):
     """
-    Configuration for entity hash calculation.
+    Configuration for data hash calculation.
 
-    This class encapsulates all parameters related to how entity hashes
+    This class encapsulates all parameters related to how data hashes
     are calculated, providing a reusable configuration object.
     """
 
@@ -55,16 +55,16 @@ class HashConfig(BaseModel):
         )
 
     @classmethod
-    def for_type(cls, entity_type: str) -> "HashConfig":
+    def for_type(cls, data_type: str) -> "HashConfig":
         """
-        Create a hash configuration optimized for a specific entity type.
+        Create a hash configuration optimized for a specific data type.
 
         Args:
-            entity_type: Type of entity
+            data_type: Type of data
 
         Returns:
-            HashConfig instance configured for the entity type
+            HashConfig instance configured for the data type
         """
         # Default config for all types - applications can override this method
-        # to provide entity-type-specific hash configurations
+        # to provide data-type-specific hash configurations
         return cls.default()

@@ -5,8 +5,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, declarative_base, scoped_session, sessionmaker
 
-from ..exceptions import ErrorCode, ServiceError, ValidationError
-from ..utils import get_logger
+from ..exceptions import BaseError, ErrorCode, ValidationError
 
 # Base class for all SQLAlchemy models
 Base: Any = declarative_base()
@@ -95,7 +94,7 @@ class DatabaseManager:
         if self.config.development_mode:
             Base.metadata.drop_all(self.engine)
         else:
-            raise ServiceError(
+            raise BaseError(
                 "Cannot drop tables: not in development mode",
                 error_code=ErrorCode.CONFIGURATION_ERROR,
                 operation="drop_tables",
@@ -153,10 +152,14 @@ def import_all_models():
     # Configure mappers to resolve all relationships
     from sqlalchemy.orm import configure_mappers
 
-    from .db_api_token_models import APIToken, APITokenUsageLog, TokenCoordination  # noqa
+    from .db_api_token_models import APIToken  # noqa
     from .db_credential_models import ExternalCredential  # noqa
-    from .db_entity_models import Entity  # noqa
-    from .db_pipeline_state_models import PipelineStateHistory  # noqa
+    from .db_pipeline_definition_models import PipelineDefinition, PipelineStepDefinition  # noqa
+    from .db_pipeline_tracking_models import (  # noqa
+        PipelineExecution,
+        PipelineMessage,
+        PipelineStep,
+    )
     from .db_tenant_models import Tenant  # noqa
 
     configure_mappers()
@@ -169,7 +172,6 @@ def init_db(db_manager: DatabaseManager) -> None:
     Args:
         db_manager: DatabaseManager instance to use for table creation
     """
-    get_logger().warning("Initializing DB")
     # First ensure all models are imported and registered
     import_all_models()
 
@@ -189,11 +191,10 @@ def get_db_manager() -> DatabaseManager:
         DatabaseManager: The current database manager
 
     Raises:
-        ServiceError: If no database manager has been initialized
+        BaseError: If no database manager has been initialized
     """
-    global _db_manager
     if _db_manager is None:
-        raise ServiceError(
+        raise BaseError(
             "Database manager not initialized. Call initialize_db() first.",
             error_code=ErrorCode.CONFIGURATION_ERROR,
             operation="get_db_manager",

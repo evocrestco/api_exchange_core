@@ -200,37 +200,7 @@ class BaseError(Exception):
         return chain
 
 
-# Layer-specific base exceptions
-class RepositoryError(BaseError):
-    """Repository layer errors."""
-
-    def __init__(
-        self,
-        message: str,
-        error_code: ErrorCode = ErrorCode.DATABASE_ERROR,
-        status_code: int = 500,
-        cause: Optional[Exception] = None,
-        **context,
-    ):
-        """Initialize repository error with database context."""
-        super().__init__(message, error_code, status_code, cause, **context)
-
-
-class ServiceError(BaseError):
-    """Service layer errors."""
-
-    def __init__(
-        self,
-        message: str,
-        error_code: ErrorCode = ErrorCode.INTERNAL_ERROR,
-        operation: Optional[str] = None,
-        cause: Optional[Exception] = None,
-        **context,
-    ):
-        """Initialize service error with operation context."""
-        if operation:
-            context["operation"] = operation
-        super().__init__(message, error_code, 500, cause, **context)
+# Domain-specific exceptions for pipeline framework
 
 
 class ValidationError(BaseError):
@@ -248,6 +218,38 @@ class ValidationError(BaseError):
         if field:
             context["field"] = field
         super().__init__(message, error_code, 400, cause, **context)
+
+
+class NotFoundError(BaseError):
+    """Resource not found errors."""
+
+    def __init__(
+        self,
+        message: str,
+        resource_type: Optional[str] = None,
+        cause: Optional[Exception] = None,
+        **context,
+    ):
+        """Initialize not found error with resource context."""
+        if resource_type:
+            context["resource_type"] = resource_type
+        super().__init__(message, ErrorCode.NOT_FOUND, 404, cause, **context)
+
+
+class DuplicateError(BaseError):
+    """Duplicate resource errors."""
+
+    def __init__(
+        self,
+        message: str,
+        resource_type: Optional[str] = None,
+        cause: Optional[Exception] = None,
+        **context,
+    ):
+        """Initialize duplicate error with resource context."""
+        if resource_type:
+            context["resource_type"] = resource_type
+        super().__init__(message, ErrorCode.DUPLICATE, 409, cause, **context)
 
 
 class ExternalServiceError(BaseError):
@@ -269,36 +271,34 @@ class ExternalServiceError(BaseError):
 # Factory functions for common error patterns
 def not_found(
     resource_type: str, cause: Optional[Exception] = None, **identifiers
-) -> RepositoryError:
+) -> NotFoundError:
     """
     Factory for not found errors.
 
     Args:
         resource_type: Type of resource (e.g., 'Entity', 'Tenant')
         cause: Original exception if any
-        **identifiers: Resource identifiers (e.g., entity_id='123')
+        **identifiers: Resource identifiers (e.g., record_id='123')
 
     Returns:
-        Configured RepositoryError instance with 404 status
+        Configured NotFoundError instance with 404 status
     """
     id_parts = [f"{k}={v}" for k, v in identifiers.items()]
     message = f"{resource_type} not found"
     if id_parts:
         message += f": {', '.join(id_parts)}"
 
-    return RepositoryError(
+    return NotFoundError(
         message,
-        error_code=ErrorCode.NOT_FOUND,
-        status_code=404,
-        cause=cause,
         resource_type=resource_type,
+        cause=cause,
         **identifiers,
     )
 
 
 def duplicate(
     resource_type: str, cause: Optional[Exception] = None, **identifiers
-) -> RepositoryError:
+) -> DuplicateError:
     """
     Factory for duplicate resource errors.
 
@@ -308,19 +308,17 @@ def duplicate(
         **identifiers: Resource identifiers
 
     Returns:
-        Configured RepositoryError instance with 409 status
+        Configured DuplicateError instance with 409 status
     """
     id_parts = [f"{k}={v}" for k, v in identifiers.items()]
     message = f"Duplicate {resource_type}"
     if id_parts:
         message += f": {', '.join(id_parts)}"
 
-    return RepositoryError(
+    return DuplicateError(
         message,
-        error_code=ErrorCode.DUPLICATE,
-        status_code=409,
-        cause=cause,
         resource_type=resource_type,
+        cause=cause,
         **identifiers,
     )
 

@@ -1,16 +1,18 @@
 """
-Hash utilities for entity comparison and duplicate detection.
+Hash utilities for data comparison and duplicate detection.
 
-This module provides functions for generating deterministic hashes of entity data
+This module provides functions for generating deterministic hashes of data data
 to enable duplicate detection and comparison.
 """
 
 import hashlib
+import json
 from typing import Any, Dict, List, Optional, Set, Tuple
+
+from pydantic_core import to_jsonable_python
 
 from ..exceptions import ErrorCode, ValidationError
 from .hash_config import HashConfig
-from .json_utils import dumps
 from .logger import get_logger
 
 logger = get_logger()
@@ -88,7 +90,7 @@ def _get_nested_value(data: Dict[str, Any], field: str) -> Any:
     return value
 
 
-def calculate_entity_hash(
+def calculate_data_hash(
     data: Dict[str, Any],
     key_fields: Optional[List[str]] = None,
     ignore_fields: Optional[List[str]] = None,
@@ -96,10 +98,10 @@ def calculate_entity_hash(
     config: Optional[HashConfig] = None,
 ) -> str:
     """
-    Calculate a deterministic hash of entity data for duplicate detection.
+    Calculate a deterministic hash of data data for duplicate detection.
 
     Args:
-        data: Dict containing the entity's data
+        data: Dict containing the data's data
         key_fields: Optional list of fields to include in hash calculation.
                    If empty, all fields except those in ignore_fields are used.
         ignore_fields: Fields to exclude from hash calculation
@@ -146,14 +148,14 @@ def calculate_entity_hash(
 
     try:
         # Use the same JSON serialization as the system to ensure consistency
-        serialized = dumps(filtered_data, sort_keys=sort_keys)
+        serialized = json.dumps(to_jsonable_python(filtered_data), sort_keys=sort_keys)
 
         # Calculate hash
         hash_value = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
         return hash_value
     except Exception as e:
-        logger.error(f"Error calculating entity hash: {str(e)}")
+        logger.error(f"Error calculating data hash: {str(e)}")
         # Return a fallback hash of the str representation as a last resort
         return hashlib.sha256(str(filtered_data).encode("utf-8")).hexdigest()
 
@@ -189,11 +191,11 @@ def compare_entities(
     config: Optional[HashConfig] = None,
 ) -> Dict[str, Any]:
     """
-    Compare two entity data dictionaries and identify differences.
+    Compare two data data dictionaries and identify differences.
 
     Args:
-        existing_data: Existing entity data
-        new_data: New entity data to compare
+        existing_data: Existing data data
+        new_data: New data data to compare
         key_fields: Optional list of fields to compare. If None, all fields are compared.
         ignore_fields: Fields to exclude from comparison
         config: Optional hash configuration object that overrides other parameters if provided

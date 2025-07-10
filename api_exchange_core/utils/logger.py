@@ -6,17 +6,18 @@ This module provides a clean implementation that:
 2. Uses AzureQueueHandler for structured queue logs
 """
 
+import json
 import logging
 import os
 import sys
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 
 from azure.storage.queue import QueueClient, QueueServiceClient
+from pydantic_core import to_jsonable_python
 
 from ..config import get_config
-from .json_utils import dumps
 
 _function_logger = None
 
@@ -84,31 +85,6 @@ class ContextAwareLogger:
     def exception(self, msg, **kwargs):
         """Log exception with formatted extra."""
         self._log_with_formatted_extra("exception", msg, **kwargs)
-
-
-class TenantContextFilter(logging.Filter):
-    """
-    Logging filter that adds tenant context information to log records.
-    """
-
-    def filter(self, record):
-        """
-        Add tenant_id to the log record if available in the current context.
-
-        Args:
-            record: LogRecord to modify
-
-        Returns:
-            True to include the record in the log output
-        """
-        # Lazy import to avoid circular dependency
-        from ..context.tenant_context import TenantContext
-
-        tenant_id = TenantContext.get_current_tenant_id()
-        if tenant_id:
-            record.tenant_id = tenant_id
-
-        return True
 
 
 class AzureQueueHandler(logging.Handler):
@@ -195,7 +171,7 @@ class AzureQueueHandler(logging.Handler):
 
             # Top-level metadata (core log record info)
             log_entry = {
-                "timestamp": datetime.fromtimestamp(record.created).isoformat(),
+                "timestamp": datetime.fromtimestamp(record.created, timezone.utc).isoformat(),
                 "level": record.levelname,
                 "logger": record.name,
                 "message": record.getMessage(),
@@ -287,7 +263,7 @@ class AzureQueueHandler(logging.Handler):
             # Send individual log entries (like metrics) to avoid base64 encoding bug
             for log_entry in self.log_buffer:
                 try:
-                    json_data = dumps(log_entry)
+                    json_data = json.dumps(to_jsonable_python(log_entry))
                     queue_client.send_message(json_data)
                 except Exception as log_error:
                     sys.stderr.write(f"Error sending individual log entry: {str(log_error)}\n")
@@ -355,10 +331,6 @@ def configure_logging(
     # Note: Azure Functions automatically provides console logging
     # We don't need to add our own StreamHandler as it causes duplicates
 
-    # Add tenant context filter to the logger itself (will apply to Azure's built-in handler)
-    tenant_filter = TenantContextFilter()
-    logger.addFilter(tenant_filter)
-
     # Add Azure Queue handler if enabled
     if enable_queue:
         queue_name = queue_name or "logs-queue"
@@ -366,7 +338,6 @@ def configure_logging(
             queue_name=queue_name, connection_string=connection_string, batch_size=queue_batch_size
         )
         queue_handler.setLevel(log_level)
-        queue_handler.addFilter(tenant_filter)
         logger.addHandler(queue_handler)
 
     # Wrap with context-aware logger
