@@ -22,8 +22,8 @@ class APIToken(Base, UUIDMixin, TimestampMixin):
     token_value = Column(EncryptedBinary, nullable=False)  # Encrypted storage
 
     # Lifecycle
-    expires_at = Column(DateTime, nullable=False, index=True)
-    last_used_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
     usage_count = Column(Integer, nullable=False, default=0)
     is_active = Column(Boolean, nullable=False, default=True)
 

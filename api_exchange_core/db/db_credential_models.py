@@ -21,7 +21,7 @@ class ExternalCredential(Base, UUIDMixin, TimestampMixin):
     credential_data = Column(EncryptedBinary, nullable=False)  # Encrypted storage
 
     # Optional expiration
-    expires_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
 
     # Context data
     context = Column(JSON, nullable=True)

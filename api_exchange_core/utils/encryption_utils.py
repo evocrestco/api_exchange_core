@@ -29,6 +29,12 @@ def encrypt_value(session: Session, value: str, tenant_id: str, key_suffix: str 
 
         result = session.execute(text("SELECT pgp_sym_encrypt(:data, :key)"), {"data": value, "key": encryption_key}).scalar()
 
+        # Convert different types to bytes
+        if isinstance(result, memoryview):
+            result = result.tobytes()
+        elif isinstance(result, str):
+            result = result.encode('utf-8')
+        
         return result
     else:
         # SQLite for testing - return as-is

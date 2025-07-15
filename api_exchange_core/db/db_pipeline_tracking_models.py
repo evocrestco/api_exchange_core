@@ -23,8 +23,8 @@ class PipelineExecution(Base, UUIDMixin, TimestampMixin):
 
     # Execution state
     status = Column(String(20), nullable=False, default="started")  # started, completed, failed
-    started_at = Column(DateTime, nullable=False)
-    completed_at = Column(DateTime, nullable=True)
+    started_at = Column(DateTime(timezone=True), nullable=False)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
     duration_ms = Column(Integer, nullable=True)  # Total execution time
 
     # Trigger information

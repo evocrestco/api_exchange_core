@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from ..db.db_api_token_models import APIToken
 from ..exceptions import TokenNotAvailableError
 from ..utils.crud_helpers import create_record, delete_record, list_records
+from ..utils.encryption_utils import encrypt_token, decrypt_token
 from ..utils.logger import get_logger
 
 
@@ -67,6 +68,15 @@ def get_valid_token(session: Session, tenant_id: str, api_provider: str, operati
     # Use first valid token
     valid_token = valid_tokens[0]
 
+    # Decrypt token value for use
+    decrypted_token = decrypt_token(session, valid_token.token_value, tenant_id, api_provider)
+    if not decrypted_token:
+        raise TokenNotAvailableError(
+            f"Failed to decrypt token for {api_provider}",
+            tenant_id=tenant_id,
+            api_provider=api_provider,
+        )
+
     # Token retrieved successfully - no automatic usage logging
 
     logger.info(
@@ -79,7 +89,7 @@ def get_valid_token(session: Session, tenant_id: str, api_provider: str, operati
         },
     )
 
-    return valid_token.token_value, valid_token.id  # type: ignore[return-value]
+    return decrypted_token, valid_token.id  # type: ignore[return-value]
 
 
 def store_token(
@@ -104,9 +114,12 @@ def store_token(
     Returns:
         Token ID
     """
+    # Encrypt token value for secure storage
+    encrypted_token = encrypt_token(session, token_value, tenant_id, api_provider)
+    
     token_data = {
         "api_provider": api_provider,
-        "token_value": token_value,
+        "token_value": encrypted_token,
         "expires_at": expires_at,
         "is_active": True,
         "context": token_metadata or {},
